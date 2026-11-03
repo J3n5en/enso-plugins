@@ -3,7 +3,7 @@ name: worker
 on:
   push:
     branches: [main]
-    paths: ['worker/**', '.github/workflows/worker.yml']
+    paths: ['worker/**', 'web/**', '.github/workflows/worker.yml']
   workflow_dispatch:
 
 permissions:
@@ -23,6 +23,11 @@ jobs:
           node-version: 22
       - name: Test
         run: node --test test/worker.test.mjs
+      - name: Build web
+        working-directory: web
+        run: |
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+          npm run build
       - name: Deploy
         working-directory: worker
         env:

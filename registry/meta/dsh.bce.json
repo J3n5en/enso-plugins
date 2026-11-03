@@ -1,5 +1,6 @@
 {
   "tier": "community",
   "tags": ["composer", "mcp"],
-  "homepage": "https://github.com/linqiu919/dsh-bce"
+  "homepage": "https://github.com/linqiu919/dsh-bce",
+  "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/dsh.bce.svg"
 }

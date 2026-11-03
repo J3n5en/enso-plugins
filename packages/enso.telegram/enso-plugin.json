@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "enso.telegram",
   "name": "Telegram",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "icon": "icon.svg",
   "description": "用 Telegram Bot 远程使用 EnsoCode 会话：配对后发消息即进入会话，执行进度原位更新，回复以富文本发回；支持图片、群聊 @、插话、远程停止和双向同步。",
   "engines": {

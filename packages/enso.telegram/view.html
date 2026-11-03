@@ -2,38 +2,37 @@
 <html>
   <head>
     <meta charset="utf-8" />
+    <link rel="stylesheet" href="enso-ui.css" />
     <style>
-      :root { --fg: #1f2328; --muted: #6b7280; --card: #fff; --bg: #f6f7f9; --line: #e5e7eb; --tg: #2481cc; --ok: #16a34a; --bad: #dc2626; }
-      [data-theme='dark'] { --fg: #e6e8eb; --muted: #9aa1ab; --card: #1c1f24; --bg: #141619; --line: #2c3036; --tg: #5eb5f7; --ok: #86efac; --bad: #fca5a5; }
-      * { box-sizing: border-box; }
-      body { margin: 0; padding: 12px; font: 12px/1.5 -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif; color: var(--fg); background: var(--bg); }
-      .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
-      h3 { margin: 0; font-size: 12px; color: var(--muted); font-weight: 500; }
+      body { padding: 10px; font-size: 12px; }
+      #app { display: flex; flex-direction: column; gap: 8px; }
+      .card { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+      h3 { margin: 0; font-size: 11px; font-weight: 500; color: var(--muted-foreground); }
+      b { font-weight: 600; }
       .row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+      .chats { display: flex; flex-direction: column; gap: 2px; margin: 0 -6px; }
+      .chats > .row { padding: 4px 6px; border-radius: var(--radius-md); }
       .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .m { color: var(--muted); font-size: 11px; }
-      .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--ok); }
-      .dot.bad { background: var(--bad); }
-      button { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--fg); border-radius: 8px; padding: 4px 10px; cursor: pointer; }
-      button:hover { border-color: var(--tg); }
-      button.primary { background: var(--tg); border-color: var(--tg); color: #fff; padding: 7px 12px; width: 100%; }
-      button.link { border: none; background: none; color: var(--muted); padding: 2px 4px; }
-      button.link:hover { color: var(--bad); }
-      .code { font: 600 26px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 6px; text-align: center; padding: 6px 0; user-select: all; }
-      ol { margin: 0; padding-left: 18px; color: var(--muted); }
-      label.switch { display: flex; align-items: center; gap: 4px; color: var(--muted); font-size: 11px; cursor: pointer; flex: none; }
-      .err { color: var(--bad); font-size: 11px; }
-      .empty { color: var(--muted); text-align: center; padding: 18px 4px; }
+      .m { color: var(--muted-foreground); font-size: 11px; }
+      .code { font-size: 26px; font-weight: 600; line-height: 1; letter-spacing: 6px; text-align: center; padding: 10px 0; border-radius: var(--radius-md); background: var(--muted); user-select: all; }
+      .code > span { padding-left: 6px; }
+      .ui-btn--block { width: 100%; height: 32px; }
+      ol { margin: 0; padding-left: 18px; color: var(--muted-foreground); display: flex; flex-direction: column; gap: 2px; }
+      label.switch { display: flex; align-items: center; gap: 6px; color: var(--muted-foreground); font-size: 11px; cursor: pointer; flex: none; }
+      .err { color: var(--destructive); font-size: 11px; }
     </style>
   </head>
   <body>
-    <div id="app"><div class="empty">加载中…</div></div>
+    <div id="app"><div class="ui-card card"><div class="ui-skeleton" style="height: 14px; width: 60%"></div></div></div>
+    <script src="enso-ui.js"></script>
     <script>
       const app = document.getElementById('app');
       const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
       let view = null;
       let error = '';
       let busy = false;
+      let lastCode = '';
+      ensoUI.tooltip();
 
       let last = '';
       async function run(method, args) {
@@ -57,34 +56,42 @@
 
       function render() {
         const v = view;
-        if (!v) return (app.innerHTML = error ? `<div class="empty err">${esc(error)}</div>` : '<div class="empty">加载中…</div>');
+        if (!v) return (app.innerHTML = error ? `<div class="ui-empty err">${esc(error)}</div>` : '<div class="ui-empty">加载中…</div>');
         if (!v.configured) {
-          app.innerHTML = `<div class="card"><b>还没有 Bot Token</b>
+          app.innerHTML = `<div class="ui-card card ui-enter"><b>还没有 Bot Token</b>
             <ol><li>在 Telegram 找 @BotFather，发 /newbot 创建机器人</li>
             <li>复制它给的 Token</li><li>填到 设置 → 插件 → Telegram → Bot Token</li></ol></div>`;
           return;
         }
         const bot = v.bot
-          ? `<div class="row"><i class="dot"></i><span class="grow"><b>@${esc(v.bot.username)}</b> <span class="m">${esc(v.bot.name)}</span></span></div>`
-          : `<div class="row"><i class="dot bad"></i><span class="grow err">连不上 Telegram：${esc(v.error)}</span></div>`;
+          ? `<div class="row"><span class="grow"><b>@${esc(v.bot.username)}</b> <span class="m">${esc(v.bot.name)}</span></span><span class="ui-badge ui-badge--success">已连接</span></div>`
+          : `<div class="row"><span class="grow err">${esc(v.error)}</span><span class="ui-badge ui-badge--destructive">连不上 Telegram</span></div>`;
         let body;
-        if (!v.sessionId) body = '<div class="empty">打开一个会话后在这里绑定</div>';
+        if (!v.sessionId) body = '<div class="ui-empty">打开一个会话后在这里绑定</div>';
         else {
           const chats = v.bindings.length
-            ? v.bindings.map((b) => `<div class="row">
+            ? '<div class="chats">' + v.bindings.map((b) => `<div class="row" data-fill>
                 <span class="grow">${b.chatType === 'private' ? '👤' : '👥'} ${esc(b.title ?? b.chatId)}</span>
-                <label class="switch" title="把在 EnsoCode 里的对话也发到这个聊天"><input type="checkbox" data-sync="${b.chatId}" ${b.sync ? 'checked' : ''}/>同步</label>
-                <button class="link" data-unbind="${b.chatId}" title="解绑">解绑</button></div>`).join('')
+                <label class="switch" data-tip="把在 EnsoCode 里的对话也发到这个聊天"><input type="checkbox" class="ui-switch" data-sync="${b.chatId}" ${b.sync ? 'checked' : ''}/>同步</label>
+                <button class="ui-btn ui-btn--sm ui-btn--destructive" data-unbind="${b.chatId}">解绑</button></div>`).join('') + '</div>'
             : '<div class="m">还没有绑定聊天</div>';
           const pairing = v.pairing
-            ? `<div class="code">${esc(v.pairing.code)}</div>
-               ${v.pairing.link ? `<button class="primary" data-open="${esc(v.pairing.link)}">在 Telegram 中打开并绑定</button>` : ''}
+            ? `<div class="code ui-mono" data-code></div>
+               ${v.pairing.link ? `<button class="ui-btn ui-btn--primary ui-btn--block" data-open="${esc(v.pairing.link)}">在 Telegram 中打开并绑定</button>` : ''}
                <div class="m">或在 Bot 私聊里发 <b>/bind ${esc(v.pairing.code)}</b>；群聊里发 <b>/bind@${esc(v.bot?.username ?? 'bot')} ${esc(v.pairing.code)}</b>。<span data-left></span></div>`
-            : `<button class="primary" data-pair>绑定 Telegram 聊天</button>`;
-          body = `<div class="card"><h3>本会话的聊天</h3>${chats}</div><div class="card">${pairing}</div>`;
+            : `<button class="ui-btn ui-btn--primary ui-btn--block" data-pair>绑定 Telegram 聊天</button>`;
+          body = `<div class="ui-card card"><h3>本会话的聊天</h3>${chats}</div><div class="ui-card card">${pairing}</div>`;
         }
         const others = v.others ? `<div class="m" style="text-align:center">其他会话还绑定了 ${v.others} 个聊天</div>` : '';
-        app.innerHTML = `<div class="card">${bot}</div>${body}${others}${error ? `<div class="err">${esc(error)}</div>` : ''}`;
+        app.innerHTML = `<div class="ui-card card">${bot}</div>${body}${others}${error ? `<div class="err">${esc(error)}</div>` : ''}`;
+        ensoUI.fill(app.querySelector('.chats'));
+        const codeEl = app.querySelector('[data-code]');
+        if (codeEl) {
+          // innerHTML 重绘后先放回旧码，配对码变化时再做一次 TextSwap
+          if (lastCode) ensoUI.swap(codeEl, lastCode);
+          ensoUI.swap(codeEl, v.pairing.code);
+          lastCode = v.pairing.code;
+        }
         tick();
       }
 

@@ -2,70 +2,35 @@
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
+    <link rel="stylesheet" href="enso-ui.css" />
     <style>
-      :root {
-        color-scheme: light dark;
-        --fg: #1f2328;
-        --muted: #8a919a;
-        --line: rgba(31, 35, 40, 0.1);
-        --col: rgba(31, 35, 40, 0.035);
-        --card: #fff;
-        --hover: rgba(31, 35, 40, 0.06);
-        --shadow: 0 1px 2px rgba(31, 35, 40, 0.06), 0 0 0 1px rgba(31, 35, 40, 0.07);
-        --shadow-lift: 0 8px 24px rgba(31, 35, 40, 0.16), 0 0 0 1px rgba(31, 35, 40, 0.08);
-        --accent: #3b82f6;
-        --danger: #e5484d;
-        --radius: 10px;
-      }
-      :root[data-theme='dark'] {
-        --fg: #e6e8eb;
-        --muted: #8b929b;
-        --line: rgba(255, 255, 255, 0.08);
-        --col: rgba(255, 255, 255, 0.03);
-        --card: #23262b;
-        --hover: rgba(255, 255, 255, 0.07);
-        --shadow: 0 0 0 1px rgba(255, 255, 255, 0.07);
-        --shadow-lift: 0 10px 28px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.12);
-        --accent: #60a5fa;
-      }
-      * { box-sizing: border-box; }
-      body {
-        margin: 0;
-        font: 13px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        color: var(--fg);
-        background: transparent;
-        -webkit-font-smoothing: antialiased;
-      }
-      button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; border-radius: 6px; padding: 0; }
-      input, textarea { font: inherit; color: inherit; background: transparent; border: 0; outline: none; width: 100%; padding: 0; resize: none; }
-      .icon {
-        width: 22px; height: 22px; display: inline-grid; place-items: center; flex: none;
-        color: var(--muted); transition: background 0.12s, color 0.12s;
-      }
-      .icon:hover { background: var(--hover); color: var(--fg); }
-      .icon.danger:hover { color: var(--danger); }
+      :where(button) { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; border-radius: var(--radius-sm); padding: 0; }
+      :where(input, textarea) { font: inherit; color: inherit; background: transparent; border: 0; outline: none; width: 100%; padding: 0; resize: none; }
       svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+      .ui-btn--icon.ui-btn--sm svg { width: 13px; height: 13px; }
+      .ui-btn.danger:hover { color: var(--destructive); }
+      /* 共享 hover 背景的组里，元素自身不再画 hover 底色 */
+      .ui-fill-host [data-fill]:hover { background: transparent; }
 
       header { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 8px; padding: 10px 12px 8px; backdrop-filter: blur(12px); }
-      header h1 { margin: 0; font-size: 13px; font-weight: 600; flex: 1; }
-      header .stat { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+      header h1 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: -0.01em; flex: 1; }
+      header .stat { color: var(--muted-foreground); font: 500 11.5px/1.4 var(--font-mono); font-variant-numeric: tabular-nums; }
+
       .toasts { position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 30; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
       .toast {
-        display: flex; align-items: center; gap: 8px; max-width: 100%; padding: 8px 12px; border-radius: 9px;
-        background: var(--card); box-shadow: var(--shadow-lift); font-size: 12.5px; pointer-events: auto;
-        animation: toast-in 0.18s ease-out; transition: opacity 0.2s, transform 0.2s;
+        display: flex; align-items: center; gap: 8px; max-width: 100%; padding: 8px 12px;
+        border: 1px solid var(--border); border-radius: var(--radius-md);
+        background: var(--popover); box-shadow: var(--shadow-lg); font-size: 12px; pointer-events: auto;
       }
-      .toast.error { color: var(--danger); }
-      .toast.leave { opacity: 0; transform: translateY(6px); }
-      @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } }
-      .mask { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, 0.32); animation: fade 0.15s; }
-      @keyframes fade { from { opacity: 0; } }
-      .modal { width: min(320px, 100%); padding: 16px; border-radius: 12px; background: var(--card); box-shadow: var(--shadow-lift); }
-      .modal h2 { margin: 0 0 6px; font-size: 14px; }
-      .modal p { margin: 0; color: var(--muted); font-size: 12.5px; word-break: break-word; }
+      .toast.error { color: var(--destructive); }
+
+      .mask { display: grid; place-items: center; padding: 16px; }
+      .modal { --origin-y: 50%; width: min(300px, 100%); padding: 16px; }
+      .modal h2 { margin: 0 0 4px; font-size: 13.5px; font-weight: 600; }
+      .modal p { margin: 0; color: var(--muted-foreground); font-size: 12px; word-break: break-word; }
       .modal .actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 16px; }
-      .btn.danger { background: var(--danger); color: #fff; }
-      .btn.danger:hover { background: var(--danger); filter: brightness(1.08); }
+      .ui-btn.btn-danger { color: #fff; background: var(--destructive); box-shadow: var(--shadow-xs); }
+      .ui-btn.btn-danger:hover { background: color-mix(in oklch, var(--destructive) 88%, transparent); }
 
       /* 窄侧栏纵向堆叠，宽时横向排列 */
       .board { display: flex; flex-direction: column; gap: 10px; padding: 0 12px 12px; }
@@ -74,94 +39,120 @@
         .col { flex: 0 0 260px; }
         .new-col { flex: 0 0 220px; }
       }
-      .col { --dot: var(--accent); background: var(--col); border-radius: var(--radius); padding: 6px; transition: box-shadow 0.15s; }
-      .col.over { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--dot) 60%, transparent); }
-      .col-head { display: flex; align-items: center; gap: 6px; padding: 2px 4px 6px 0; min-height: 28px; }
-      .col-head .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dot); flex: none; }
-      .col-head .name { font-weight: 600; font-size: 12.5px; padding: 1px 4px; border-radius: 5px; cursor: text; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .col-head .name:hover { background: var(--hover); }
-      .col-head input.name { flex: 1; background: var(--card); box-shadow: var(--shadow); }
-      .col-head .count { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+      .col {
+        --dot: var(--brand);
+        padding: 4px 6px 6px; border-radius: var(--radius-lg);
+        background: color-mix(in oklch, var(--muted) 55%, transparent);
+        box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--border) 60%, transparent);
+        transition: box-shadow var(--dur-2) var(--ease-out), background-color var(--dur-2) var(--ease-out);
+      }
+      .col.over {
+        background: color-mix(in oklch, var(--dot) 6%, color-mix(in oklch, var(--muted) 55%, transparent));
+        box-shadow: inset 0 0 0 1.5px color-mix(in oklch, var(--dot) 55%, transparent);
+      }
+      .col-head { display: flex; align-items: center; gap: 4px; padding: 2px 0 6px; min-height: 30px; }
+      .col-head .dot { width: 7px; height: 7px; margin: 0 2px; border-radius: 50%; background: var(--dot); flex: none; box-shadow: 0 0 0 3px color-mix(in oklch, var(--dot) 18%, transparent); }
+      .col-head .name { font-weight: 600; font-size: 12.5px; padding: 2px 5px; border-radius: var(--radius-sm); cursor: text; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .col-head input.name { flex: 1; cursor: text; background: var(--card); box-shadow: 0 0 0 1px var(--ring), 0 0 0 4px color-mix(in oklch, var(--ring) 25%, transparent); }
+      .col-head .count { color: var(--muted-foreground); font: 500 11px/1 var(--font-mono); font-variant-numeric: tabular-nums; padding: 2px 5px; border-radius: 999px; background: color-mix(in oklch, var(--foreground) 6%, transparent); }
       .col-head .spacer { flex: 1; }
-      .col-head .tools { display: flex; opacity: 0; transition: opacity 0.12s; }
+      .col-head .tools { display: flex; opacity: 0; transition: opacity var(--dur-1) var(--ease-out); }
       .col:hover .col-head .tools, .col-head .tools:focus-within { opacity: 1; }
-      .collapse svg { transition: transform 0.15s; }
+      .collapse svg { transition: transform var(--dur-3) var(--ease-spring); }
       .col.folded .collapse svg { transform: rotate(-90deg); }
-      .col.folded .cards, .col.folded .add { display: none; }
+      .col.folded .cards, .col.folded .add, .col.folded .editor { display: none; }
 
       .cards { display: flex; flex-direction: column; gap: 6px; min-height: 6px; }
-      .card { position: relative; background: var(--card); border-radius: 8px; box-shadow: var(--shadow); padding: 8px 10px; cursor: grab; transition: box-shadow 0.15s, transform 0.15s, opacity 0.15s; }
-      .card:hover { box-shadow: var(--shadow-lift); }
-      .card.dragging { opacity: 0.35; transform: scale(0.98); }
-      .placeholder { height: 36px; border-radius: 8px; border: 1.5px dashed color-mix(in srgb, var(--dot) 55%, transparent); background: color-mix(in srgb, var(--dot) 6%, transparent); }
-      .card .title { font-weight: 500; word-break: break-word; padding-right: 22px; }
-      .card .body { margin-top: 3px; color: var(--muted); font-size: 12px; white-space: pre-wrap; word-break: break-word; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-      .card .foot { display: flex; align-items: center; gap: 6px; margin-top: 7px; font-size: 11px; color: var(--muted); }
-      .chip { display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; height: 18px; border-radius: 9px; background: var(--hover); }
-      .chip.session { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
-      .chip svg { width: 11px; height: 11px; }
-      .card .ops { position: absolute; top: 5px; right: 5px; display: flex; gap: 1px; opacity: 0; background: var(--card); border-radius: 6px; }
-      .card:hover .ops, .card .ops.open { opacity: 1; }
-      .creator { display: inline-grid; place-items: center; color: var(--muted); }
-      .creator svg { width: 12px; height: 12px; }
-      .chip.bound { cursor: pointer; max-width: 150px; color: var(--fg); }
-      .chip.bound span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .chip.bound:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
-      .chip.current { cursor: default; color: #fff; background: var(--accent); }
-      .chip.current:hover { color: #fff; background: var(--accent); }
-      .chip.stale { cursor: default; color: var(--muted); text-decoration: line-through; }
-      .chip.stale:hover { color: var(--muted); background: var(--hover); }
-      .chip .live { width: 6px; height: 6px; border-radius: 50%; background: #10b981; flex: none; box-shadow: 0 0 0 2px color-mix(in srgb, #10b981 25%, transparent); }
-      .menu {
-        position: fixed; z-index: 10; min-width: 168px; padding: 4px; border-radius: 9px;
-        background: var(--card); box-shadow: var(--shadow-lift);
+      .card {
+        position: relative; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-md);
+        background: var(--card); box-shadow: var(--shadow-xs); cursor: grab;
+        transition: box-shadow var(--dur-2) var(--ease-out), border-color var(--dur-2) var(--ease-out), transform var(--dur-3) var(--ease-spring), opacity var(--dur-2) var(--ease-out);
       }
-      .menu button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; font-size: 12.5px; text-align: left; }
-      .menu button:hover { background: var(--hover); }
-      .menu button svg { color: var(--muted); }
-      .menu small { display: block; color: var(--muted); font-size: 11px; }
+      .card:hover { border-color: color-mix(in oklch, var(--foreground) 16%, transparent); box-shadow: var(--shadow-sm); }
+      .card:hover:active { cursor: grabbing; }
+      /* 拖起瞬间抬起，供拖拽快照；之后原位只留浅影 */
+      .card.lift { transform: scale(1.02) rotate(1deg); box-shadow: var(--shadow-lg); transition: none; }
+      .card.dragging { opacity: 0.3; transform: scale(0.98); box-shadow: none; }
+      .card.settle { animation: settle var(--dur-3) var(--ease-spring); }
+      @keyframes settle { from { scale: 1.02; rotate: 1deg; box-shadow: var(--shadow-lg); } }
+      .placeholder {
+        height: 36px; border-radius: var(--radius-md);
+        border: 1.5px dashed color-mix(in oklch, var(--dot) 50%, transparent);
+        background: color-mix(in oklch, var(--dot) 6%, transparent);
+        animation: ui-fade-in var(--dur-1) var(--ease-out);
+      }
+      .card .title { font-weight: 500; font-size: 12.5px; line-height: 1.45; word-break: break-word; padding-right: 22px; }
+      .card .body { margin-top: 3px; color: var(--muted-foreground); font-size: 12px; white-space: pre-wrap; word-break: break-word; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+      .card .foot { display: flex; align-items: center; gap: 6px; margin-top: 7px; font-size: 11px; color: var(--muted-foreground); }
+      .chip { display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; height: 18px; border-radius: 999px; font-weight: 500; background: color-mix(in oklch, var(--foreground) 6%, transparent); transition: background-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out); }
+      .chip svg { width: 11px; height: 11px; }
+      .card .ops {
+        position: absolute; top: 4px; right: 4px; display: flex; padding: 1px; opacity: 0;
+        border-radius: var(--radius-md); background: var(--card);
+        translate: 0 -2px; transition: opacity var(--dur-1) var(--ease-out), translate var(--dur-2) var(--ease-out);
+      }
+      .card:hover .ops, .card .ops.open { opacity: 1; translate: 0 0; }
+      .creator { display: inline-grid; place-items: center; color: var(--muted-foreground); }
+      .creator svg { width: 12px; height: 12px; }
+      .chip.bound { cursor: pointer; max-width: 150px; color: var(--foreground); }
+      .chip.bound span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .chip.bound:hover { background: color-mix(in oklch, var(--brand) 14%, transparent); color: var(--brand); }
+      .chip.current { cursor: default; color: var(--brand); background: color-mix(in oklch, var(--brand) 12%, transparent); }
+      .chip.current:hover { color: var(--brand); background: color-mix(in oklch, var(--brand) 12%, transparent); }
+      .chip.stale { cursor: default; color: var(--muted-foreground); text-decoration: line-through; }
+      .chip.stale:hover { color: var(--muted-foreground); }
+      .chip .live { width: 6px; height: 6px; border-radius: 50%; background: var(--success); flex: none; box-shadow: 0 0 0 2px color-mix(in oklch, var(--success) 25%, transparent); animation: live 1.6s var(--ease-out) infinite; }
+      @keyframes live { 50% { box-shadow: 0 0 0 4px color-mix(in oklch, var(--success) 0%, transparent); } }
 
-      .btn { height: 24px; padding: 0 10px; border-radius: 6px; font-size: 12px; }
+      .menu { position: fixed; z-index: 10; min-width: 180px; padding: 4px; }
+      .menu button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border-radius: var(--radius-sm); font-size: 12px; text-align: left; }
+      .menu button svg { color: var(--muted-foreground); flex: none; }
+      .menu small { display: block; color: var(--muted-foreground); font-size: 11px; }
+
       .cards + .editor { margin-top: 6px; }
       .editor {
-        background: var(--card); border-radius: 10px; overflow: hidden;
-        box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent), 0 6px 20px rgba(0, 0, 0, 0.12);
-        animation: pop 0.14s ease-out;
+        overflow: hidden; border-color: var(--ring);
+        box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 22%, transparent), var(--shadow-sm);
       }
-      @keyframes pop { from { opacity: 0; transform: translateY(-3px) scale(0.99); } }
-      .editor .fields { padding: 10px 12px 8px; }
-      .editor .title-in { font-size: 13.5px; font-weight: 600; }
-      .editor .title-in::placeholder, .editor textarea::placeholder { color: var(--muted); opacity: 0.7; }
-      .editor textarea { display: block; margin-top: 6px; min-height: 36px; max-height: 240px; font-size: 12.5px; line-height: 1.55; color: var(--fg); opacity: 0.85; }
-      .editor .bar { display: flex; align-items: center; gap: 4px; padding: 6px 8px; border-top: 1px solid var(--line); background: var(--col); }
+      .editor .fields { padding: 9px 11px 7px; }
+      .editor .title-in { font-size: 13px; font-weight: 600; }
+      .editor .title-in::placeholder, .editor textarea::placeholder { color: var(--muted-foreground); opacity: 0.8; }
+      .editor textarea { display: block; margin-top: 4px; min-height: 36px; max-height: 240px; font-size: 12px; line-height: 1.55; color: var(--foreground); opacity: 0.85; }
+      .editor .bar { display: flex; align-items: center; gap: 4px; padding: 5px 6px; border-top: 1px solid var(--border); background: color-mix(in oklch, var(--muted) 50%, transparent); }
       .pill {
         flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px; height: 24px; padding: 0 4px 0 8px;
-        border-radius: 12px; color: var(--muted); cursor: pointer; transition: background 0.12s, color 0.12s;
+        border-radius: 999px; color: var(--muted-foreground); cursor: pointer; transition: background-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
       }
-      .pill:hover { background: var(--hover); color: var(--fg); }
-      .pill.on { color: var(--accent); }
+      .pill:hover { background: var(--hover); color: var(--foreground); }
+      .pill.on { color: var(--brand); }
       .pill svg { flex: none; width: 12px; height: 12px; }
       .pill select {
         min-width: 0; max-width: 100%; font: inherit; font-size: 12px; color: inherit; background: none; border: 0; outline: none;
         cursor: pointer; appearance: none; text-overflow: ellipsis;
       }
-      .btn.ghost { color: var(--muted); }
-      .btn.ghost:hover { color: var(--fg); }
-      .btn:hover { background: var(--hover); }
-      .btn.primary { background: var(--accent); color: #fff; }
-      .btn.primary:hover { filter: brightness(1.08); background: var(--accent); }
 
-      .add { display: flex; align-items: center; gap: 6px; width: 100%; margin-top: 6px; padding: 5px 8px; color: var(--muted); border-radius: 7px; font-size: 12.5px; }
-      .add:hover { background: var(--hover); color: var(--fg); }
-      .new-col { display: flex; align-items: center; gap: 6px; border-radius: var(--radius); border: 1.5px dashed var(--line); padding: 6px 10px 6px 6px; color: var(--muted); }
-      .new-col:focus-within { border-color: var(--accent); color: var(--fg); }
-      .empty-state { padding: 40px 16px; text-align: center; color: var(--muted); font-size: 12.5px; }
+      .add { display: flex; align-items: center; gap: 6px; width: 100%; margin-top: 6px; padding: 5px 8px; color: var(--muted-foreground); border-radius: var(--radius-md); font-size: 12px; transition: background-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out); }
+      .add:hover { background: var(--hover); color: var(--foreground); }
+      .add:hover:active { background: var(--press); }
+      .col-empty { padding: 14px 8px 8px; gap: 4px; font-size: 11.5px; }
+      .col-empty svg { width: 20px; height: 20px; }
+      .col.over .col-empty { display: none; }
+      .new-col {
+        display: flex; align-items: center; gap: 6px; padding: 6px 10px 6px 8px; border-radius: var(--radius-lg);
+        border: 1px dashed color-mix(in oklch, var(--foreground) 18%, transparent); color: var(--muted-foreground);
+        transition: border-color var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out);
+      }
+      .new-col:hover { border-color: color-mix(in oklch, var(--foreground) 30%, transparent); }
+      .new-col:focus-within { border-style: solid; border-color: var(--ring); color: var(--foreground); box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 22%, transparent); }
+      .new-col input::placeholder { color: var(--muted-foreground); }
+      .new-col > svg { flex: none; }
     </style>
   </head>
   <body>
     <header><h1>看板</h1><span class="stat" id="stat"></span></header>
     <div id="toasts" class="toasts"></div>
     <div id="board" class="board"></div>
+    <script src="enso-ui.js"></script>
     <script>
       const PALETTE = ['#8b93a1', '#3b82f6', '#f59e0b', '#10b981', '#a855f7', '#ef4444', '#06b6d4', '#ec4899'];
       const ICON = {
@@ -177,6 +168,8 @@
         draft: '<path d="M4 20h16M4 4h16v10H4z"/>',
         newchat: '<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/><path d="M12 9v6M9 12h6"/>',
         link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+        inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+        columns: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18"/>',
       };
       const $ = (id) => document.getElementById(id);
       const svg = (name) => `<svg viewBox="0 0 24 24">${ICON[name]}</svg>`;
@@ -192,7 +185,9 @@
         node.append(...kids.filter((k) => k != null && k !== false));
         return node;
       };
-      const iconBtn = (name, title, onclick, extra = '') => h('button', { class: `icon ${extra}`, title, html: svg(name), onclick });
+      const iconBtn = (name, title, onclick, extra = '') =>
+        h('button', { class: `ui-btn ui-btn--icon ui-btn--sm ${extra}`, 'data-tip': title, 'aria-label': title, 'data-fill': '', html: svg(name), onclick });
+      ensoUI.tooltip();
 
       let state = null;
       let sess = { current: null, sessions: [] }; // 宿主会话列表；旧宿主不支持时保持空
@@ -205,35 +200,41 @@
       };
       let editing = null; // { card?, column?, renaming? }
       let drag = null; // { id, before }
+      let seen = null; // 上次渲染的卡片 id，用于给新卡片入场动画
+      let dropped = null; // 刚落位的卡片 id
       const folded = new Set(JSON.parse(localStorage.getItem('kanban.folded') || '[]'));
       const busy = () => editing || drag || menu || document.querySelector('.mask') || document.activeElement?.matches('input, textarea');
 
       // Electron 侧栏不支持 alert/confirm/prompt，用页内 toast 与 modal
       function toast(message, kind = '') {
-        const node = h('div', { class: `toast ${kind}` }, message);
+        const node = h('div', { class: `toast ui-enter ${kind}` }, message);
         $('toasts').append(node);
-        setTimeout(() => {
-          node.classList.add('leave');
-          setTimeout(() => node.remove(), 200);
-        }, kind === 'error' ? 3500 : 2000);
+        setTimeout(() => ensoUI.leave(node), kind === 'error' ? 3500 : 2000);
       }
 
       function ask(title, message, okText = '删除') {
+        const trigger = document.activeElement?.closest?.('button');
         return new Promise((resolve) => {
+          let closed = false;
+          // 确认向下离开，取消原路收回
           const done = (v) => {
-            mask.remove();
+            if (closed) return;
+            closed = true;
             document.removeEventListener('keydown', onKey, true);
+            mask.setAttribute('data-leaving', '');
+            ensoUI.close(modal, v ? 'confirm' : undefined).then(() => mask.remove());
             resolve(v);
           };
           const onKey = (e) => {
             if (e.key === 'Escape') { e.stopPropagation(); done(false); }
             if (e.key === 'Enter') { e.preventDefault(); done(true); }
           };
-          const ok = h('button', { class: 'btn danger', onclick: () => done(true) }, okText);
-          const mask = h('div', { class: 'mask', onmousedown: (e) => e.target === mask && done(false) },
-            h('div', { class: 'modal' }, h('h2', {}, title), h('p', {}, message),
-              h('div', { class: 'actions' }, h('button', { class: 'btn', onclick: () => done(false) }, '取消'), ok)));
+          const ok = h('button', { class: 'ui-btn btn-danger', onclick: () => done(true) }, okText);
+          const modal = h('div', { class: 'modal ui-pop' }, h('h2', {}, title), h('p', {}, message),
+            h('div', { class: 'actions' }, h('button', { class: 'ui-btn ui-btn--outline', onclick: () => done(false) }, '取消'), ok));
+          const mask = h('div', { class: 'mask ui-overlay', onmousedown: (e) => e.target === mask && done(false) }, modal);
           document.body.append(mask);
+          ensoUI.pop(modal, trigger);
           document.addEventListener('keydown', onKey, true);
           ok.focus();
         });
@@ -256,7 +257,7 @@
 
       let menu = null;
       const closeMenu = () => {
-        menu?.remove();
+        if (menu) ensoUI.close(menu);
         menu = null;
         document.querySelectorAll('.ops.open').forEach((o) => o.classList.remove('open'));
       };
@@ -267,12 +268,12 @@
         closeMenu();
         const bound = card.boundTo && card.boundTo !== sess.current && sessionOf(card.boundTo);
         const item = (icon, label, hint, target) =>
-          h('button', { html: svg(icon), onclick: async () => {
+          h('button', { 'data-fill': '', html: svg(icon), onclick: async () => {
             closeMenu();
             apply(await run('send', { id: card.id, target }));
             loadSessions().then(() => !busy() && render());
           } }, h('span', {}, label, h('small', {}, hint)));
-        menu = h('div', { class: 'menu' },
+        menu = h('div', { class: 'menu ui-pop' },
           bound && item('reply', '发送到绑定会话', bound.title || '未命名会话', 'bound'),
           item('send', '发送到当前会话', '立即开始处理，并绑定', 'current'),
           item('newchat', '新建会话', '预填到新会话输入框，并绑定', 'new'),
@@ -284,6 +285,8 @@
         const mh = menu.offsetHeight;
         menu.style.left = `${Math.max(6, Math.min(r.right - w, document.documentElement.clientWidth - w - 6))}px`;
         menu.style.top = `${r.bottom + mh + 4 > document.documentElement.clientHeight ? r.top - mh - 4 : r.bottom + 4}px`;
+        ensoUI.pop(menu, anchor);
+        ensoUI.fill(menu);
       }
 
       const ago = (t) => {
@@ -308,15 +311,24 @@
         select.value = bound;
         const grow = () => { body.style.height = 'auto'; body.style.height = `${body.scrollHeight}px`; };
         body.oninput = grow;
+        let closing = false;
+        const cancel = () => {
+          if (closing) return;
+          closing = true;
+          ensoUI.close(node).then(() => edit(null));
+        };
         const submit = async () => {
+          if (closing) return;
           if (!title.value.trim()) return title.focus();
           const next = await run('upsert', { id: card?.id, title: title.value, body: body.value, column, bind: select.value || false });
           if (!next) return;
+          closing = true;
+          await ensoUI.close(node, 'confirm');
           editing = null;
           apply(next);
         };
         title.onkeydown = body.onkeydown = (e) => {
-          if (e.key === 'Escape') edit(null);
+          if (e.key === 'Escape') cancel();
           else if (e.key === 'Enter' && !e.isComposing && (e.metaKey || e.ctrlKey || e.target === title)) {
             e.preventDefault();
             submit();
@@ -325,24 +337,25 @@
         requestAnimationFrame(() => { grow(); title.focus(); });
         const sync = () => pill.classList.toggle('on', !!select.value);
         select.onchange = sync;
-        const pill = h('label', { class: 'pill', title: '绑定会话', html: svg('link') }, select);
+        const pill = h('label', { class: 'pill', 'data-tip': '绑定会话', html: svg('link') }, select);
         sync();
-        return h('div', { class: 'editor' },
+        const node = h('div', { class: 'editor ui-card ui-pop' },
           h('div', { class: 'fields' }, title, body),
           h('div', { class: 'bar' }, pill,
-            h('button', { class: 'btn ghost', onclick: () => edit(null) }, '取消'),
-            h('button', { class: 'btn primary', title: '回车 / ⌘↩', onclick: submit }, card ? '保存' : '添加')));
+            h('button', { class: 'ui-btn ui-btn--sm', onclick: cancel }, '取消'),
+            h('button', { class: 'ui-btn ui-btn--sm ui-btn--primary', 'data-tip': '回车 / ⌘↩', onclick: submit }, card ? '保存' : '添加')));
+        return node;
       }
 
       function boundChip(id) {
         const current = id === sess.current;
         const s = sessionOf(id);
         const supported = sess.current != null;
-        if (supported && !current && !s) return h('span', { class: 'chip stale', title: '会话已删除或已结束' }, '已失效');
+        if (supported && !current && !s) return h('span', { class: 'chip stale', 'data-tip': '会话已删除或已结束' }, '已失效');
         const label = current ? '当前' : supported ? sessionName(id) : '已绑定会话';
         const chip = h('span', {
           class: `chip bound ${current ? 'current' : ''}`,
-          title: current ? '绑定到当前会话' : `跳转到「${label}」`,
+          'data-tip': current ? '绑定到当前会话' : `跳转到「${label}」`,
           html: s?.running && !current ? '<i class="live"></i>' : svg('link'),
         }, h('span', {}, label));
         chip.onclick = async (e) => {
@@ -357,13 +370,14 @@
         if (editing?.card === card.id) return editor(card, card.column);
         const bySession = card.createdBy?.kind === 'session';
         const creator = bySession ? `由${card.createdBy.sessionId === sess.current ? '当前会话' : '会话'}创建` : '由我创建';
-        const node = h('div', { class: 'card', draggable: 'true', 'data-id': card.id },
+        const enter = seen && !seen.has(card.id) ? 'ui-enter' : '';
+        const node = h('div', { class: `card ${enter} ${dropped === card.id ? 'settle' : ''}`, draggable: 'true', 'data-id': card.id },
           h('div', { class: 'title' }, card.title),
           card.body && h('div', { class: 'body' }, card.body),
           h('div', { class: 'foot' },
-            h('span', { class: 'creator', title: creator, html: svg(bySession ? 'bot' : 'user') }),
+            h('span', { class: 'creator', 'data-tip': creator, html: svg(bySession ? 'bot' : 'user') }),
             card.boundTo && boundChip(card.boundTo),
-            h('span', { title: new Date(card.updatedAt).toLocaleString() }, ago(card.updatedAt))),
+            h('span', { 'data-tip': new Date(card.updatedAt).toLocaleString() }, ago(card.updatedAt))),
           h('div', { class: 'ops' },
             iconBtn('send', '发送到会话', (e) => {
               e.stopPropagation();
@@ -371,14 +385,23 @@
             }),
             iconBtn('trash', '删除', async (e) => {
               e.stopPropagation();
-              if (await ask('删除卡片', `「${card.title}」删除后无法恢复。`)) apply(await run('remove', { id: card.id }));
+              if (!(await ask('删除卡片', `「${card.title}」删除后无法恢复。`))) return;
+              // 先淡出再收起，结束后再按新状态重绘
+              const [next] = await Promise.all([run('remove', { id: card.id }), ensoUI.leave(node)]);
+              next ? apply(next) : render();
             }, 'danger')));
+        ensoUI.fill(node.querySelector('.ops'));
         node.onclick = () => edit({ card: card.id });
         node.ondragstart = (e) => {
           drag = { id: card.id, before: null };
           e.dataTransfer.effectAllowed = 'move';
           e.dataTransfer.setData('text/plain', card.id);
-          requestAnimationFrame(() => node.classList.add('dragging'));
+          // 同步加上抬起态，让拖拽快照带着抬起的样子；下一帧原位变成浅影
+          node.classList.add('lift');
+          requestAnimationFrame(() => {
+            node.classList.remove('lift');
+            node.classList.add('dragging');
+          });
         };
         node.ondragend = () => { drag = null; render(); };
         return node;
@@ -386,7 +409,7 @@
 
       function columnName(column) {
         if (editing?.renaming !== column.id) {
-          return h('span', { class: 'name', title: '点击改名', onclick: () => edit({ renaming: column.id }) }, column.name);
+          return h('span', { class: 'name', 'data-tip': '点击改名', 'data-fill': '', onclick: () => edit({ renaming: column.id }) }, column.name);
         }
         const input = h('input', { class: 'name', value: column.name });
         let done = false;
@@ -419,7 +442,8 @@
         const startAdd = () => { folded.delete(column.id); edit({ column: column.id }); };
         const adding = editing?.column === column.id && !editing.card;
 
-        const list = h('div', { class: 'cards' }, ...cards.map(cardEl));
+        const empty = !cards.length && !adding && h('div', { class: 'ui-empty col-empty', html: svg('inbox') }, '暂无卡片');
+        const list = h('div', { class: 'cards' }, ...cards.map(cardEl), empty);
         const col = h('section', { class: `col ${isFolded ? 'folded' : ''}`, style: `--dot:${PALETTE[index % PALETTE.length]}` },
           h('div', { class: 'col-head' },
             iconBtn('chevron', isFolded ? '展开' : '折叠', toggle, 'collapse'),
@@ -432,11 +456,16 @@
               index < state.columns.length - 1 && iconBtn('right', '后移', op('move', { index: index + 1 })),
               iconBtn('trash', '删除列', () => {
                 if (cards.length) return toast(`「${column.name}」里还有 ${cards.length} 张卡片，先移走或删除`, 'error');
-                ask('删除列', `删除列「${column.name}」？`).then((ok) => ok && op('delete')());
+                ask('删除列', `删除列「${column.name}」？`).then(async (ok) => {
+                  if (!ok) return;
+                  const [next] = await Promise.all([run('column', { action: 'delete', id: column.id }), ensoUI.leave(col)]);
+                  next ? apply(next) : render();
+                });
               }, 'danger')),
             iconBtn('plus', '添加卡片', startAdd)),
           list,
           adding ? editor(null, column.id) : h('button', { class: 'add', html: svg('plus'), onclick: startAdd }, '添加卡片'));
+        ensoUI.fill(col.querySelector('.col-head'));
 
         // 拖放：占位块标出落点
         const placeholder = h('div', { class: 'placeholder' });
@@ -467,7 +496,9 @@
           if (!drag) return;
           const { id, before } = drag;
           drag = null;
-          apply(await run('move', { id, column: column.id, beforeId: before ?? undefined }));
+          const next = await run('move', { id, column: column.id, beforeId: before ?? undefined });
+          dropped = id; // dragend 的重绘先于此处，落位动画留给这次 apply
+          apply(next);
         };
         return col;
       }
@@ -483,19 +514,26 @@
           if (e.key === 'Enter' && !e.isComposing) add();
           if (e.key === 'Escape') input.blur();
         };
-        return h('div', { class: 'new-col' }, h('span', { class: 'icon', html: svg('plus') }), input);
+        return h('div', { class: 'new-col', html: svg('columns') }, input);
       }
 
       function render() {
         if (!state) return;
         const last = state.columns.at(-1);
         const total = state.cards.length;
-        $('stat').textContent = total && last ? `${state.cards.filter((c) => c.column === last.id).length}/${total}` : '';
-        $('stat').title = last ? `「${last.name}」/ 全部` : '';
+        ensoUI.swap($('stat'), total && last ? `${state.cards.filter((c) => c.column === last.id).length}/${total}` : '');
+        if (last) $('stat').dataset.tip = `「${last.name}」/ 全部`;
+        else delete $('stat').dataset.tip;
+        const first = seen === null;
         $('board').replaceChildren(
           ...state.columns.map(columnEl),
           newColumnEl(),
-          ...(state.columns.length ? [] : [h('div', { class: 'empty-state' }, '还没有列，先新建一列吧')]));
+          ...(state.columns.length ? [] : [h('div', { class: 'ui-empty', html: svg('columns') }, '还没有列，先新建一列吧')]));
+        // 首次渲染列错落入场，之后的重绘不再播放
+        $('board').classList.toggle('ui-stagger', first);
+        if (first) ensoUI.stagger($('board'));
+        seen = new Set(state.cards.map((c) => c.id));
+        dropped = null;
       }
 
       // 其他会话 / agent 改动时自动刷新；编辑、拖动、输入时暂停。会话列表每 5 秒刷新
@@ -507,7 +545,7 @@
           const rev = await window.enso.call('rev').catch(() => null);
           if (rev === -1) {
             state = null;
-            $('board').replaceChildren(h('div', { class: 'empty-state' }, '打开一个项目后即可使用看板'));
+            $('board').replaceChildren(h('div', { class: 'ui-empty', html: svg('columns') }, '打开一个项目后即可使用看板'));
           } else if (rev !== null && rev !== state?.rev) apply(await run('list'));
           else if (state && before !== JSON.stringify(sess)) render();
         }

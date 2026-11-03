@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "enso.example.notes",
   "name": "Notes",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "icon": "icon.svg",
   "description": "侧栏里的便签：存在插件自己的数据目录，可一键插入输入框。",
   "main": "main.mjs",

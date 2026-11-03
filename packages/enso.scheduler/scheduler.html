@@ -2,230 +2,103 @@
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
+    <link rel="stylesheet" href="enso-ui.css" />
     <style>
-      :root {
-        color-scheme: light dark;
-        --fg: #1f2328;
-        --muted: #6e7781;
-        --line: rgba(31, 35, 40, 0.12);
-        --card: rgba(255, 255, 255, 0.72);
-        --soft: rgba(31, 35, 40, 0.05);
-        --accent: #6d5dfc;
-        --accent2: #19b6d2;
-        --ok: #1f9d55;
-        --err: #d1242f;
-        --warn: #bf8700;
-      }
-      :root[data-theme='dark'] {
-        --fg: #e6edf3;
-        --muted: #8b949e;
-        --line: rgba(240, 246, 252, 0.1);
-        --card: rgba(22, 27, 34, 0.7);
-        --soft: rgba(240, 246, 252, 0.05);
-        --accent: #9d8cff;
-        --accent2: #3dd6f0;
-        --ok: #3fb950;
-        --err: #f85149;
-        --warn: #d29922;
-      }
-      * { box-sizing: border-box; }
-      body {
-        margin: 0;
-        padding: 12px;
-        font: 13px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        color: var(--fg);
-        background: transparent;
-      }
-      .num { font-variant-numeric: tabular-nums; }
-      .muted { color: var(--muted); }
-      header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-      header h1 { margin: 0; font-size: 15px; font-weight: 600; }
-      header .sub { font-size: 12px; }
-      button {
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        padding: 4px 10px;
-        background: transparent;
-        color: inherit;
-        font: inherit;
-        cursor: pointer;
-        transition: background 0.15s, border-color 0.15s, transform 0.1s;
-      }
-      button:hover { background: var(--soft); }
-      button:active { transform: scale(0.97); }
-      button:disabled { opacity: 0.5; cursor: default; }
-      button.primary {
-        border: none;
-        color: #fff;
-        background: linear-gradient(135deg, var(--accent), var(--accent2));
-      }
-      button.primary:hover { filter: brightness(1.08); }
-      button.danger { color: var(--err); border-color: var(--err); }
-      button.ghost { border-color: transparent; color: var(--muted); padding: 4px 6px; }
-      button.ghost:hover { color: var(--fg); }
+      body { padding: 12px; }
+      header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+      header h1 { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+      header .sub { font-size: 11.5px; }
 
-      .hero {
-        position: relative;
-        overflow: hidden;
-        padding: 14px;
-        border-radius: 14px;
-        margin-bottom: 12px;
-        color: #fff;
-        background: linear-gradient(135deg, var(--accent), var(--accent2));
-        display: flex;
-        align-items: center;
-        gap: 14px;
-      }
-      .hero::after {
-        content: '';
-        position: absolute;
-        inset: -40% -20% auto auto;
-        width: 160px;
-        height: 160px;
-        border-radius: 50%;
-        background: rgba(255, 255, 255, 0.12);
-      }
-      .ring { flex: none; width: 58px; height: 58px; transform: rotate(-90deg); }
-      .ring circle { fill: none; stroke-width: 5; }
-      .ring .track { stroke: rgba(255, 255, 255, 0.25); }
-      .ring .bar { stroke: #fff; stroke-linecap: round; transition: stroke-dashoffset 1s linear; }
-      .hero .label { font-size: 11px; opacity: 0.85; letter-spacing: 0.04em; }
-      .hero .count { font-size: 24px; font-weight: 650; line-height: 1.15; }
-      .hero .what { font-size: 12px; opacity: 0.9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .hero .info { min-width: 0; z-index: 1; }
-      .hero.idle { background: var(--soft); color: var(--muted); }
+      .hero { display: flex; align-items: center; gap: 12px; padding: 12px; margin-bottom: 12px; }
+      .hero.idle { color: var(--muted-foreground); border-style: dashed; box-shadow: none; background: transparent; }
+      .ring { flex: none; width: 48px; height: 48px; transform: rotate(-90deg); }
+      .ring circle { fill: none; stroke-width: 4; }
+      .ring .track { stroke: var(--muted); }
+      .ring .bar { stroke: var(--brand); stroke-linecap: round; transition: stroke-dashoffset 1s linear; }
+      .hero .info { min-width: 0; }
+      .hero .label { font-size: 11px; color: var(--muted-foreground); }
+      .hero .count { font-size: 20px; font-weight: 600; line-height: 1.25; letter-spacing: -0.02em; }
+      .hero .what { font-size: 11.5px; color: var(--muted-foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .hero.idle .hint { font-size: 12px; }
 
-      .editor {
-        display: grid;
-        gap: 10px;
-        padding: 12px;
-        border: 1px solid var(--line);
-        border-radius: 14px;
-        background: var(--card);
-        margin-bottom: 12px;
-        animation: drop 0.18s ease-out;
-      }
-      @keyframes drop { from { opacity: 0; transform: translateY(-6px); } }
+      .editor { display: grid; gap: 12px; padding: 12px; margin-bottom: 12px; transform-origin: var(--origin-x, 100%) var(--origin-y, 0%); }
       .field { display: grid; gap: 4px; }
-      .field > span { font-size: 11px; color: var(--muted); }
-      input[type='text'], input[type='time'], input[type='number'], textarea, select {
-        width: 100%;
-        padding: 6px 8px;
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        background: transparent;
-        color: inherit;
-        font: inherit;
-        outline: none;
-        transition: border-color 0.15s, box-shadow 0.15s;
+      .field > .ui-label { margin: 0; }
+      textarea.ui-input { min-height: 72px; resize: vertical; }
+      .ui-seg.wide { display: flex; width: 100%; overflow-x: auto; scrollbar-width: none; }
+      .ui-seg.wide > button { flex: 1 0 auto; padding: 0 6px; font-size: 11.5px; }
+      .inline { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--muted-foreground); }
+      .inline input[type='number'] { width: 64px; }
+      .inline input[type='time'] { width: 104px; }
+      .days { display: flex; gap: 3px; }
+      .days button {
+        width: 26px; height: 26px; padding: 0;
+        border: 1px solid var(--border); border-radius: 999px;
+        font: 500 11px/1 var(--font-sans); color: var(--muted-foreground); background: transparent; cursor: pointer;
+        transition: background-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out), transform var(--dur-2) var(--ease-spring);
       }
-      input:focus, textarea:focus, select:focus {
-        border-color: var(--accent);
-        box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
-      }
-      textarea { min-height: 72px; resize: vertical; }
-      .seg { display: flex; flex-wrap: wrap; gap: 4px; padding: 3px; border-radius: 9px; background: var(--soft); }
-      .seg button { flex: 1; border: none; border-radius: 6px; padding: 3px 8px; font-size: 12px; white-space: nowrap; }
-      .seg button.on { background: var(--card); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); color: var(--accent); font-weight: 600; }
-      .inline { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-      .inline input[type='number'] { width: 70px; }
-      .inline input[type='time'] { width: 110px; }
-      .days { display: flex; gap: 4px; }
-      .days button { width: 28px; height: 28px; padding: 0; border-radius: 50%; font-size: 12px; }
-      .days button.on { border-color: var(--accent); background: var(--accent); color: #fff; }
-      .preview { font-size: 12px; padding: 6px 8px; border-radius: 8px; background: var(--soft); }
-      .preview.bad { color: var(--err); }
-      .check { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+      .days button:hover { background: var(--hover); color: var(--foreground); }
+      .days button:hover:active { transform: scale(var(--press-scale)); }
+      .days button.on { border-color: var(--primary); background: var(--primary); color: var(--primary-foreground); }
+      .preview { min-height: 30px; padding: 7px 9px; border-radius: var(--radius-md); background: var(--muted); font-size: 11.5px; }
+      .preview b { font-weight: 500; color: var(--foreground); }
+      .preview.bad { color: var(--destructive); background: color-mix(in oklch, var(--destructive) 10%, transparent); }
+      .check { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted-foreground); cursor: pointer; }
+      .warn { font-size: 11.5px; color: var(--warning); }
       .actions { display: flex; justify-content: flex-end; gap: 6px; }
 
-      ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+      ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
       .task {
-        padding: 10px 12px;
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        background: var(--card);
-        transition: opacity 0.2s, border-color 0.2s;
+        padding: 10px 11px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        transition: opacity var(--dur-2) var(--ease-out), border-color var(--dur-1) var(--ease-out);
       }
-      .task:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
-      .task.off { opacity: 0.55; }
-      .row { display: flex; align-items: center; gap: 8px; }
-      .row.space { justify-content: space-between; }
-      .name { font-weight: 600; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .chip {
-        font-size: 11px;
-        padding: 1px 7px;
-        border-radius: 99px;
-        background: color-mix(in srgb, var(--accent) 14%, transparent);
-        color: var(--accent);
-        white-space: nowrap;
-      }
-      .chip.grey { background: var(--soft); color: var(--muted); }
-      .switch { position: relative; width: 30px; height: 18px; flex: none; border: none; padding: 0; border-radius: 99px; background: var(--line); }
-      .switch::after {
-        content: '';
-        position: absolute;
-        top: 2px;
-        left: 2px;
-        width: 14px;
-        height: 14px;
-        border-radius: 50%;
-        background: #fff;
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
-        transition: transform 0.18s ease;
-      }
-      .switch.on { background: linear-gradient(135deg, var(--accent), var(--accent2)); }
-      .switch.on::after { transform: translateX(12px); }
-      .switch:hover { background-color: var(--line); filter: brightness(1.05); }
-      .countdown { margin: 8px 0 4px; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-      .countdown .big { font-size: 18px; font-weight: 650; }
-      .countdown .due { color: var(--accent); }
-      .progress { height: 4px; border-radius: 99px; background: var(--soft); overflow: hidden; }
-      .progress > i {
-        display: block;
-        height: 100%;
-        border-radius: inherit;
-        background: linear-gradient(90deg, var(--accent), var(--accent2));
-        transition: width 1s linear;
-      }
-      .prompt { margin-top: 6px; font-size: 12px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-wrap; }
+      .task.off { opacity: 0.6; }
+      .row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+      .name { flex: 1; min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .countdown { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 6px 0 6px; }
+      .countdown .big { font-size: 17px; font-weight: 600; letter-spacing: -0.02em; }
+      .countdown .big.due { color: var(--brand); }
+      .countdown .at { font-size: 11px; }
+      .progress { height: 3px; border-radius: 999px; background: var(--muted); overflow: hidden; }
+      .progress > i { display: block; height: 100%; border-radius: inherit; background: var(--brand); transition: width 1s linear; }
+      .prompt { margin-top: 6px; font-size: 12px; color: var(--muted-foreground); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-wrap; }
       .meta { margin-top: 8px; display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 11px; }
+      .meta .ui-btn--icon { color: var(--muted-foreground); }
       .dots { display: flex; gap: 3px; }
-      .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--line); }
-      .dot.ok { background: var(--ok); }
-      .dot.error { background: var(--err); }
-      .dot.missed { background: var(--warn); }
-      .err { margin-top: 6px; font-size: 11px; color: var(--err); }
-      .empty { text-align: center; padding: 28px 8px; color: var(--muted); border: 1px dashed var(--line); border-radius: 12px; }
-      .empty b { display: block; font-size: 22px; margin-bottom: 4px; }
+      .dot { width: 6px; height: 6px; border-radius: 999px; background: var(--border); }
+      .dot.ok { background: var(--success); }
+      .dot.error { background: var(--destructive); }
+      .dot.missed { background: var(--warning); }
+      .err { margin-top: 6px; padding: 5px 8px; border-radius: var(--radius-sm); font-size: 11px; color: var(--destructive); background: color-mix(in oklch, var(--destructive) 8%, transparent); }
+      .ui-empty { border: 1px dashed var(--border); border-radius: var(--radius-lg); }
+
       .toast {
-        position: fixed;
-        left: 12px;
-        right: 12px;
-        bottom: 12px;
-        padding: 8px 10px;
-        border-radius: 10px;
-        font-size: 12px;
-        color: #fff;
-        background: var(--err);
-        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
-        animation: drop 0.18s ease-out;
+        position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 950;
+        padding: 8px 11px; font-size: 12px;
+        color: var(--primary-foreground); background: var(--primary); border-color: transparent;
+        --origin-y: 100%;
       }
-      .toast.info { background: #2d333b; }
-      .foot { margin-top: 12px; font-size: 11px; text-align: center; }
+      .toast.error { color: #fff; background: var(--destructive); }
+      .foot { margin-top: 14px; font-size: 11px; line-height: 1.6; text-align: center; color: var(--muted-foreground); }
     </style>
   </head>
   <body>
     <header>
       <div>
         <h1>定时任务</h1>
-        <div class="sub muted" id="sub"></div>
+        <div class="sub ui-muted" id="sub"></div>
       </div>
-      <button class="primary" id="new">＋ 新建</button>
+      <button class="ui-btn ui-btn--primary ui-btn--sm" id="new">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>新建
+      </button>
     </header>
     <section id="hero"></section>
     <section id="editorSlot"></section>
     <ul id="list"></ul>
-    <div class="foot muted">仅在应用运行时生效；插件刚启用时首次触发最多延迟 1 分钟。<br />启用插件前已打开的会话收不到消息，请新建会话或重开该会话。</div>
+    <div class="foot">仅在应用运行时生效；插件刚启用时首次触发最多延迟 1 分钟。<br />启用插件前已打开的会话收不到消息，请新建会话或重开该会话。</div>
+    <script src="enso-ui.js"></script>
     <script>
       const $ = (sel) => document.querySelector(sel);
       const h = (tag, props = {}, ...children) => {
@@ -239,20 +112,34 @@
         el.append(...children.flat().filter((c) => c != null && c !== false));
         return el;
       };
+      const ICONS = {
+        play: '<path d="M6 4l14 8-14 8z" />',
+        edit: '<path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />',
+        trash: '<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />',
+        clock: '<circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />',
+      };
+      const icon = (name) => {
+        const t = document.createElement('template');
+        t.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]}</svg>`;
+        return t.content.firstChild;
+      };
       const pad = (n) => String(n).padStart(2, '0');
       const WEEK = ['日', '一', '二', '三', '四', '五', '六'];
 
       let state = { tasks: [], now: Date.now(), sessionId: null };
       let editing = null;
       let confirmDelete = null;
+      let removing = null;
       let toastTimer = null;
+      let toastEl = null;
 
       function toast(message, kind = 'error') {
-        document.querySelector('.toast')?.remove();
         clearTimeout(toastTimer);
-        const el = h('div', { class: `toast ${kind === 'info' ? 'info' : ''}` }, message);
+        toastEl?.remove();
+        const el = h('div', { class: `toast ui-card ui-pop ${kind === 'info' ? '' : 'error'}`, role: 'status' }, message);
+        toastEl = el;
         document.body.append(el);
-        toastTimer = setTimeout(() => el.remove(), 4000);
+        toastTimer = setTimeout(() => ensoUI.close(el), 4000);
       }
 
       async function call(method, args) {
@@ -333,7 +220,7 @@
       }
 
       // ---- 编辑器 ----
-      function openEditor(task) {
+      function openEditor(task, trigger) {
         confirmDelete = null;
         editing = {
           id: task?.id ?? null,
@@ -343,13 +230,27 @@
           notify: task?.notify ?? false,
           freq: fromCron(task?.schedule),
         };
-        renderEditor();
+        renderEditor(trigger);
         $('#editorSlot input')?.focus();
       }
+
+      async function closeEditor(kind) {
+        const el = $('#editorSlot .editor');
+        editing = null;
+        if (el) await ensoUI.close(el, kind);
+        if (!editing) $('#editorSlot').replaceChildren();
+      }
+
+      const skeleton = () => h('div', { class: 'ui-skeleton', style: 'height: 14px; width: 72%' });
 
       let previewTimer = null;
       function refreshPreview() {
         clearTimeout(previewTimer);
+        const box = $('#preview');
+        if (box && !box.querySelector('.ui-skeleton')) {
+          box.className = 'preview';
+          box.replaceChildren(skeleton());
+        }
         previewTimer = setTimeout(async () => {
           const box = $('#preview');
           if (!box || !editing) return;
@@ -359,60 +260,85 @@
             box.textContent = '执行时间无效';
             return;
           }
-          box.className = 'preview';
-          box.replaceChildren(h('b', {}, res.description), h('span', { class: 'muted' }, ` · 接下来：${res.runs.map(when).join('、')}`));
+          box.className = 'preview ui-muted';
+          box.replaceChildren(h('b', {}, res.description), ` · 接下来：${res.runs.map(when).join('、')}`);
         }, 150);
       }
 
-      function seg(options, value, onPick) {
-        return h('div', { class: 'seg' }, options.map(([v, label]) =>
-          h('button', { class: v === value ? 'on' : '', onclick: () => onPick(v) }, label)));
+      // 选项切换只改 aria-pressed，让 indicator 平移过去，不重建整个编辑器
+      function seg(options, value, onPick, wide) {
+        const el = h('div', { class: `ui-seg${wide ? ' wide' : ''}`, role: 'group' }, options.map(([v, label]) =>
+          h('button', { type: 'button', 'aria-pressed': String(v === value), 'data-v': v, onclick: (ev) => {
+            for (const b of el.querySelectorAll(':scope > button')) b.setAttribute('aria-pressed', String(b === ev.currentTarget));
+            ensoUI.seg(el);
+            onPick(v);
+          } }, label)));
+        return el;
       }
 
-      function renderEditor() {
+      function renderEditor(trigger) {
         const slot = $('#editorSlot');
         if (!editing) return slot.replaceChildren();
         const e = editing;
         const f = e.freq;
-        const rerender = () => { renderEditor(); };
         const bind = (el, fn) => { el.oninput = () => { fn(el); refreshPreview(); }; return el; };
 
-        const timeInput = () => bind(h('input', { type: 'time', value: f.time }), (el) => (f.time = el.value));
-        const freqBody = {
-          interval: () => h('div', { class: 'inline' }, '每', bind(h('input', { type: 'number', min: 1, max: 59, value: f.every }), (el) => (f.every = Math.min(59, Math.max(1, +el.value || 1)))), '分钟'),
-          hourly: () => h('div', { class: 'inline' }, '每小时第', bind(h('input', { type: 'number', min: 0, max: 59, value: f.minute }), (el) => (f.minute = Math.min(59, Math.max(0, +el.value || 0)))), '分'),
+        const timeInput = () => bind(h('input', { class: 'ui-input', type: 'time', value: f.time }), (el) => (f.time = el.value));
+        const freqBody = () => ({
+          interval: () => h('div', { class: 'inline' }, '每', bind(h('input', { class: 'ui-input ui-mono', type: 'number', min: 1, max: 59, value: f.every }), (el) => (f.every = Math.min(59, Math.max(1, +el.value || 1)))), '分钟'),
+          hourly: () => h('div', { class: 'inline' }, '每小时第', bind(h('input', { class: 'ui-input ui-mono', type: 'number', min: 0, max: 59, value: f.minute }), (el) => (f.minute = Math.min(59, Math.max(0, +el.value || 0)))), '分'),
           daily: () => h('div', { class: 'inline' }, '每天', timeInput()),
           weekdays: () => h('div', { class: 'inline' }, '周一至周五', timeInput()),
           weekly: () => h('div', { class: 'inline' },
             h('div', { class: 'days' }, [1, 2, 3, 4, 5, 6, 0].map((d) =>
-              h('button', { class: f.days.has(d) ? 'on' : '', onclick: () => { f.days.has(d) ? f.days.delete(d) : f.days.add(d); rerender(); } }, WEEK[d]))),
+              h('button', { type: 'button', class: f.days.has(d) ? 'on' : '', onclick: (ev) => {
+                f.days.has(d) ? f.days.delete(d) : f.days.add(d);
+                ev.currentTarget.classList.toggle('on', f.days.has(d));
+                refreshPreview();
+              } }, WEEK[d]))),
             timeInput()),
           cron: () => h('div', { class: 'field' },
-            bind(h('input', { type: 'text', value: f.cron, placeholder: '分 时 日 月 周，例如 0 9 * * 1-5', spellcheck: 'false' }), (el) => (f.cron = el.value)),
-            h('span', {}, 'cron：分 时 日 月 周，本地时间')),
-        }[f.mode]();
+            bind(h('input', { class: 'ui-input ui-mono', type: 'text', value: f.cron, placeholder: '分 时 日 月 周，例如 0 9 * * 1-5', spellcheck: 'false' }), (el) => (f.cron = el.value)),
+            h('span', { class: 'ui-label' }, 'cron：分 时 日 月 周，本地时间')),
+        })[f.mode]();
 
-        slot.replaceChildren(
-          h('div', { class: 'editor' },
-            h('label', { class: 'field' }, h('span', {}, '名称'),
-              bind(h('input', { type: 'text', value: e.name, placeholder: '例如：每日站会总结', maxlength: 60 }), (el) => (e.name = el.value))),
-            h('div', { class: 'field' }, h('span', {}, '到点时'),
-              seg([['prompt', '发送提示词到会话'], ['notify', '仅系统通知']], e.action, (v) => { e.action = v; rerender(); })),
-            h('label', { class: 'field' }, h('span', {}, e.action === 'prompt' ? '提示词' : '通知内容'),
-              bind(h('textarea', { placeholder: e.action === 'prompt' ? '到点后发送给 agent 的内容，例如：总结今天的 git 提交并列出待办' : '通知正文' }), (el) => (e.prompt = el.value))),
-            h('div', { class: 'field' }, h('span', {}, '执行时间'),
-              seg([['interval', '每 N 分钟'], ['hourly', '每小时'], ['daily', '每天'], ['weekdays', '工作日'], ['weekly', '每周'], ['cron', '自定义']], f.mode, (v) => { f.mode = v; rerender(); }),
-              freqBody),
-            h('div', { id: 'preview', class: 'preview muted' }, '…'),
-            e.action === 'prompt' && h('label', { class: 'check' },
-              h('input', { type: 'checkbox', checked: e.notify, onchange: (ev) => (e.notify = ev.target.checked) }), '触发时同时弹出系统通知'),
-            !state.sessionId && h('div', { class: 'check' }, '⚠️ 请先打开一个会话，任务会绑定到该会话'),
-            h('div', { class: 'actions' },
-              h('button', { onclick: () => { editing = null; renderEditor(); } }, '取消'),
-              h('button', { class: 'primary', onclick: submit }, e.id ? '保存' : '创建')),
-          ),
+        const freqSlot = h('div', {}, freqBody());
+        const promptLabel = h('span', { class: 'ui-label' });
+        const textarea = bind(h('textarea', { class: 'ui-input' }), (el) => (e.prompt = el.value));
+        const notifyCheck = h('label', { class: 'check' },
+          h('input', { type: 'checkbox', class: 'ui-switch', checked: e.notify, onchange: (ev) => (e.notify = ev.target.checked) }), '触发时同时弹出系统通知');
+        const syncAction = () => {
+          promptLabel.textContent = e.action === 'prompt' ? '提示词' : '通知内容';
+          textarea.placeholder = e.action === 'prompt' ? '到点后发送给 agent 的内容，例如：总结今天的 git 提交并列出待办' : '通知正文';
+          notifyCheck.hidden = e.action !== 'prompt';
+        };
+        syncAction();
+
+        const actionSeg = seg([['prompt', '发送提示词到会话'], ['notify', '仅系统通知']], e.action, (v) => { e.action = v; syncAction(); });
+        const freqSeg = seg([['interval', '每 N 分钟'], ['hourly', '每小时'], ['daily', '每天'], ['weekdays', '工作日'], ['weekly', '每周'], ['cron', '自定义']], f.mode, (v) => {
+          f.mode = v;
+          freqSlot.replaceChildren(freqBody());
+          refreshPreview();
+        }, true);
+
+        const editor = h('div', { class: 'editor ui-card ui-pop' },
+          h('label', { class: 'field' }, h('span', { class: 'ui-label' }, '名称'),
+            bind(h('input', { class: 'ui-input', type: 'text', value: e.name, placeholder: '例如：每日站会总结', maxlength: 60 }), (el) => (e.name = el.value))),
+          h('div', { class: 'field' }, h('span', { class: 'ui-label' }, '到点时'), actionSeg),
+          h('label', { class: 'field' }, promptLabel, textarea),
+          h('div', { class: 'field' }, h('span', { class: 'ui-label' }, '执行时间'), freqSeg, freqSlot),
+          h('div', { id: 'preview', class: 'preview' }, skeleton()),
+          notifyCheck,
+          !state.sessionId && h('div', { class: 'warn' }, '请先打开一个会话，任务会绑定到该会话'),
+          h('div', { class: 'actions' },
+            h('button', { type: 'button', class: 'ui-btn ui-btn--outline', onclick: () => closeEditor() }, '取消'),
+            h('button', { type: 'button', class: 'ui-btn ui-btn--primary', onclick: submit }, e.id ? '保存' : '创建')),
         );
-        slot.querySelector('textarea').value = e.prompt;
+        slot.replaceChildren(editor);
+        textarea.value = e.prompt;
+        ensoUI.pop(editor, trigger);
+        ensoUI.seg(actionSeg);
+        ensoUI.seg(freqSeg);
         refreshPreview();
       }
 
@@ -423,18 +349,24 @@
           notify: e.notify, schedule: toCron(e.freq),
         });
         if (!res) return;
-        editing = null;
-        renderEditor();
+        await closeEditor('confirm');
         apply(res);
         toast(e.id ? '已保存' : '已创建', 'info');
       }
 
       // ---- 列表 ----
       const live = [];
+      const seen = new Set();
+      let lastKey = '';
+      let firstList = true;
 
       function apply(next) {
         if (!next) return;
         state = next;
+        // 数据没变就不重建 DOM，倒计时的 TextSwap 和入场动画才连贯
+        const key = JSON.stringify({ ...next, now: 0 });
+        if (key === lastKey) return;
+        lastKey = key;
         render();
       }
 
@@ -442,93 +374,118 @@
         const { tasks } = state;
         const enabled = tasks.filter((t) => t.enabled && t.nextRunAt);
         const upcoming = [...enabled].sort((a, b) => a.nextRunAt - b.nextRunAt)[0];
-        $('#sub').textContent = tasks.length
-          ? `${enabled.length} 个运行中 · 共 ${tasks.length} 个`
-          : '让 agent 按时开工';
+        ensoUI.swap($('#sub'), tasks.length ? `${enabled.length} 个运行中 · 共 ${tasks.length} 个` : '让 agent 按时开工');
         live.length = 0;
 
         const hero = $('#hero');
         if (upcoming) {
-          const R = 25;
+          const R = 21;
           const C = 2 * Math.PI * R;
           const bar = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
           const ring = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
           ring.setAttribute('class', 'ring');
-          ring.setAttribute('viewBox', '0 0 58 58');
-          ring.innerHTML = `<circle class="track" cx="29" cy="29" r="${R}"></circle>`;
-          for (const [k, v] of Object.entries({ class: 'bar', cx: 29, cy: 29, r: R, 'stroke-dasharray': C })) bar.setAttribute(k, v);
+          ring.setAttribute('viewBox', '0 0 48 48');
+          ring.innerHTML = `<circle class="track" cx="24" cy="24" r="${R}"></circle>`;
+          for (const [k, v] of Object.entries({ class: 'bar', cx: 24, cy: 24, r: R, 'stroke-dasharray': C })) bar.setAttribute(k, v);
           ring.append(bar);
-          const count = h('div', { class: 'count num' });
-          hero.replaceChildren(h('div', { class: 'hero' }, ring,
+          const count = h('div', { class: 'count ui-mono' });
+          const label = h('div', { class: 'label' });
+          hero.replaceChildren(h('div', { class: 'hero ui-card' }, ring,
             h('div', { class: 'info' },
-              h('div', { class: 'label' }, `下一个 · ${when(upcoming.nextRunAt)}`),
+              label,
               count,
               h('div', { class: 'what' }, `${upcoming.name} · ${upcoming.description}`))));
           live.push((now) => {
-            count.textContent = countdown(upcoming.nextRunAt - now);
+            ensoUI.swap(label, `下一个 · ${when(upcoming.nextRunAt)}`);
+            ensoUI.swap(count, countdown(upcoming.nextRunAt - now));
             bar.setAttribute('stroke-dashoffset', String(C * (1 - progressOf(upcoming, now))));
           });
         } else {
-          hero.replaceChildren(h('div', { class: 'hero idle' },
-            h('div', { class: 'info' }, h('div', { class: 'label' }, '没有待运行的任务'), h('div', {}, tasks.length ? '启用一个任务开始倒计时' : '点击右上角“新建”创建第一个任务'))));
+          hero.replaceChildren(h('div', { class: 'hero ui-card idle' },
+            h('div', { class: 'info' }, h('div', { class: 'label' }, '没有待运行的任务'), h('div', { class: 'hint' }, tasks.length ? '启用一个任务开始倒计时' : '点击右上角“新建”创建第一个任务'))));
         }
 
         const list = $('#list');
         if (!tasks.length) {
-          list.replaceChildren(h('li', { class: 'empty' }, h('b', {}, '⏰'), state.sessionId ? '当前会话还没有定时任务' : '打开一个会话后再创建定时任务'));
+          firstList = false;
+          list.replaceChildren(h('li', { class: 'ui-empty' }, icon('clock'), state.sessionId ? '当前会话还没有定时任务' : '打开一个会话后再创建定时任务'));
           tick();
           return;
         }
-        list.replaceChildren(...tasks.map(renderTask));
+        const items = tasks.map(renderTask);
+        list.replaceChildren(...items);
+        if (firstList) {
+          firstList = false;
+          list.classList.add('ui-stagger');
+          ensoUI.stagger(list);
+          setTimeout(() => list.classList.remove('ui-stagger'), 800);
+        } else {
+          tasks.forEach((t, i) => { if (!seen.has(t.id)) items[i].classList.add('ui-enter'); });
+        }
+        for (const t of tasks) seen.add(t.id);
+        ensoUI.fill(list);
         tick();
       }
 
       function renderTask(t) {
-        const big = h('span', { class: 'big num' });
+        const big = h('span', { class: 'big ui-mono' });
+        const at = h('span', { class: 'at ui-muted ui-mono' });
         const fill = h('i');
-        const sessionLabel = h('span', { class: 'chip grey' }, t.action === 'notify' ? '通知' : '发送到会话');
         const deleting = confirmDelete === t.id;
 
         if (t.enabled && t.nextRunAt) {
           live.push((now) => {
             const left = t.nextRunAt - now;
-            big.textContent = countdown(left);
+            ensoUI.swap(big, countdown(left));
+            ensoUI.swap(at, when(t.nextRunAt));
             big.classList.toggle('due', left <= 0);
             fill.style.width = `${progressOf(t, now) * 100}%`;
           });
         } else big.textContent = '已暂停';
 
         const history = [...(t.history ?? [])].reverse();
-        return h('li', { class: `task ${t.enabled ? '' : 'off'}` },
+        return h('li', { class: `task ${t.enabled ? '' : 'off'}`, 'data-fill': true, 'data-id': t.id },
           h('div', { class: 'row' },
             h('span', { class: 'name', title: t.name }, t.name),
-            h('span', { class: 'chip' }, t.description),
-            h('button', { class: `switch ${t.enabled ? 'on' : ''}`, title: t.enabled ? '暂停' : '启用', onclick: async () => apply(await call('toggle', { id: t.id })) })),
-          h('div', { class: 'countdown' },
-            big,
-            h('span', { class: 'muted num' }, t.enabled && t.nextRunAt ? when(t.nextRunAt) : '')),
+            h('span', { class: 'ui-badge ui-badge--brand' }, t.description),
+            h('input', { type: 'checkbox', class: 'ui-switch', checked: t.enabled, 'aria-label': t.enabled ? '暂停' : '启用', 'data-tip': t.enabled ? '暂停' : '启用', onchange: async () => apply(await call('toggle', { id: t.id })) })),
+          h('div', { class: 'countdown' }, big, at),
           t.enabled && t.nextRunAt && h('div', { class: 'progress' }, fill),
           h('div', { class: 'prompt' }, t.prompt),
           t.lastStatus === 'error' && t.lastError && h('div', { class: 'err' }, `上次失败：${t.lastError}`),
           h('div', { class: 'meta' },
             h('div', { class: 'row' },
-              sessionLabel,
+              h('span', { class: 'ui-badge' }, t.action === 'notify' ? '通知' : '发送到会话'),
               history.length
-                ? h('div', { class: 'dots', title: '最近运行（右侧最新）' }, history.map((r) => h('span', { class: `dot ${r.status}`, title: `${when(r.at)} ${r.status === 'ok' ? '成功' : r.error || r.status}` })))
+                ? h('div', { class: 'dots', 'data-tip': '最近运行（右侧最新）' }, history.map((r) => h('span', { class: `dot ${r.status}`, title: `${when(r.at)} ${r.status === 'ok' ? '成功' : r.error || r.status}` })))
                 : null,
-              h('span', { class: 'muted' }, t.lastRunAt ? ago(t.lastRunAt) : '未运行')),
+              h('span', { class: 'ui-muted' }, t.lastRunAt ? ago(t.lastRunAt) : '未运行')),
             h('div', { class: 'row' },
-              h('button', { class: 'ghost', title: '立即运行一次', onclick: async (ev) => {
+              h('button', { type: 'button', class: 'ui-btn ui-btn--icon ui-btn--sm', 'aria-label': '立即运行一次', 'data-tip': '立即运行一次', onclick: async (ev) => {
                 ev.currentTarget.disabled = true;
                 const res = await call('runNow', { id: t.id });
                 apply(res);
                 const updated = res?.tasks.find((x) => x.id === t.id);
                 if (updated) toast(updated.lastStatus === 'ok' ? '已运行' : updated.lastError, updated.lastStatus === 'ok' ? 'info' : 'error');
-              } }, '▶ 运行'),
-              h('button', { class: 'ghost', onclick: () => openEditor(t) }, '编辑'),
+              } }, icon('play')),
+              h('button', { type: 'button', class: 'ui-btn ui-btn--icon ui-btn--sm', 'aria-label': '编辑', 'data-tip': '编辑', onclick: (ev) => openEditor(t, ev.currentTarget) }, icon('edit')),
               deleting
-                ? h('button', { class: 'danger', onclick: async () => { confirmDelete = null; apply(await call('remove', { id: t.id })); } }, '确认删除')
-                : h('button', { class: 'ghost', onclick: () => { confirmDelete = t.id; render(); setTimeout(() => { if (confirmDelete === t.id) { confirmDelete = null; render(); } }, 3000); } }, '删除'))));
+                ? h('button', { type: 'button', class: 'ui-btn ui-btn--destructive ui-btn--sm', onclick: async (ev) => {
+                    const li = ev.currentTarget.closest('li');
+                    removing = t.id;
+                    const res = await call('remove', { id: t.id });
+                    if (res) await ensoUI.leave(li);
+                    removing = null;
+                    confirmDelete = null;
+                    seen.delete(t.id);
+                    if (res) apply(res);
+                    else render();
+                  } }, '确认删除')
+                : h('button', { type: 'button', class: 'ui-btn ui-btn--icon ui-btn--sm', 'aria-label': '删除', 'data-tip': '删除', onclick: () => {
+                    confirmDelete = t.id;
+                    render();
+                    setTimeout(() => { if (confirmDelete === t.id && removing !== t.id) { confirmDelete = null; render(); } }, 3000);
+                  } }, icon('trash')))));
       }
 
       let lastFetch = 0;
@@ -555,7 +512,8 @@
         if (!editing && confirmDelete === null) apply(next);
       }
 
-      $('#new').onclick = () => openEditor(null);
+      $('#new').onclick = (ev) => openEditor(null, ev.currentTarget);
+      ensoUI.tooltip();
       setInterval(tick, 1000);
       refresh();
     </script>

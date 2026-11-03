@@ -2,124 +2,162 @@
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
+    <link rel="stylesheet" href="enso-ui.css" />
     <link rel="stylesheet" href="player.css" />
     <style>
       :root {
-        color-scheme: light dark;
-        --fg: #1f2328;
-        --muted: #6e7781;
-        --line: #d0d7de;
-        --card: rgba(0, 0, 0, 0.04);
-        --accent: #e5484d;
+        --hg: oklch(0.637 0.237 25.331);
       }
       :root[data-theme='dark'] {
-        --fg: #e6edf3;
-        --muted: #8b949e;
-        --line: #30363d;
-        --card: rgba(255, 255, 255, 0.05);
+        --hg: oklch(0.704 0.191 22.216);
       }
-      * { box-sizing: border-box; }
-      body {
-        margin: 0;
-        padding: 10px;
-        font: 13px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        color: var(--fg);
-        background: transparent;
+      body { padding: 12px; }
+      section:not([hidden]) {
+        animation: ui-rise var(--dur-3) var(--ease-out) both, ui-fade-in var(--dur-2) var(--ease-out) both;
       }
-      button, input, select {
-        font: inherit;
-        color: inherit;
-        border: 1px solid var(--line);
-        border-radius: 6px;
-        background: transparent;
-      }
-      button { padding: 3px 10px; cursor: pointer; }
-      .bar { display: flex; gap: 6px; margin-bottom: 10px; align-items: center; }
-      .bar input { flex: 1; min-width: 0; padding: 4px 8px; }
-      .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
-      .card { cursor: pointer; }
+      svg.i { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+      .nav { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+      .nav .ui-seg { flex: none; }
+      .bar { display: flex; gap: 6px; margin-bottom: 12px; align-items: center; }
+      .search { position: relative; flex: 1; min-width: 0; }
+      .search svg { position: absolute; left: 9px; top: 50%; translate: 0 -50%; color: var(--muted-foreground); pointer-events: none; }
+      .search .ui-input { padding-left: 28px; }
+
+      .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 12px 10px; }
+      .card { cursor: pointer; -webkit-tap-highlight-color: transparent; }
       .card .img {
-        aspect-ratio: 3 / 4;
-        border-radius: 6px;
-        background: var(--card) center / cover no-repeat;
         position: relative;
+        aspect-ratio: 3 / 4;
+        border-radius: var(--radius-md);
+        background: var(--muted) center / cover no-repeat;
+        box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--foreground) 6%, transparent);
+        transition: transform var(--dur-3) var(--ease-out), box-shadow var(--dur-2) var(--ease-out);
       }
+      .grid .card:hover .img { transform: scale(1.03); box-shadow: var(--shadow-lg); }
+      .grid .card:hover:active .img { transform: scale(0.99); transition-duration: var(--dur-1); }
       .card .badge {
-        position: absolute; right: 4px; bottom: 4px; padding: 0 5px; border-radius: 4px;
-        font-size: 11px; color: #fff; background: rgba(0, 0, 0, 0.55);
+        position: absolute; right: 4px; bottom: 4px; padding: 1px 6px; border-radius: 999px;
+        font-size: 10.5px; font-weight: 500; color: #fff;
+        background: rgb(0 0 0 / 0.5); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
       }
       .card .t {
-        margin-top: 4px; font-size: 12px; overflow: hidden;
+        margin-top: 6px; font-size: 12px; font-weight: 500; line-height: 1.4; overflow: hidden;
         display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+        transition: color var(--dur-1) var(--ease-out);
       }
-      h3 { margin: 4px 0 8px; font-size: 13px; color: var(--muted); font-weight: 500; }
-      .muted { color: var(--muted); font-size: 12px; }
-      .error { color: #cf222e; font-size: 12px; margin: 6px 0; white-space: pre-wrap; }
-      .more { display: block; margin: 12px auto; }
-      .title { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .desc { margin: 8px 0; font-size: 12px; color: var(--muted); }
-      .eps { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 6px; margin-top: 8px; }
-      .eps button { padding: 4px 0; }
-      .eps button.on { border-color: var(--accent); color: var(--accent); font-weight: 600; }
-      .eps button.seen:not(.on) { color: var(--muted); background: var(--card); }
-      .eps button:disabled { opacity: 0.35; cursor: default; }
-      .head { display: flex; align-items: baseline; justify-content: space-between; }
-      .link { border: 0; padding: 0; color: var(--muted); font-size: 12px; }
-      .row { display: flex; gap: 8px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); cursor: pointer; }
-      .row .img { width: 48px; flex: none; }
-      .row .info { flex: 1; min-width: 0; }
+      .grid .card:hover .t { color: var(--hg); }
+      .skel .img { aspect-ratio: 3 / 4; }
+      .skel .line { height: 10px; margin-top: 8px; width: 80%; }
+
+      h3 { margin: 0 0 8px; font-size: 12px; color: var(--muted-foreground); font-weight: 500; }
+      .head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }
+      .head h3 { margin: 0; }
+      .muted { color: var(--muted-foreground); font-size: 12px; }
+      .error {
+        margin: 8px 0; padding: 8px 10px; border-radius: var(--radius-md); font-size: 12px; white-space: pre-wrap;
+        color: var(--destructive); background: color-mix(in oklch, var(--destructive) 8%, transparent);
+        border: 1px solid color-mix(in oklch, var(--destructive) 20%, transparent);
+        animation: ui-fade-in var(--dur-2) var(--ease-out);
+      }
+      .error:empty, .ui-empty:empty { display: none; }
+      #homeError { white-space: pre-wrap; }
+      .more { display: flex; margin: 16px auto 4px; }
+      .title { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: -0.01em; }
+
+      .meta { display: flex; align-items: center; gap: 8px; margin: 10px 0 0; }
+      .meta .muted { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted-foreground); cursor: pointer; user-select: none; }
+      .desc { margin: 10px 0 4px; font-size: 12px; line-height: 1.6; color: var(--muted-foreground); }
+      .desc:empty { display: none; }
+
+      .eps { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 4px; margin-top: 12px; }
+      .eps button {
+        height: 30px; padding: 0; border: 0; border-radius: var(--radius-md);
+        font: 500 12px/1 var(--font-mono); font-variant-numeric: tabular-nums;
+        color: var(--foreground); background: transparent; cursor: pointer;
+        transition: color var(--dur-1) var(--ease-out), background-color var(--dur-2) var(--ease-out), transform var(--dur-2) var(--ease-spring);
+      }
+      .eps button:hover:active { transform: scale(var(--press-scale)); }
+      .eps button.seen:not(.on) { color: var(--muted-foreground); }
+      .eps button.on { color: var(--hg); font-weight: 600; background: color-mix(in oklch, var(--hg) 12%, transparent); }
+      .eps button:disabled { opacity: 0.3; cursor: default; }
+
+      #historyList { display: flex; flex-direction: column; gap: 2px; }
+      .row { display: flex; gap: 10px; align-items: center; padding: 6px; border-radius: var(--radius-lg); cursor: pointer; }
+      .row .img { width: 44px; flex: none; }
+      .row .info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
       .row .info .t { margin: 0; -webkit-line-clamp: 1; }
-      .row .x { border: 0; color: var(--muted); padding: 2px 6px; }
-      .prog { height: 3px; margin-top: 4px; border-radius: 2px; background: var(--card); overflow: hidden; }
-      .prog i { display: block; height: 100%; background: var(--accent); }
+      .row .x { opacity: 0; transition: opacity var(--dur-1) var(--ease-out), background-color var(--dur-1) var(--ease-out), transform var(--dur-2) var(--ease-spring); }
+      .row:hover .x, .row .x:focus-visible { opacity: 1; }
+      .prog { height: 3px; margin-top: 4px; border-radius: 2px; background: var(--muted); overflow: hidden; }
+      .prog i { display: block; height: 100%; border-radius: inherit; background: var(--hg); }
+      .cache { display: flex; align-items: center; gap: 8px; margin: -4px 0 10px; }
+      .cache .muted { flex: 1; }
       [hidden] { display: none !important; }
     </style>
   </head>
   <body>
+    <nav class="nav" id="nav">
+      <div class="ui-seg" id="tabs" role="tablist">
+        <button id="reset" type="button" aria-pressed="true">推荐</button>
+        <button id="openHistory" type="button" aria-pressed="false">历史</button>
+      </div>
+    </nav>
+
     <section id="home">
       <div class="bar">
-        <input id="q" placeholder="搜索短剧，回车" />
-        <button id="reset" type="button">推荐</button>
-        <button id="openHistory" type="button">历史</button>
+        <label class="search">
+          <svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+          <input id="q" class="ui-input" type="search" placeholder="搜索短剧，回车" />
+        </label>
       </div>
       <div id="recent" hidden>
-        <div class="head"><h3>继续观看</h3><button class="link" id="allHistory" type="button">全部 ›</button></div>
-        <div class="grid" id="recentGrid"></div>
-        <h3 style="margin-top: 14px" id="listTitle">推荐</h3>
+        <div class="head">
+          <h3>继续观看</h3>
+          <button class="ui-btn ui-btn--sm" id="allHistory" type="button">全部<svg class="i" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" /></svg></button>
+        </div>
+        <div class="grid ui-stagger" id="recentGrid"></div>
+        <h3 style="margin-top: 18px" id="listTitle">推荐</h3>
       </div>
-      <div id="homeError" class="error"></div>
-      <div class="grid" id="grid"></div>
-      <button id="more" class="more" type="button" hidden>加载更多</button>
+      <div id="homeError" class="ui-empty"></div>
+      <div class="grid ui-stagger" id="grid"></div>
+      <button id="more" class="more ui-btn ui-btn--outline" type="button" hidden>加载更多</button>
     </section>
 
     <section id="history" hidden>
       <div class="bar">
-        <button id="historyBack" type="button">‹ 返回</button>
+        <button id="historyBack" class="ui-btn ui-btn--icon" type="button" data-tip="返回" hidden>
+          <svg class="i" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6" /></svg>
+        </button>
         <span class="title">观看历史</span>
-        <button id="clearHistory" type="button">清空</button>
+        <button id="clearHistory" class="ui-btn ui-btn--sm ui-btn--destructive" type="button">清空</button>
       </div>
-      <div class="bar" style="margin-top: 0">
+      <div class="cache">
         <span class="muted" id="cacheInfo">缓存计算中…</span>
-        <button id="clearCache" type="button" hidden>清理缓存</button>
+        <button id="clearCache" class="ui-btn ui-btn--sm ui-btn--outline" type="button" hidden>清理缓存</button>
       </div>
       <div id="historyList"></div>
     </section>
 
     <section id="detail" hidden>
       <div class="bar">
-        <button id="back" type="button">‹ 返回</button>
+        <button id="back" class="ui-btn ui-btn--icon" type="button" data-tip="返回">
+          <svg class="i" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6" /></svg>
+        </button>
         <span class="title" id="seriesTitle"></span>
       </div>
       <div id="player"><video id="video" playsinline autoplay></video></div>
-      <div class="bar" style="margin: 6px 0 0">
-        <span class="muted" id="status" style="flex: 1"></span>
-        <label class="muted"><input type="checkbox" id="auto" checked /> 自动下一集</label>
+      <div class="meta">
+        <span class="muted ui-mono" id="status"></span>
+        <label class="toggle"><input type="checkbox" class="ui-switch" id="auto" checked /> 自动下一集</label>
       </div>
       <div id="playError" class="error"></div>
       <div class="desc" id="desc"></div>
       <div class="eps" id="eps"></div>
     </section>
 
+    <script src="enso-ui.js"></script>
     <script src="player.js"></script>
     <script>
       const $ = (id) => document.getElementById(id);
@@ -210,11 +248,11 @@
         }
         const token = feed.token;
         $('homeError').textContent = '';
+        $('homeError').className = 'ui-empty';
         $('more').hidden = true;
-        const status = document.createElement('div');
-        status.className = 'muted';
-        status.textContent = '加载中…';
+        const status = skeleton(reset ? 6 : 3);
         $('grid').after(status);
+        const start = $('grid').children.length;
         try {
           const page = await call(feed.method, { q: feed.q, cursor: feed.cursor || undefined });
           if (token !== feed.token) return;
@@ -223,19 +261,33 @@
             feed.seen.add(s.id);
             $('grid').append(card(s, s.count ? `${s.count}集` : ''));
           }
+          [...$('grid').children].slice(start).forEach((el, i) => el.style.setProperty('--i', i));
           feed.cursor = page.cursor;
           $('more').hidden = !page.hasMore;
           if (!$('grid').children.length) $('homeError').textContent = feed.q ? '没有搜到结果' : '没有内容';
         } catch (e) {
-          if (token === feed.token) { $('homeError').textContent = e.message; $('more').hidden = false; }
+          if (token === feed.token) { $('homeError').className = 'error'; $('homeError').textContent = e.message; $('more').hidden = false; }
         } finally {
           status.remove();
         }
+      }
+      function skeleton(n) {
+        const el = document.createElement('div');
+        el.className = 'grid skel';
+        el.style.marginTop = '12px';
+        el.setAttribute('aria-label', '加载中');
+        for (let i = 0; i < n; i++) {
+          const c = document.createElement('div');
+          c.innerHTML = '<div class="img ui-skeleton"></div><div class="line ui-skeleton"></div>';
+          el.append(c);
+        }
+        return el;
       }
       function renderRecent() {
         const recent = loadHistory();
         $('recent').hidden = !recent.length;
         $('recentGrid').replaceChildren(...recent.slice(0, 6).map((r) => card(r, `第${r.number}集`)));
+        ensoUI.stagger($('recentGrid'));
         $('listTitle').textContent = feed.q ? `搜索：${feed.q}` : '推荐';
       }
 
@@ -260,8 +312,9 @@
         $('clearHistory').hidden = !list.length;
         if (!list.length) {
           const empty = document.createElement('div');
-          empty.className = 'muted';
-          empty.textContent = '还没有观看记录';
+          empty.className = 'ui-empty';
+          empty.innerHTML =
+            '<svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg><span>还没有观看记录</span>';
           $('historyList').replaceChildren(empty);
           return;
         }
@@ -269,6 +322,7 @@
           ...list.map((h) => {
             const row = document.createElement('div');
             row.className = 'row card';
+            row.dataset.fill = '';
             const img = card(h).querySelector('.img');
             const info = document.createElement('div');
             info.className = 'info';
@@ -286,13 +340,15 @@
             prog.append(bar);
             info.append(t, meta, prog);
             const x = document.createElement('button');
-            x.className = 'x';
-            x.textContent = '×';
-            x.title = '删除这条记录';
+            x.type = 'button';
+            x.className = 'x ui-btn ui-btn--icon ui-btn--sm';
+            x.dataset.tip = '删除这条记录';
+            x.setAttribute('aria-label', '删除这条记录');
+            x.innerHTML = '<svg class="i" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12" /></svg>';
             x.onclick = (e) => {
               e.stopPropagation();
               saveHistory(loadHistory().filter((r) => r.id !== h.id));
-              renderHistory();
+              ensoUI.leave(row).then(() => { if (!loadHistory().length) renderHistory(); });
             };
             row.append(img, info, x);
             row.onclick = () => openSeries(h);
@@ -300,9 +356,16 @@
           })
         );
       }
+      function syncNav() {
+        $('nav').hidden = !$('detail').hidden;
+        $('reset').setAttribute('aria-pressed', String(!$('home').hidden));
+        $('openHistory').setAttribute('aria-pressed', String(!$('history').hidden));
+        ensoUI.seg($('tabs'));
+      }
       function showHistory() {
         $('home').hidden = true;
         $('history').hidden = false;
+        syncNav();
         renderHistory();
         refreshCache();
         window.scrollTo(0, 0);
@@ -356,6 +419,7 @@
         loadFeed(true);
       });
       $('reset').onclick = () => {
+        if (!$('history').hidden) return show(false);
         $('q').value = '';
         feed.method = 'discover';
         feed.q = '';
@@ -395,6 +459,7 @@
         $('home').hidden = detail;
         $('history').hidden = true;
         $('detail').hidden = !detail;
+        syncNav();
         if (!detail) {
           stop();
           renderRecent();
@@ -427,6 +492,8 @@
           ...episodes.map((ep) => {
             const b = document.createElement('button');
             b.textContent = ep.number;
+            b.type = 'button';
+            b.dataset.fill = '';
             b.title = ep.title || `第${ep.number}集`;
             b.disabled = !ep.playable;
             b.dataset.id = ep.id;
@@ -616,6 +683,10 @@
         if (Number.isFinite(video.duration) && video.duration > 0) dur = video.duration;
       });
 
+      ensoUI.tooltip();
+      ensoUI.fill($('eps'));
+      ensoUI.fill($('historyList'));
+      syncNav();
       renderRecent();
       loadFeed(true);
     </script>

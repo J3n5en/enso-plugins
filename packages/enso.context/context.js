@@ -155,11 +155,17 @@
     return prompt ? u.cacheRead / prompt : null;
   };
 
+  // 统计格按标签复用，数值变化时做 TextSwap
   function stat(box, label, value, note) {
-    const e = el('div', 'stat');
-    e.append(el('span', '', label), el('b', '', value));
+    let e = [...box.children].find((c) => c.dataset.label === label);
+    if (!e) {
+      e = el('div', 'stat');
+      e.dataset.label = label;
+      e.append(el('span', '', label), el('b'));
+      box.append(e);
+    }
+    ensoUI.swap(e.children[1], value);
     if (note) setTip(e, () => [el('div', 'tip-head', label), ...[].concat(note).map((n) => el('div', 'tip-sub', n))]);
-    box.append(e);
   }
 
   const tileName = (t) => {
@@ -255,21 +261,35 @@
   function render(s) {
     current = s;
     if (!s) {
-      root.replaceChildren(el('div', 'empty', '还没有上下文数据。在会话里发一条消息后这里会显示。'));
+      root.replaceChildren(el('div', 'ui-empty', '还没有上下文数据。在会话里发一条消息后这里会显示。'));
       return;
     }
     let card = root.querySelector('.card');
     if (!card) {
-      card = el('div', 'card');
-      card.append(el('div', 'head'), el('div', 'stats'), el('div', 'map'), el('ul'), el('div', 'note'));
+      card = el('div', 'card ui-card');
+      const head = el('div', 'head');
+      const bar = el('div', 'bar');
+      bar.append(el('i'));
+      head.append(el('b', 'used'), el('span', 'm'), el('span', 'pct'), bar);
+      card.append(head, el('div', 'stats'), el('div', 'map'), el('ul'), el('div', 'note'));
       root.replaceChildren(card);
+      ensoUI.fill(card.children[3]);
     }
     const [head, stats, map, list, note] = card.children;
     const free = s.window ? Math.max(0, s.window - s.used) : 0;
-    head.replaceChildren(el('b', '', fmtK(s.used)), el('span', 'm', s.window ? '/ ' + fmtK(s.window) + ' tokens' : 'tokens'));
-    if (s.window) head.append(el('span', 'pct', pct(s.used / s.window)));
+    const [usedEl, windowEl, pctEl, bar] = head.children;
+    ensoUI.swap(usedEl, fmtK(s.used));
+    windowEl.textContent = s.window ? '/ ' + fmtK(s.window) + ' tokens' : 'tokens';
+    // .ui-swap 自带 display，hidden 属性压不住，直接写 display
+    pctEl.style.display = bar.style.display = s.window ? '' : 'none';
+    if (s.window) {
+      const ratio = s.used / s.window;
+      ensoUI.swap(pctEl, pct(ratio));
+      bar.firstChild.style.width = Math.min(100, ratio * 100) + '%';
+      bar.classList.toggle('warn', ratio >= 0.7 && ratio < 0.9);
+      bar.classList.toggle('full', ratio >= 0.9);
+    }
 
-    stats.replaceChildren();
     const hit = cacheHit(s.usage);
     stat(stats, '提示词缓存', hit == null ? '—' : pct(hit), s.usage
       ? ['最近一次请求的提示词里，厂商从缓存读到的比例', `缓存读 ${fmtK(s.usage.cacheRead)} · 缓存写 ${fmtK(s.usage.cacheWrite)} · 未缓存 ${fmtK(s.usage.input)} · 输出 ${fmtK(s.usage.output)}`]
@@ -283,7 +303,10 @@
 
     drawMap(map, s);
 
+    // 保留 HoverFill 的背景层，2 秒一次的刷新不打断 hover
+    const fillBg = list.querySelector(':scope > .ui-fill-bg');
     list.replaceChildren();
+    if (fillBg) list.append(fillBg);
     const scale = Math.max(s.window, s.used, 1);
     for (const k of PARTS) {
       const part = s.parts.find((x) => x.kind === k);
@@ -291,6 +314,7 @@
       if (!v) continue;
       const li = el('li', 'part' + (opened.has(k) ? ' open' : ''));
       const row = el('div', 'row');
+      row.dataset.fill = '';
       const dot = el('i', 'dot');
       dot.style.setProperty('--k', `var(--k-${k})`);
       const items = part.items.filter((it) => it.tokens > 0);
@@ -306,9 +330,10 @@
         const sub = el('ul', 'items');
         for (const it of items) {
           const r = el('li');
+          r.dataset.fill = '';
           const tag = tagName(it);
           r.append(itemLabel(it, k));
-          if (tag) r.append(el('span', 'tag', tag));
+          if (tag) r.append(el('span', 'tag ui-badge', tag));
           if (it.n) r.append(el('span', 'c', '×' + it.n));
           r.append(el('b', '', fmtK(it.tokens)), el('span', 'p', pct(it.tokens / Math.max(1, v))));
           setTip(r, () => [tipHead(k, itemName(it), it.tokens, it.tokens / scale),
@@ -322,6 +347,7 @@
     if (s.window) {
       const li = el('li', 'part');
       const row = el('div', 'row');
+      row.dataset.fill = '';
       row.append(el('span', 'caret'), el('i', 'dot free'), el('span', 'grow', '剩余空间'), el('b', '', fmtK(free)), el('span', 'p', pct(free / scale)));
       setTip(row, () => [tipHead('free', '剩余空间', free, free / scale), el('div', 'tip-sub', `窗口 ${fmtK(s.window)}，还没用到的部分`)]);
       li.append(row);

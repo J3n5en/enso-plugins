@@ -6,6 +6,11 @@ workers_dev = false
 
 routes = [{ pattern = "enso-plugins.j3.do", custom_domain = true }]
 
+# 首页由 web/ 构建为静态资源；/v1/* 始终交给 Worker 脚本
+[assets]
+directory = "../web/dist"
+run_worker_first = ["/v1/*"]
+
 [vars]
 ORIGIN = "https://raw.githubusercontent.com/J3n5en/enso-plugins/dist/"
 

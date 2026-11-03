@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "enso.context",
   "name": "Context Window",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "icon": "icon.svg",
   "description": "侧栏里看当前会话的上下文窗口：各部分占多少、还剩多少、提示词缓存命中率。",
   "engines": { "enso": ">=0.2.0" },

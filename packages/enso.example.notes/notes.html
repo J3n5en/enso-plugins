@@ -2,66 +2,56 @@
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
+    <link rel="stylesheet" href="enso-ui.css" />
     <style>
-      :root {
-        color-scheme: light dark;
-        --fg: #1f2328;
-        --muted: #6e7781;
-        --line: #d0d7de;
-        --accent: #0969da;
-      }
-      :root[data-theme='dark'] {
-        --fg: #e6edf3;
-        --muted: #8b949e;
-        --line: #30363d;
-        --accent: #4493f8;
-      }
       body {
-        margin: 0;
         padding: 10px;
-        font: 13px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        color: var(--fg);
-        background: transparent;
       }
-      textarea {
-        box-sizing: border-box;
-        width: 100%;
-        min-height: 64px;
+      .composer {
         padding: 8px;
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        background: transparent;
-        color: inherit;
-        font: inherit;
+        transition:
+          border-color var(--dur-1) var(--ease-out),
+          box-shadow var(--dur-1) var(--ease-out);
+      }
+      .composer:focus-within {
+        border-color: var(--ring);
+        box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 30%, transparent);
+      }
+      .composer textarea {
+        min-height: 56px;
+        padding: 0;
+        border: 0;
+        box-shadow: none;
         resize: vertical;
+      }
+      .composer textarea:focus {
+        box-shadow: none;
       }
       .row {
         display: flex;
+        align-items: center;
         gap: 6px;
-        justify-content: flex-end;
-        margin: 6px 0 12px;
+        margin-top: 6px;
       }
-      button {
-        border: 1px solid var(--line);
-        border-radius: 6px;
-        padding: 3px 10px;
-        background: transparent;
-        color: inherit;
-        font: inherit;
-        cursor: pointer;
-      }
-      button.primary {
-        border-color: var(--accent);
-        color: var(--accent);
+      .hint {
+        flex: 1;
+        font-size: 11px;
+        color: var(--muted-foreground);
       }
       ul {
         list-style: none;
-        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin: 12px 0 0;
         padding: 0;
       }
-      li {
-        border-top: 1px solid var(--line);
-        padding: 8px 0;
+      li.note {
+        padding: 8px 10px;
+        transition: border-color var(--dur-1) var(--ease-out);
+      }
+      li.note:hover {
+        border-color: color-mix(in oklch, var(--foreground) 18%, transparent);
       }
       .text {
         white-space: pre-wrap;
@@ -70,32 +60,52 @@
       .meta {
         display: flex;
         align-items: center;
-        gap: 6px;
+        gap: 2px;
         margin-top: 4px;
-        color: var(--muted);
         font-size: 11px;
+        color: var(--muted-foreground);
       }
       .meta span {
         flex: 1;
       }
-      .error {
-        color: #cf222e;
-        font-size: 12px;
+      /* 操作按钮平时淡出，悬停卡片时出现 */
+      .meta .ui-btn {
+        opacity: 0;
       }
-      .empty {
-        color: var(--muted);
+      li.note:hover .meta .ui-btn,
+      .meta .ui-btn:focus-visible {
+        opacity: 1;
+      }
+      .error {
+        margin-top: 6px;
+        font-size: 12px;
+        color: var(--destructive);
+      }
+      .error:empty {
+        display: none;
       }
     </style>
   </head>
   <body>
-    <textarea id="input" placeholder="写点什么… ⌘/Ctrl+Enter 保存"></textarea>
-    <div class="row"><button id="add" type="button" class="primary">保存</button></div>
+    <div class="ui-card composer">
+      <textarea id="input" class="ui-input" placeholder="写点什么…"></textarea>
+      <div class="row">
+        <span class="hint">⌘/Ctrl + Enter 保存</span>
+        <button id="add" type="button" class="ui-btn ui-btn--primary ui-btn--sm">保存</button>
+      </div>
+    </div>
     <div id="error" class="error"></div>
     <ul id="list"></ul>
+    <script src="enso-ui.js"></script>
     <script>
       const input = document.getElementById('input');
       const list = document.getElementById('list');
       const errorBox = document.getElementById('error');
+      const ICON_INSERT =
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 10 4 15l5 5"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/></svg>';
+      const ICON_DELETE =
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+      ensoUI.tooltip();
 
       const run = async (method, args) => {
         errorBox.textContent = '';
@@ -107,17 +117,35 @@
         }
       };
 
+      // 首次渲染错落入场；之后只有新出现的便签做添加动画
+      let known = null;
+
+      function iconButton(svg, tip, extra) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'ui-btn ui-btn--icon ui-btn--sm' + (extra ? ' ' + extra : '');
+        button.dataset.tip = tip;
+        button.setAttribute('aria-label', tip);
+        button.innerHTML = svg;
+        return button;
+      }
+
       function render(notes) {
         list.replaceChildren();
+        list.classList.toggle('ui-stagger', known === null);
         if (!notes || notes.length === 0) {
+          known = new Set();
           const empty = document.createElement('li');
-          empty.className = 'empty';
-          empty.textContent = '还没有便签';
+          empty.className = 'ui-empty';
+          empty.innerHTML =
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15.5 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.5z"/><path d="M15 3v5a1 1 0 0 0 1 1h5"/></svg><span>还没有便签</span>';
           list.append(empty);
           return;
         }
         for (const note of notes) {
           const item = document.createElement('li');
+          item.className = 'ui-card note';
+          if (known && !known.has(note.id)) item.classList.add('ui-enter');
           const text = document.createElement('div');
           text.className = 'text';
           text.textContent = note.text;
@@ -125,16 +153,19 @@
           meta.className = 'meta';
           const time = document.createElement('span');
           time.textContent = new Date(note.at).toLocaleString();
-          const insert = document.createElement('button');
-          insert.textContent = '插入输入框';
+          const insert = iconButton(ICON_INSERT, '插入输入框');
           insert.onclick = () => run('insert', { id: note.id });
-          const remove = document.createElement('button');
-          remove.textContent = '删除';
-          remove.onclick = async () => render(await run('remove', { id: note.id }));
+          const remove = iconButton(ICON_DELETE, '删除', 'ui-btn--destructive');
+          remove.onclick = async () => {
+            const [next] = await Promise.all([run('remove', { id: note.id }), ensoUI.leave(item)]);
+            render(next);
+          };
           meta.append(time, insert, remove);
           item.append(text, meta);
           list.append(item);
         }
+        ensoUI.stagger(list);
+        known = new Set(notes.map((note) => note.id));
       }
 
       async function add() {

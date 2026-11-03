@@ -1,5 +1,3 @@
-import { HOME } from './home.js';
-
 const ID_RE = /^[a-z][a-z0-9]*(\.[a-z0-9]+)+$/;
 const SEMVER_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$/;
 const MAX_ICON = 1024 * 1024;
@@ -175,13 +173,6 @@ async function proxyIcon(url, ctx) {
 export async function handle(request, env, ctx) {
   if (request.method !== 'GET') return text(404, 'not found');
   const url = new URL(request.url);
-  if (url.pathname === '/' || url.pathname === '/index.html') {
-    return text(200, HOME, {
-      'content-type': 'text/html; charset=utf-8',
-      'cache-control': 'public, max-age=300',
-      'content-security-policy': "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'",
-    });
-  }
   if (url.pathname === '/v1/index.json') {
     return indexFile(env, ctx, 'v1/index.json', 'application/json; charset=utf-8');
   }

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "enso.example.wordstats",
   "name": "Word Stats",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "icon": "icon.svg",
   "description": "统计项目里文本文件的字数、行数与高频词，结果以卡片展示；提供条形图代码块。",
   "main": "main.mjs",

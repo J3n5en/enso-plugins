@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "enso.scheduler",
   "name": "Scheduler",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "icon": "icon.svg",
   "description": "定时任务：按 cron 到点向会话发送提示词或弹出系统通知，侧栏显示下次运行时间与倒计时。",
   "main": "main.mjs",

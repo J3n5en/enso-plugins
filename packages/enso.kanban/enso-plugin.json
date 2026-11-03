@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "enso.kanban",
   "name": "Kanban",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "icon": "icon.svg",
   "description": "项目看板：同一项目的所有会话共享，人和会话都能创建、编辑、拖动卡片。",
   "main": "main.mjs",
