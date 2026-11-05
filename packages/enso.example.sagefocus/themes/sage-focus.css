@@ -1,0 +1,77 @@
+/* 仅在本插件深色模式下生效，不依赖新增的宿主标记或高亮变量。
+ *
+ * Apply only to this plugin in dark mode, using existing host anchors and tokens.
+ */
+:root.dark[data-theme="enso.example.sagefocus/sage-focus"] [data-enso="sidebar"],
+:root.dark[data-theme="enso.example.sagefocus/sage-focus"] [data-enso="settings-nav"] {
+  background-color: var(--sage-sidebar);
+}
+
+:root.dark[data-theme="enso.example.sagefocus/sage-focus"] [data-enso="title-bar"],
+:root.dark[data-theme="enso.example.sagefocus/sage-focus"] [data-enso="session-tabs"],
+:root.dark[data-theme="enso.example.sagefocus/sage-focus"] [data-enso="composer"] {
+  background-color: var(--sage-toolbar);
+}
+
+:root.dark[data-theme="enso.example.sagefocus/sage-focus"] .enso-side-dock [data-side-tab] {
+  background-color: var(--sage-inactive-tab);
+}
+
+:root.dark[data-theme="enso.example.sagefocus/sage-focus"] .enso-side-dock [data-side-tab]:hover {
+  background-color: var(--sage-line);
+}
+
+:root.dark[data-theme="enso.example.sagefocus/sage-focus"] .enso-side-dock [data-side-tab][data-active] {
+  background-color: var(--background);
+  box-shadow: inset 0 -2px var(--brand);
+}
+
+:root.dark[data-theme="enso.example.sagefocus/sage-focus"] [data-enso="status-line"] {
+  background-color: var(--background);
+  color: var(--foreground);
+}
+
+:root.dark[data-theme="enso.example.sagefocus/sage-focus"] [data-enso="status-line"] :is(.text-muted-foreground, .text-subtle-foreground) {
+  color: var(--foreground);
+}
+
+:root.dark[data-theme="enso.example.sagefocus/sage-focus"] ::selection {
+  background-color: var(--sage-selection);
+  color: var(--foreground);
+}
+
+:root.dark[data-theme="enso.example.sagefocus/sage-focus"] :is(input, textarea, [contenteditable="true"]) {
+  caret-color: var(--sage-cursor);
+}
+
+:root.dark[data-theme="enso.example.sagefocus/sage-focus"] :is(button, a, input, textarea, select, [tabindex]):focus-visible {
+  outline: 1px solid var(--brand);
+  outline-offset: 2px;
+}
+
+:root.dark[data-theme="enso.example.sagefocus/sage-focus"] :is([role="treeitem"], [role="option"]):hover {
+  background-color: var(--sage-line);
+}
+
+:root.dark[data-theme="enso.example.sagefocus/sage-focus"] :is([role="treeitem"], [role="option"])[aria-selected="true"] {
+  background-color: var(--sage-selection);
+  color: var(--foreground);
+}
+
+:root.dark[data-theme="enso.example.sagefocus/sage-focus"] mark {
+  background-color: var(--sage-search);
+  color: var(--foreground);
+}
+
+:root.dark[data-theme="enso.example.sagefocus/sage-focus"] ::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+}
+
+:root.dark[data-theme="enso.example.sagefocus/sage-focus"] ::-webkit-scrollbar-thumb:hover {
+  background-color: var(--sage-scrollbar-hover);
+}
+
+:root.dark[data-theme="enso.example.sagefocus/sage-focus"] [data-enso="code-block"] pre {
+  font-size: 14px;
+  line-height: 1.6;
+}

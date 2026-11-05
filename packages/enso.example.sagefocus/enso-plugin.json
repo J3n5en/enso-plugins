@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "enso.example.sagefocus",
+  "name": "Sage Focus · 鼠尾草·专注（仅深色模式）",
+  "version": "1.0.3",
+  "icon": "assets/icon.svg",
+  "description": "仅在深色模式下生效，浅色模式沿用 Enso 默认配色。低饱和暖灰绿主题，不修改编辑器语法高亮或终端配色。",
+  "permissions": [],
+  "contributes": {
+    "themes": [
+      {
+        "id": "sage-focus",
+        "name": "Sage Focus · 鼠尾草·专注（仅深色模式）",
+        "path": "themes/sage-focus.json",
+        "css": "themes/sage-focus.css"
+      }
+    ]
+  }
+}

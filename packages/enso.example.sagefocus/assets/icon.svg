@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none">
+  <title>Sage Focus · 鼠尾草·专注</title>
+  <rect width="128" height="128" rx="28" fill="#202824"/>
+  <rect x="1" y="1" width="126" height="126" rx="27" stroke="#354239" stroke-width="2"/>
+  <path d="M39 24H31a7 7 0 0 0-7 7v8M89 24h8a7 7 0 0 1 7 7v8M104 89v8a7 7 0 0 1-7 7h-8M39 104h-8a7 7 0 0 1-7-7v-8" stroke="#718578" stroke-width="4" stroke-linecap="round"/>
+  <path d="M43 85C26 58 50 35 89 34c2 37-16 65-46 51Z" fill="#9BCFB5"/>
+  <path d="M43 85C63 88 82 70 89 34L43 85Z" fill="#7FAE94"/>
+  <path d="M 37 93 L 76 49 M 53 75 L 50 59 M 62 65 L 76 65" stroke="#202824" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
