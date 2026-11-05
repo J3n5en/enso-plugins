@@ -8,3 +8,4 @@ node_modules/
 
 # 外部插件由 scripts/external.mjs 按 registry/external 拉取，不提交
 /packages/dsh.bce/
+/packages/yce.enhance/

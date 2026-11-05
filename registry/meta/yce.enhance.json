@@ -1,0 +1,6 @@
+{
+  "tier": "community",
+  "tags": ["composer", "mcp", "prompt"],
+  "homepage": "https://github.com/xiamuwnagwang/enso-yce",
+  "icon": "https://cdn.jsdelivr.net/gh/xiamuwnagwang/enso-yce@907b2a26275c8de77277b2e807ca9fdf08967e8e/icon.svg"
+}

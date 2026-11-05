@@ -45,6 +45,7 @@ EnsoCode 官方插件市场的源仓库 · [浏览插件](https://enso-plugins.j
 | Telegram | `enso.telegram` | 0.3.0 | 官方 | 用 Telegram Bot 远程使用 EnsoCode 会话：配对后发消息即进入会话，执行进度原位更新，回复以富文本发回；支持图片、群聊绑定、成员白名单与群聊上下文、插话、远程停止和双向同步。 |
 | 双语对照翻译 | `enso.translate` | 0.1.1 | 官方 | 把思考过程和回复正文译成目标语言，原文下面紧跟译文。代码、链接、路径和公式保持原样。 |
 | [深海女仆工坊](https://github.com/Small-tailqwq/dsh-deep-whale) | `enso.whalemaid` | 0.1.0 | 官方 | 鲸鱼娘女仆主题：深海蓝配金色描边，水晶宫殿作背景，两位女仆站在对话两侧，输入框系着蝴蝶结。美术 CC BY-NC-SA 4.0，禁止商用。 |
+| [YCE Prompt Enhance](https://github.com/xiamuwnagwang/enso-yce) | `yce.enhance` | 0.1.1 | 社区 · [`xiamuwnagwang/enso-yce`](https://github.com/xiamuwnagwang/enso-yce) | YCE 提示词增强：复用宿主已配置的 yce-mcp，在输入框一键将模糊草稿改写为清晰、结构化的提示词。 |
 <!-- plugins:end -->
 
 ## 仓库结构
