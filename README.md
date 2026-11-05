@@ -30,7 +30,7 @@ EnsoCode 官方插件市场的源仓库 · [浏览插件](https://enso-plugins.j
 <!-- plugins:start -->
 | 插件 | id | 版本 | 来源 | 介绍 |
 | --- | --- | --- | --- | --- |
-| [BCE Prompt Enhance](https://github.com/linqiu919/dsh-bce) | `dsh.bce` | 0.1.4 | 社区 · [`linqiu919/dsh-bce`](https://github.com/linqiu919/dsh-bce) | Composer wand that incrementally indexes the current project through the configured bce-tool MCP and rewrites the draft. Same interaction as dsh-bce, hosted by EnsoCode. |
+| [BCE Prompt Enhance](https://github.com/linqiu919/dsh-bce) | `dsh.bce` | 0.1.5 | 社区 · [`linqiu919/dsh-bce`](https://github.com/linqiu919/dsh-bce) | Better Context Engine 提示词增强：增量索引项目，精准补全代码上下文，让提问更清楚、回答更准确。 |
 | Context Window | `enso.context` | 0.1.2 | 官方 | 侧栏里看当前会话的上下文窗口：各部分占多少、还剩多少、提示词缓存命中率。 |
 | Notes | `enso.example.notes` | 1.0.2 | 官方 | 侧栏里的便签：存在插件自己的数据目录，可一键插入输入框。 |
 | Word Stats | `enso.example.wordstats` | 1.0.2 | 官方 | 统计项目里文本文件的字数、行数与高频词，结果以卡片展示；提供条形图代码块。 |
