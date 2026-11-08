@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "id": "enso.github",
   "name": "GitHub",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "icon": "icon.svg",
-  "description": "在侧栏查看、回复、关闭和重开当前项目的 GitHub issue 与 PR；会话里的 agent 也能调用。支持设备码登录，已登录的 gh CLI 可直接复用。",
+  "description": "在侧栏查看、回复、关闭和重开当前项目的 GitHub issue 与 PR，也可查看 Actions 运行、失败原因与日志，并重跑或取消。会话里的 agent 也能调用。支持设备码登录，已登录的 gh CLI 可直接复用。",
   "engines": {
     "enso": ">=0.2.14"
   },
@@ -18,7 +18,7 @@
       {
         "key": "token",
         "title": "Personal Access Token（可选）",
-        "description": "不想用设备码登录时填写；需要 Issues 与 Pull requests 读写权限",
+        "description": "不想用设备码登录时填写；需要 Issues、Pull requests 与 Actions 读写权限",
         "secret": true
       }
     ],
@@ -29,7 +29,11 @@
       { "name": "list", "timeoutMs": 30000 },
       { "name": "view", "timeoutMs": 30000 },
       { "name": "comment", "timeoutMs": 30000 },
-      { "name": "setState", "timeoutMs": 30000 }
+      { "name": "setState", "timeoutMs": 30000 },
+      { "name": "runs", "timeoutMs": 30000 },
+      { "name": "run", "timeoutMs": 30000 },
+      { "name": "jobLog", "timeoutMs": 30000 },
+      { "name": "runAction", "timeoutMs": 30000 }
     ],
     "agentTools": [
       {
@@ -82,6 +86,56 @@
             "comment": { "type": "string", "description": "Optional comment posted before changing state" }
           },
           "required": ["number", "state"]
+        }
+      },
+      {
+        "name": "github_runs",
+        "description": "List recent GitHub Actions workflow runs of a repository (defaults to the current project's origin). Returns id, name, title, number, status, conclusion, branch, and url.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "repo": { "type": "string", "description": "owner/name; omit to use the current project's GitHub origin" },
+            "branch": { "type": "string", "description": "Only runs on this branch" },
+            "status": { "type": "string", "enum": ["queued", "in_progress", "completed", "success", "failure", "cancelled"], "description": "Filter passed through to GitHub" }
+          }
+        }
+      },
+      {
+        "name": "github_run",
+        "description": "Get one Actions run with its jobs, steps, and annotations for failed jobs. Use github_job_log to read a job log.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "repo": { "type": "string", "description": "owner/name; omit to use the current project's GitHub origin" },
+            "id": { "type": "integer", "description": "Workflow run id" }
+          },
+          "required": ["id"]
+        }
+      },
+      {
+        "name": "github_job_log",
+        "description": "Read an Actions job log via the gh CLI. Returns lines around ##[error] when present, otherwise the last lines (default 150).",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "repo": { "type": "string", "description": "owner/name; omit to use the current project's GitHub origin" },
+            "job": { "type": "integer", "description": "Job id" },
+            "lines": { "type": "integer", "description": "Tail length when the log has no ##[error] line. Default 150, max 1000" }
+          },
+          "required": ["job"]
+        }
+      },
+      {
+        "name": "github_run_action",
+        "description": "Rerun, rerun failed jobs, or cancel a GitHub Actions workflow run.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "repo": { "type": "string", "description": "owner/name; omit to use the current project's GitHub origin" },
+            "id": { "type": "integer", "description": "Workflow run id" },
+            "action": { "type": "string", "enum": ["rerun", "rerun_failed", "cancel"] }
+          },
+          "required": ["id", "action"]
         }
       }
     ]
