@@ -22,6 +22,8 @@
       .dot.open { background: #22c55e; }
       .dot.closed { background: #a855f7; }
       .dot.draft { background: var(--muted-foreground); }
+      .dot.wait { background: #eab308; }
+      .dot.fail { background: var(--destructive); }
       h2 { margin: 0; font-size: 13.5px; font-weight: 600; word-break: break-word; }
       .body { white-space: pre-wrap; word-break: break-word; line-height: 1.55; }
       .comment { border-top: 1px solid var(--border); padding-top: 8px; display: flex; flex-direction: column; gap: 4px; }
@@ -38,6 +40,7 @@
       .md a:hover { text-decoration: underline; }
       .md code { font: 11px/1.5 var(--font-mono); padding: 1px 4px; border-radius: 4px; background: var(--muted); }
       .md pre { padding: 8px 10px; border-radius: var(--radius-md); background: var(--muted); overflow-x: auto; }
+      .md pre.log { max-height: 320px; overflow: auto; white-space: pre-wrap; margin: 0; font: 11px/1.5 var(--font-mono); }
       .md pre code { padding: 0; background: none; white-space: pre; }
       .md blockquote { padding: 0 0 0 10px; border-left: 3px solid var(--border); color: var(--muted-foreground); }
       .md img { max-width: 100%; height: auto; border-radius: var(--radius-sm); }
@@ -62,6 +65,32 @@
         if (s < 86400) return `${Math.round(s / 3600)} 小时前`;
         return `${Math.round(s / 86400)} 天前`;
       };
+      const RUN_STATE = {
+        queued: { dot: 'wait', label: '排队' },
+        running: { dot: 'wait', label: '运行中' },
+        success: { dot: 'open', label: '成功' },
+        failure: { dot: 'fail', label: '失败' },
+        cancelled: { dot: '', label: '已取消' },
+        skipped: { dot: '', label: '已跳过' },
+        neutral: { dot: '', label: '中性' },
+      };
+      const ACTIVE_KEY = { in_progress: 'running', queued: 'queued', waiting: 'queued', pending: 'queued', requested: 'queued' };
+      const DONE_KEY = {
+        success: 'success', failure: 'failure', timed_out: 'failure', startup_failure: 'failure',
+        cancelled: 'cancelled', skipped: 'skipped', neutral: 'neutral', action_required: 'neutral', stale: 'neutral',
+      };
+      const runState = (r) => {
+        const key = r.status === 'completed' ? (DONE_KEY[r.conclusion] ?? 'neutral') : (ACTIVE_KEY[r.status] ?? 'running');
+        return { key, ...RUN_STATE[key] };
+      };
+      const dur = (j) => {
+        const ms = Date.parse(j.completedAt) - Date.parse(j.startedAt);
+        if (!Number.isFinite(ms) || ms < 0) return '';
+        const s = Math.round(ms / 1000);
+        if (s < 60) return `${s} 秒`;
+        const m = Math.floor(s / 60);
+        return s % 60 ? `${m} 分 ${s % 60} 秒` : `${m} 分`;
+      };
       const SOURCES = { device: '设备码登录', config: 'PAT', env: '环境变量', gh: 'gh CLI' };
       // body_html 已经由 GitHub 过滤过，这里再去掉脚本类元素和事件属性兜底
       const md = (html, raw) => {
@@ -73,7 +102,7 @@
         });
         return `<div class="md">${doc.body.innerHTML}</div>`;
       };
-      const ui = { auth: null, repo: '', kind: 'issue', state: 'open', items: null, detail: null, error: '', busy: false };
+      const ui = { auth: null, repo: '', kind: 'issue', state: 'open', items: null, detail: null, logs: {}, error: '', busy: false };
       let typedRepo = false;
       ensoUI.tooltip();
 
@@ -94,11 +123,15 @@
       }
       const repoArg = () => (ui.repo ? { repo: ui.repo } : {});
       const loadList = () => act(async () => {
-        const r = await call('list', { ...repoArg(), kind: ui.kind, state: ui.state });
+        const r = ui.kind === 'actions' ? await call('runs', repoArg()) : await call('list', { ...repoArg(), kind: ui.kind, state: ui.state });
         ui.repo = r.repo;
         ui.items = r.items;
       });
       const loadDetail = (number) => act(async () => (ui.detail = await call('view', { ...repoArg(), number })));
+      const loadRun = (id) => act(async () => {
+        if (ui.detail?.run?.id !== id) ui.logs = {};
+        ui.detail = { kind: 'run', run: await call('run', { ...repoArg(), id }) };
+      });
 
       async function refreshAuth() {
         const prev = JSON.stringify(ui.auth);
@@ -111,6 +144,7 @@
           ui.repo = ui.auth.repo;
           ui.items = null;
           ui.detail = null;
+          ui.logs = {};
         }
         if (JSON.stringify(ui.auth) !== prev) render();
         if (ui.auth?.source && !ui.items && !ui.busy && ui.repo) loadList();
@@ -132,16 +166,19 @@
 
       function listView() {
         const seg = (k, v, label) => `<button aria-pressed="${ui[k] === v}" data-set="${k}:${v}">${label}</button>`;
+        const actions = ui.kind === 'actions';
         const items = ui.items == null
           ? ui.repo ? '<div class="ui-skeleton" style="height: 14px"></div>' : '<div class="ui-empty">在上方输入仓库 owner/name</div>'
           : ui.items.length
-            ? '<div class="list">' + ui.items.map((i) => `<button class="item" data-fill data-num="${i.number}">
-                <span class="dot ${i.draft ? 'draft' : i.state}"></span>
-                <span class="grow"><span class="title">${esc(i.title)}</span>
-                <div class="m ellipsis"><span class="no">#${i.number}</span> ${esc(i.author)} · ${ago(i.updatedAt)}${i.comments ? ` · ${i.comments} 条评论` : ''}${i.labels.length ? ' · ' + esc(i.labels.join(', ')) : ''}</div></span></button>`).join('') + '</div>'
-            : `<div class="ui-empty">没有${ui.state === 'open' ? '打开的' : ui.state === 'closed' ? '已关闭的' : ''}${ui.kind === 'pr' ? ' PR' : ' issue'}</div>`;
-        return `<div class="row"><div class="ui-seg">${seg('kind', 'issue', 'Issues')}${seg('kind', 'pr', 'PR')}</div>
-          <span class="grow"></span><div class="ui-seg">${seg('state', 'open', '打开')}${seg('state', 'closed', '关闭')}${seg('state', 'all', '全部')}</div></div>
+            ? '<div class="list" data-feed>' + ui.items.map((i) => actions
+              ? `<button class="item" data-fill data-run="${i.id}"><span class="dot ${runState(i).dot}"></span><span class="grow"><span class="title">${esc(i.title)}</span><div class="m ellipsis">${[i.name, `#${i.number}`, i.branch, i.actor, ago(i.updatedAt)].filter(Boolean).map(esc).join(' · ')}</div></span></button>`
+              : `<button class="item" data-fill data-num="${i.number}"><span class="dot ${i.draft ? 'draft' : i.state}"></span><span class="grow"><span class="title">${esc(i.title)}</span><div class="m ellipsis"><span class="no">#${i.number}</span> ${esc(i.author)} · ${ago(i.updatedAt)}${i.comments ? ` · ${i.comments} 条评论` : ''}${i.labels.length ? ' · ' + esc(i.labels.join(', ')) : ''}</div></span></button>`).join('') + '</div>'
+            : actions
+              ? '<div class="ui-empty">没有运行</div>'
+              : `<div class="ui-empty">没有${ui.state === 'open' ? '打开的' : ui.state === 'closed' ? '已关闭的' : ''}${ui.kind === 'pr' ? ' PR' : ' issue'}</div>`;
+        const stateSeg = actions ? '' : `<div class="ui-seg">${seg('state', 'open', '打开')}${seg('state', 'closed', '关闭')}${seg('state', 'all', '全部')}</div>`;
+        return `<div class="row"><div class="ui-seg">${seg('kind', 'issue', 'Issues')}${seg('kind', 'pr', 'PR')}${seg('kind', 'actions', 'Actions')}</div>
+          <span class="grow"></span>${stateSeg}</div>
           <div class="ui-card card">${items}</div>`;
       }
 
@@ -165,6 +202,34 @@
             <div class="actions">${toggle}<button class="ui-btn ui-btn--sm ui-btn--primary" data-reply>回复</button></div></div>`;
       }
 
+      function runView(d) {
+        const st = runState(d);
+        const badge = st.key === 'success' ? 'ui-badge--success' : st.key === 'failure' ? 'ui-badge--destructive' : st.key === 'running' || st.key === 'queued' ? 'ui-badge--warning' : '';
+        const jobs = d.jobs.map((j) => {
+          const js = runState(j);
+          const steps = j.steps.map((s) => {
+            const ss = runState(s);
+            return `<div class="row"><span class="dot ${ss.dot}"></span><span class="grow ellipsis">${esc(s.name)}</span><span class="m">${ss.label}</span></div>`;
+          }).join('');
+          const stepBlock = j.conclusion === 'failure'
+            ? `<div class="list">${steps}</div>`
+            : `<details><summary class="m">${j.steps.length} 个步骤</summary><div class="list">${steps}</div></details>`;
+          const ann = (j.annotations ?? []).map((a) => `<div class="row"><span class="ui-badge ${a.level === 'failure' ? 'ui-badge--destructive' : 'ui-badge--warning'}">${a.level === 'failure' ? '失败' : '警告'}</span><span class="grow">${esc(a.message)} <span class="m ui-mono">${esc(a.path)}:${a.line ?? ''}</span></span></div>`).join('');
+          const saved = ui.logs[j.id];
+          const pre = saved ? `<div class="md"><pre class="log">${esc(saved.log)}</pre></div>${saved.truncated ? '<div class="m">已截断</div>' : ''}` : '';
+          const took = dur(j);
+          return `<div class="comment"><div class="row"><span class="dot ${js.dot}"></span><b class="ellipsis">${esc(j.name)}</b><span class="grow"></span><span class="m">${js.label}${took ? ` · ${took}` : ''}</span></div>${stepBlock}${ann}<div><button class="ui-btn ui-btn--sm" data-log="${j.id}">查看日志</button></div>${pre}</div>`;
+        }).join('');
+        const buttons = d.status !== 'completed'
+          ? '<button class="ui-btn ui-btn--sm ui-btn--outline" data-action="cancel">取消</button>'
+          : `<button class="ui-btn ui-btn--sm ui-btn--outline" data-action="rerun">重新运行</button>${d.conclusion === 'failure' ? '<button class="ui-btn ui-btn--sm ui-btn--outline" data-action="rerun_failed">重跑失败作业</button>' : ''}`;
+        return `<div class="row"><button class="ui-btn ui-btn--sm" data-back>← 返回</button><span class="grow"></span>
+            <button class="ui-btn ui-btn--sm" data-open="${esc(d.url)}">在浏览器打开</button></div>
+          <div class="ui-card card ui-enter"><h2>${esc(d.title)}</h2>
+            <div class="row"><span class="ui-badge ${badge}">${st.label}</span><span class="m ellipsis">${esc(d.name)} · #${d.number} · ${esc(d.event)} · ${esc(d.branch)}@${esc(d.sha)} · ${esc(d.actor)}</span></div>
+            ${jobs}<div class="actions">${buttons}</div></div>`;
+      }
+
       function render() {
         const a = ui.auth;
         if (!a) return (app.innerHTML = ui.error ? `<div class="ui-empty err">${esc(ui.error)}</div>` : '<div class="ui-empty">加载中…</div>');
@@ -174,11 +239,12 @@
           : '';
         const head = `<div class="row"><input class="ui-input grow ui-mono" id="repo" placeholder="owner/name" value="${esc(ui.repo)}" />
           <button class="ui-btn ui-btn--sm" data-reload ${ui.busy ? 'disabled' : ''}>${ui.busy ? '…' : '刷新'}</button>${account}</div>`;
-        const body = !a.source ? authView(a) : ui.detail ? detailView(ui.detail) : listView();
+        const body = !a.source ? authView(a) : ui.detail?.kind === 'run' ? runView(ui.detail.run) : ui.detail ? detailView(ui.detail) : listView();
         app.innerHTML = head + body + (ui.error ? `<div class="err">${esc(ui.error)}</div>` : '');
         const reply = document.getElementById('reply');
         if (reply) reply.value = draft;
-        ensoUI.fill(app.querySelector('.list'));
+        app.querySelectorAll('pre.log').forEach((p) => (p.scrollTop = p.scrollHeight));
+        ensoUI.fill(app.querySelector('[data-feed]'));
       }
 
       app.addEventListener('click', (e) => {
@@ -194,14 +260,25 @@
         const d = t.dataset;
         if ('login' in d) act(async () => { await call('login'); await refreshAuth(); });
         else if ('cancel' in d) act(async () => { await call('cancelLogin'); await refreshAuth(); });
-        else if ('logout' in d) act(async () => { await call('logout'); ui.items = null; ui.detail = null; await refreshAuth(); });
+        else if ('logout' in d) act(async () => { await call('logout'); ui.items = null; ui.detail = null; ui.logs = {}; await refreshAuth(); });
         else if (d.open) call('open', { url: d.open });
-        else if ('reload' in d) ui.detail ? loadDetail(ui.detail.number) : loadList();
-        else if ('back' in d) { ui.detail = null; loadList(); }
+        else if ('reload' in d) ui.detail?.kind === 'run' ? loadRun(ui.detail.run.id) : ui.detail ? loadDetail(ui.detail.number) : loadList();
+        else if ('back' in d) { ui.detail = null; ui.logs = {}; loadList(); }
         else if (d.set) {
           const [k, v] = d.set.split(':');
-          if (ui[k] !== v) { ui[k] = v; ui.items = null; loadList(); }
-        } else if (d.num) loadDetail(Number(d.num));
+          if (ui[k] !== v) { ui[k] = v; ui.items = null; ui.detail = null; ui.logs = {}; loadList(); }
+        } else if (d.run) loadRun(Number(d.run));
+        else if (d.num) loadDetail(Number(d.num));
+        else if (d.log) {
+          const job = Number(d.log);
+          act(async () => { ui.logs[job] = await call('jobLog', { ...repoArg(), job }); });
+        } else if (d.action) {
+          const id = ui.detail.run.id;
+          act(async () => {
+            await call('runAction', { ...repoArg(), id, action: d.action });
+            ui.detail = { kind: 'run', run: await call('run', { ...repoArg(), id }) };
+          });
+        }
         else if ('reply' in d) {
           const body = document.getElementById('reply').value.trim();
           if (!body) return;
@@ -226,6 +303,7 @@
         typedRepo = Boolean(ui.repo);
         ui.items = null;
         ui.detail = null;
+        ui.logs = {};
         loadList();
       });
 
@@ -234,6 +312,26 @@
       (function loop() {
         setTimeout(async () => {
           await refreshAuth();
+          try {
+            if (!ui.busy && !ui.auth?.pending && ui.auth?.source) {
+              if (ui.detail?.kind === 'run' && ui.detail.run.status !== 'completed') {
+                const id = ui.detail.run.id;
+                const run = await call('run', { ...repoArg(), id });
+                if (!ui.busy && ui.detail?.kind === 'run' && ui.detail.run.id === id && JSON.stringify(ui.detail.run) !== JSON.stringify(run)) {
+                  ui.detail = { kind: 'run', run };
+                  render();
+                }
+              } else if (!ui.detail && ui.kind === 'actions' && ui.items?.some((i) => i.status !== 'completed')) {
+                const repo = ui.repo;
+                const r = await call('runs', repoArg());
+                if (!ui.busy && !ui.detail && ui.kind === 'actions' && ui.repo === repo && JSON.stringify(ui.items) !== JSON.stringify(r.items)) {
+                  ui.repo = r.repo;
+                  ui.items = r.items;
+                  render();
+                }
+              }
+            }
+          } catch {}
           loop();
         }, ui.auth?.pending ? 1500 : 5000);
       })();
