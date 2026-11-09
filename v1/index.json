@@ -1,8 +1,38 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-08T15:53:29.016Z",
-  "sequence": 60,
+  "generatedAt": "2026-11-09T09:43:44.102Z",
+  "sequence": 61,
   "plugins": [
+    {
+      "id": "aierlanta.alicetheme",
+      "name": "爱丽丝的茶会",
+      "description": "爱丽丝的茶会主题：蓝白格纹配蕾丝，Alice 趴在输入框上，侧栏、待办和代码块各有茶会小摆件，随会话状态换表情。另附带花园壁纸的「爱丽丝的茶会 · 花园」，深浅色和运行中、等待、出错各一张。作者 Alice Aierlanta。",
+      "tier": "community",
+      "tags": [
+        "theme",
+        "wallpaper"
+      ],
+      "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/packages/aierlanta.alicetheme/icon.webp",
+      "readme": {
+        "path": "packages/aierlanta.alicetheme/0.3.0.readme.md",
+        "sha256": "98e0bf00cfbc4c868f84fa54dd038d2fc4c3b2e946faa24ddaba325016f694cf",
+        "size": 6098
+      },
+      "latest": "0.3.0",
+      "versions": [
+        {
+          "version": "0.3.0",
+          "engines": {
+            "enso": ">=0.3.3"
+          },
+          "permissions": [],
+          "path": "packages/aierlanta.alicetheme/0.3.0.zip",
+          "sha256": "2852d12869483b91d7172c24304792e342dca6b9eee249fb69aa0723bf58bb9a",
+          "size": 5955433,
+          "publishedAt": "2026-11-09T09:43:44.102Z"
+        }
+      ]
+    },
     {
       "id": "dsh.bce",
       "name": "BCE Prompt Enhance",
