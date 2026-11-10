@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "aierlanta.alicetheme",
   "name": "爱丽丝的茶会",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "icon": "icon.webp",
   "description": "爱丽丝的茶会主题：蓝白格纹配蕾丝，Alice 趴在输入框上，侧栏、待办和代码块各有茶会小摆件，随会话状态换表情。另有奶油黄配色的「爱丽丝的茶会 · 蜂蜜」，和带花园壁纸的「爱丽丝的茶会 · 花园」（深浅色和运行中、等待、出错各一张）。作者 Alice Aierlanta。",
   "engines": {
