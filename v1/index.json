@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-09T14:27:28.288Z",
-  "sequence": 64,
+  "generatedAt": "2026-11-10T02:03:19.275Z",
+  "sequence": 65,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -14,11 +14,11 @@
       ],
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/packages/aierlanta.alicetheme/icon.webp",
       "readme": {
-        "path": "packages/aierlanta.alicetheme/0.3.1.readme.md",
+        "path": "packages/aierlanta.alicetheme/0.3.2.readme.md",
         "sha256": "718a546dcb932669ad9b707b04c9e10a3225e93dbb25ae82b08eaf07d5d56c55",
         "size": 6576
       },
-      "latest": "0.3.1",
+      "latest": "0.3.2",
       "versions": [
         {
           "version": "0.3.0",
@@ -41,6 +41,17 @@
           "sha256": "9264c7b984e92ff582b1607ddc8c367c55aeba65be5122d3a9da92c713784305",
           "size": 6583233,
           "publishedAt": "2026-11-09T10:20:12.527Z"
+        },
+        {
+          "version": "0.3.2",
+          "engines": {
+            "enso": ">=0.3.3"
+          },
+          "permissions": [],
+          "path": "packages/aierlanta.alicetheme/0.3.2.zip",
+          "sha256": "12dd3d6f53fffcd7caa0ee010e8e4808f1a97d76ba546d077fb835abbfdb9cf2",
+          "size": 6581409,
+          "publishedAt": "2026-11-10T02:03:19.275Z"
         }
       ]
     },
