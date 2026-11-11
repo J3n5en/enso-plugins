@@ -13,11 +13,22 @@
 
 最多 50 个任务，提示词不超过 8000 字。
 
+## Agent 工具
+
+和侧栏表单同一份存储、同样绑当前会话，模型可以直接建和管任务：
+
+- `cron_create`：`{ name, schedule, prompt, action?, notify?, id? }`，带 `id` 是改已有任务；返回任务、下次运行时间和总任务数。
+- `cron_list`：列出本会话所有任务（cron 描述、启用状态、上次运行与错误）。
+- `cron_delete`：`{ id }` 删除一个任务。
+
+例：`cron_create({ name: '看 PR', schedule: '*/10 * * * *', prompt: '查下 CI 和 review 评论' })`。
+
 ## 运行规则
 
 - 插件每 60 秒检查一次，所以首次触发最多晚 1 分钟。
 - 应用没在运行而错过超过 10 分钟的任务算作错过，不补跑。
 - 启用插件之前就打开的会话收不到消息，需要新建或重新打开会话。
+- 应用重启后任务照常继续：任务存在插件数据目录，宿主每分钟唤醒插件执行；到点时会话没开着会先尝试把会话拉起来。
 
 ## 常见问题
 
@@ -31,3 +42,4 @@
 | `process.background` | 后台定时检查任务 |
 | `agent.inject` | 到点向会话发送提示词 |
 | `ui.notify` | 弹出系统通知 |
+| `agent.tool` | 提供给 Agent 的 `cron_create` / `cron_list` / `cron_delete` |
