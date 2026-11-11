@@ -164,6 +164,27 @@ export function watchDelayMs(watch, now = Date.now()) {
   return Math.max(debounce, wait);
 }
 
+/** 关键词去空、去重（不分大小写），最多 20 个；空则不过滤 */
+export function normalizeKeywords(raw) {
+  if (!Array.isArray(raw)) return undefined;
+  const seen = new Set();
+  const out = [];
+  for (const x of raw) {
+    const k = String(x ?? '').trim().slice(0, 60);
+    if (!k || seen.has(k.toLowerCase())) continue;
+    seen.add(k.toLowerCase());
+    out.push(k);
+  }
+  return out.length ? out.slice(0, 20) : undefined;
+}
+
+/** 设了关键词时：正文含任一关键词（不分大小写），或 @我 / 回复我（被提及）才算命中 */
+export function keywordHit(m, keywords) {
+  if (!keywords?.length || m?.mentioned) return true;
+  const text = String(m?.message ?? '').toLowerCase();
+  return keywords.some((k) => text.includes(k.toLowerCase()));
+}
+
 /**
  * 一次投递失败后怎么处置：消息一律放回队列，订阅绝不因为单次失败被删除。
  * - 限流：5 秒后重试
@@ -1847,13 +1868,13 @@ function createApp(enso) {
   const matches = (f, it) => {
     const ids = f.chats?.map((x) => x.id);
     const hit = ids ? ids.includes(it.chat) : f.chat ? it.chat === f.chat : f.includeMuted || !mutedNow(it.chat);
-    return hit && (!f.directOnly || it.m.mentioned || entities.get(it.chat) instanceof Api.User);
+    return hit && (!f.directOnly || it.m.mentioned || entities.get(it.chat) instanceof Api.User) && keywordHit(it.m, f.keywords);
   };
   const watchOf = (w) => {
     const cs = chatsOf(w);
-    return { chat: chatLabel(w), ...(cs.length > 1 ? { chats: cs.map((x) => x.id) } : {}), directOnly: !!w.directOnly, includeMuted: !!w.includeMuted, debounceSec: w.debounceSec ?? DEBOUNCE_SEC, minIntervalSec: w.minIntervalSec ?? 0, ...(w.note ? { note: w.note } : {}) };
+    return { chat: chatLabel(w), ...(cs.length > 1 ? { chats: cs.map((x) => x.id) } : {}), directOnly: !!w.directOnly, includeMuted: !!w.includeMuted, ...(w.keywords ? { keywords: w.keywords } : {}), debounceSec: w.debounceSec ?? DEBOUNCE_SEC, minIntervalSec: w.minIntervalSec ?? 0, ...(w.note ? { note: w.note } : {}) };
   };
-  const FIELDS = ['chat', 'title', 'chats', 'directOnly', 'includeMuted', 'debounceSec', 'minIntervalSec', 'note', 'project', 'since', 'delivered', 'lastAt', 'error', 'failures', 'failNotified'];
+  const FIELDS = ['chat', 'title', 'chats', 'directOnly', 'includeMuted', 'keywords', 'debounceSec', 'minIntervalSec', 'note', 'project', 'since', 'delivered', 'lastAt', 'error', 'failures', 'failNotified'];
   const fieldsOf = (w) => Object.fromEntries(FIELDS.filter((k) => w[k] !== undefined).map((k) => [k, w[k]]));
   const saveWatches = () => {
     account.watches = [...watches].map(([sessionId, w]) => ({ sessionId, ...fieldsOf(w) }));
@@ -1919,7 +1940,7 @@ function createApp(enso) {
   tool('tg_wait_messages', async (args, ctx) => {
     const c = await agentClient();
     const chat = args.chat ? await chatOf(c, args.chat) : null;
-    const f = { chat: chat?.id, directOnly: !!args.directOnly, includeMuted: !!args.includeMuted };
+    const f = { chat: chat?.id, directOnly: !!args.directOnly, includeMuted: !!args.includeMuted, keywords: normalizeKeywords(args.keywords) };
     const ms = Math.min(Math.max(Number(args.timeoutSec) || 60, 1), 540) * 1000;
     let cursor = args.cursor != null && Number(args.cursor) <= iseq ? Number(args.cursor) : iseq;
     const missed = inbox.length > 0 && cursor < inbox[0].seq - 1;
@@ -1971,6 +1992,7 @@ function createApp(enso) {
       ...(chats.length > 1 ? { chats } : {}),
       directOnly: !!args.directOnly,
       includeMuted: !chats.length && !!args.includeMuted,
+      keywords: normalizeKeywords(args.keywords),
       debounceSec: clampSec(args.debounceSec, 1, MAX_DEBOUNCE_SEC, DEBOUNCE_SEC),
       minIntervalSec: clampSec(args.minIntervalSec, 0, MAX_INTERVAL_SEC, 0),
       note: cut(String(args.note ?? '').trim(), 500) || undefined,
