@@ -323,3 +323,84 @@ test('清单、原生模块与社区 tier', async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('未改动的外部插件不出现在权限变更里', async () => {
+  const root = await tempRoot();
+  const commit = 'a'.repeat(40);
+  const spec = (sha) => JSON.stringify({ repo: 'linqiu919/dsh-bce', commit: sha, path: '.' });
+  try {
+    await writePlugin(root, { id: 'enso.example.notes', version: '1.0.0', permissions: ['ui.view'] });
+    await mkdir(join(root, 'registry/external'), { recursive: true });
+    await writeFile(join(root, 'registry/external/dsh.bce.json'), spec(commit));
+    await writeFile(join(root, 'registry/meta/dsh.bce.json'), JSON.stringify({ tier: 'community', tags: ['mcp'] }));
+    git(root, ['init', '-b', 'main']);
+    git(root, ['add', '-A']);
+    git(root, ['commit', '-m', 'base']);
+
+    await writePlugin(
+      root,
+      {
+        id: 'dsh.bce',
+        version: '0.1.5',
+        permissions: ['composer.draft', 'mcp.call', 'ui.clipboard', 'ui.slot'],
+        mcp: { tools: ['enhance_prompt', 'search_context'] },
+      },
+      { meta: { tier: 'community', tags: ['mcp'] }, files: { '.external': `${commit}\n` } },
+    );
+    let fetched = 0;
+    const clean = await validateRepo(root, {
+      base: 'main',
+      catalog: false,
+      community: false,
+      fetch: async () => {
+        fetched += 1;
+        return { ok: false, text: async () => '' };
+      },
+    });
+    assert.equal(clean.ok, true, clean.errors.join('\n'));
+    assert.match(clean.summary, /无权限变更/);
+    assert.equal(fetched, 0);
+
+    await writeFile(join(root, 'registry/external/yce.enhance.json'), spec('c'.repeat(40)));
+    await writePlugin(root, { id: 'yce.enhance', version: '0.1.1', permissions: ['ui.slot'] }, { meta: { tier: 'community', tags: [] } });
+    const added = await validateRepo(root, { base: 'main', catalog: false, community: false });
+    assert.match(added.summary, /yce\.enhance` 新插件 0\.1\.1/);
+    assert.doesNotMatch(added.summary, /dsh\.bce/);
+    await rm(join(root, 'packages/yce.enhance'), { recursive: true, force: true });
+    await rm(join(root, 'registry/external/yce.enhance.json'));
+    await rm(join(root, 'registry/meta/yce.enhance.json'));
+
+    const manifest = JSON.parse(await readFile(join(root, 'packages/enso.example.notes/enso-plugin.json'), 'utf8'));
+    manifest.permissions = ['ui.view', 'agent.tool'];
+    manifest.version = '1.1.0';
+    await writeFile(join(root, 'packages/enso.example.notes/enso-plugin.json'), JSON.stringify(manifest));
+    const real = await validateRepo(root, { base: 'main', catalog: false, community: false });
+    assert.match(real.summary, /enso\.example\.notes/);
+    assert.match(real.summary, /新增权限：`agent\.tool`/);
+    assert.doesNotMatch(real.summary, /dsh\.bce/);
+
+    await writeFile(join(root, 'registry/external/dsh.bce.json'), spec('b'.repeat(40)));
+    const bumped = await validateRepo(root, {
+      base: 'main',
+      catalog: false,
+      community: false,
+      fetch: async (url) => {
+        assert.match(String(url), new RegExp(`${commit}/enso-plugin.json$`));
+        return {
+          ok: true,
+          text: async () => JSON.stringify({ schemaVersion: 1, id: 'dsh.bce', version: '0.1.4', permissions: ['ui.slot'] }),
+        };
+      },
+    });
+    assert.match(bumped.summary, /dsh\.bce` 0\.1\.4 → 0\.1\.5/);
+    assert.match(bumped.summary, /新增权限：`composer\.draft`/);
+    assert.doesNotMatch(bumped.summary, /新插件 0\.1\.5/);
+
+    await rm(join(root, 'registry/external/dsh.bce.json'));
+    await rm(join(root, 'packages/dsh.bce'), { recursive: true, force: true });
+    const removed = await validateRepo(root, { base: 'main', catalog: false, community: false });
+    assert.match(removed.summary, /dsh\.bce` 已从仓库移除/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

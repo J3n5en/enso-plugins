@@ -461,6 +461,69 @@ function readBaseTier(root, ref, id) {
   }
 }
 
+function externalPin(raw) {
+  if (!raw || typeof raw.repo !== 'string' || typeof raw.commit !== 'string') return null;
+  const path = raw.path == null || raw.path === '' ? '.' : raw.path;
+  if (typeof path !== 'string') return null;
+  return `${raw.repo}@${raw.commit}:${path}`;
+}
+
+function readBaseExternals(root, ref) {
+  const listed = git(root, ['ls-tree', '-r', '--name-only', `${ref}:registry/external`]);
+  if (listed.status !== 0) return {};
+  const map = {};
+  for (const name of listed.stdout
+    .split('\n')
+    .map((item) => item.trim())
+    .filter((item) => item.endsWith('.json'))) {
+    const id = name.split('/').pop().slice(0, -5);
+    const text = gitText(root, ref, `registry/external/${name}`);
+    if (text == null) continue;
+    try {
+      map[id] = JSON.parse(text);
+    } catch {
+      // 基线声明损坏时不当成「pin 没变」
+    }
+  }
+  return map;
+}
+
+async function pinnedManifest(spec, fetchImpl) {
+  const path = spec.path == null || spec.path === '' ? '.' : spec.path;
+  const prefix = path === '.' ? '' : `${path.split('/').map((part) => encodeURIComponent(part)).join('/')}/`;
+  const url = `https://raw.githubusercontent.com/${spec.repo}/${spec.commit}/${prefix}enso-plugin.json`;
+  try {
+    const res = await fetchImpl(url);
+    if (!res?.ok) return null;
+    const json = JSON.parse(await res.text());
+    return json && typeof json === 'object' && !Array.isArray(json) ? json : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 外部插件不进 Git。pin 没变就不是这个 PR 的变更；pin 变了再读旧清单，避免每次都显示成新插件。 */
+async function alignExternalBaseline(root, ref, current, base, fetchImpl) {
+  const currentSpecs = await readExternals(root);
+  const baseSpecs = readBaseExternals(root, ref);
+  for (const [id, spec] of Object.entries(currentSpecs)) {
+    const cur = externalPin(spec);
+    const prev = externalPin(baseSpecs[id]);
+    if (!cur || !prev) continue;
+    if (cur === prev) {
+      if (!base[id]) delete current[id];
+      continue;
+    }
+    if (!current[id] || base[id]) continue;
+    const manifest = await pinnedManifest(baseSpecs[id], fetchImpl);
+    if (manifest) base[id] = manifest;
+  }
+  for (const [id, spec] of Object.entries(baseSpecs)) {
+    if (!externalPin(spec) || currentSpecs[id] || current[id] || base[id]) continue;
+    base[id] = { version: '未知' };
+  }
+}
+
 export async function validateRepo(root, options = {}) {
   installPackageDeps(root);
   const { packages, errors } = await readPackages(root);
@@ -480,6 +543,7 @@ export async function validateRepo(root, options = {}) {
     const base = readBasePackages(root, baseRef, baseErrors);
     errors.push(...baseErrors);
     const current = Object.fromEntries(packages.map((plugin) => [plugin.id, plugin.manifest]));
+    await alignExternalBaseline(root, baseRef, current, base, options.fetch ?? fetch);
     summary = permissionSummary(current, base);
     if (community) {
       const ids = new Set([...Object.keys(base), ...packages.map((plugin) => plugin.id)]);
