@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-11T13:47:42.574Z",
-  "sequence": 73,
+  "generatedAt": "2026-11-11T13:48:11.212Z",
+  "sequence": 74,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -1069,11 +1069,11 @@
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.scheduler.svg",
       "category": "productivity",
       "readme": {
-        "path": "packages/enso.scheduler/1.0.3.readme.md",
-        "sha256": "543b08ecb724e7c539b2cf17cd4fefd22c00870983a6c7c5235ecf68d12c59df",
-        "size": 1392
+        "path": "packages/enso.scheduler/1.1.0.readme.md",
+        "sha256": "b2a007615245579412a7c11a0fc0e3c9b84d936a9a5af51a051879e9f09f2921",
+        "size": 2168
       },
-      "latest": "1.0.3",
+      "latest": "1.1.0",
       "versions": [
         {
           "version": "1.0.0",
@@ -1126,6 +1126,20 @@
           "sha256": "19f06be44e4455d928da4a6afbb2586048ff77e6e5e339aad217651c5ddf1120",
           "size": 64562,
           "publishedAt": "2026-11-07T12:01:21.782Z"
+        },
+        {
+          "version": "1.1.0",
+          "permissions": [
+            "agent.tool",
+            "ui.view",
+            "process.background",
+            "agent.inject",
+            "ui.notify"
+          ],
+          "path": "packages/enso.scheduler/1.1.0.zip",
+          "sha256": "e9bbe1be1752703f6127d7dd77bddf30d72c34f9cc3f8f50912d843910b92c70",
+          "size": 70026,
+          "publishedAt": "2026-11-11T13:48:11.212Z"
         }
       ]
     },
