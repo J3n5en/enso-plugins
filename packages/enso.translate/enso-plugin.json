@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "enso.translate",
   "name": "双语对照翻译",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "icon": "icon.svg",
   "description": "把思考过程和回复正文译成目标语言，原文下面紧跟译文。代码、链接、路径和公式保持原样。",
   "engines": {

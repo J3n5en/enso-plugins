@@ -320,6 +320,12 @@ export function leafPlan({ final, bodyMode, shown, source, targetLanguage }) {
   return prepareSource(source, targetLanguage);
 }
 
+/** 与思考分段相同：没有任何可译正文时不显示翻译按钮。缺正文时保持原样。 */
+export function hasTranslatable(text, targetLanguage) {
+  if (typeof text !== 'string') return true;
+  return segment(text, false, targetLanguage).some((block) => block.kind === 'prose');
+}
+
 export function translationKey(model, target, text) {
   return `${model}\0${target}\0${text}`;
 }
@@ -620,10 +626,11 @@ export function onLoad(enso) {
     });
   }
 
-  function Action({ messageIndex, sessionId }) {
+  function Action({ messageIndex, sessionId, text }) {
     const settings = useSettings();
     const shown = useShown(sessionId, messageIndex, settings?.bodyMode);
     if (!settings || settings.bodyMode === '关闭') return null;
+    if (!hasTranslatable(text, settings.targetLanguage)) return null;
     const label = shown ? '显示原文' : '翻译';
     return h(
       'button',

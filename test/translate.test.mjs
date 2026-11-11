@@ -7,6 +7,7 @@ import {
   isUnchanged,
   leafPlan,
   prepareSource,
+  hasTranslatable,
   protect,
   restore,
   segment,
@@ -310,6 +311,24 @@ test('未完成、关闭或未显示时叶子不翻译', () => {
     leafPlan({ final: true, bodyMode: '自动', shown: true, source: 'Hello', targetLanguage: '中文' })?.text,
     'Hello',
   );
+});
+
+test('整段无需翻译时不显示按钮，判断与思考分段相同', () => {
+  const zh = [
+    '「已工作 1m40s · ...」这一行在本轮还没结束时会呼吸，结束后恢复静止。',
+    '',
+    '尾段折进过程组、这一轮仍在跑时，标题和后面的摘要一起用 animate-pulse 呼吸，效果与 Orca 进行中的工具摘要一致。',
+    '',
+    '回合结束，或后面已经出现正文、这段过程算完成时，不再呼吸。',
+  ].join('\n');
+  assert.equal(hasTranslatable(zh, '中文'), false);
+  assert.equal(hasTranslatable('这是中文。\n\n```js\nconst a = 1;\n```', '中文'), false);
+  assert.equal(hasTranslatable('这是中文。\n\nHello, this still needs translation.', '中文'), true);
+  assert.equal(hasTranslatable('Hello', '中文'), true);
+  assert.equal(hasTranslatable('Hello', '英文'), false);
+  assert.equal(hasTranslatable('这是中文', '英文'), true);
+  assert.equal(hasTranslatable('', '中文'), false);
+  assert.equal(hasTranslatable(undefined, '中文'), true);
 });
 
 test('message.action 切换后 message.leaf 的订阅者收到更新', () => {
