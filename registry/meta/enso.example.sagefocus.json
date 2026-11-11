@@ -1,5 +1,6 @@
 {
   "tier": "community",
+  "category": "themes",
   "tags": ["theme", "dark"],
   "icon": "https://raw.githubusercontent.com/J3n5en/enso-plugins/main/packages/enso.example.sagefocus/assets/icon.svg"
 }

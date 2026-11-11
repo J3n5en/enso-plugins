@@ -86,15 +86,17 @@ out/v1/                   本地构建产物，不提交
 2. **市场元数据（可选）**：添加 `registry/meta/<id>.json`。
 
    ```json
-   { "tier": "community", "tags": ["ui"], "homepage": "https://example.com", "icon": "icon.png" }
+   { "tier": "community", "category": "productivity", "tags": ["ui"], "homepage": "https://example.com", "icon": "icon.png" }
    ```
 
    | 字段 | 说明 |
    | --- | --- |
    | `tier` | `official` 或 `community`，不写元数据时按 `community` |
+   | `category` | 市场分类，只能是 `themes`（主题外观）、`agent`（Agent 能力）、`productivity`（效率工作流）、`integrations`（外部集成）、`insights`（观测统计）、`writing`（写作翻译）、`fun`（休闲娱乐）之一；不写归入「其他」 |
    | `tags` | 标签，用于搜索 |
    | `homepage` | `https` 链接 |
    | `icon` | 相对路径，或 `https` 图片（客户端经 Worker `/v1/icon` 拉取） |
+   | `screenshots` | 可选，最多 6 张 `{ "url": "https://…", "alt": "说明" }`，显示在市场详情页；只收 `https`，客户端同样经 Worker 拉取，单张不超过 1MB |
 
 3. **本地检查**：
 

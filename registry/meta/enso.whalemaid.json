@@ -1,5 +1,6 @@
 {
   "tier": "official",
+  "category": "themes",
   "tags": ["theme"],
   "homepage": "https://github.com/Small-tailqwq/dsh-deep-whale",
   "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.whalemaid.svg"

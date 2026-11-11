@@ -1,5 +1,6 @@
 {
   "tier": "official",
+  "category": "agent",
   "tags": ["skills", "workflow", "agents", "principles"],
   "homepage": "https://github.com/cursor/plugins/tree/main/pstack",
   "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.pstack.svg"

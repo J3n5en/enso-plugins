@@ -235,15 +235,43 @@ function parseMeta(raw) {
     if (value.startsWith('https://')) return true;
     return PATH_RE.test(value) && !value.split('/').includes('..') && !value.startsWith('/');
   });
+  if (json.category != null && !CATEGORIES.includes(json.category)) {
+    errors.push(`category 不合法，只能是 ${CATEGORIES.join(' / ')}`);
+  }
+  const screenshots = json.screenshots ?? [];
+  if (!validScreenshots(screenshots)) errors.push('screenshots 不合法：最多 6 张，每张 { url: https 地址, alt }');
   return {
     meta: {
       tier: json.tier === 'official' ? 'official' : 'community',
       tags: Array.isArray(tags) ? tags : [],
       homepage,
       icon,
+      category: CATEGORIES.includes(json.category) ? json.category : undefined,
+      screenshots: validScreenshots(screenshots) ? screenshots : [],
     },
     errors,
   };
+}
+
+/** 市场固定分类，与 EnsoCode 的 MARKET_CATEGORIES 一致 */
+export const CATEGORIES = ['themes', 'agent', 'productivity', 'integrations', 'insights', 'writing', 'fun'];
+
+function validScreenshots(value) {
+  return (
+    Array.isArray(value) &&
+    value.length <= 6 &&
+    value.every(
+      (shot) =>
+        shot &&
+        typeof shot === 'object' &&
+        typeof shot.url === 'string' &&
+        shot.url.startsWith('https://') &&
+        shot.url.length <= 1000 &&
+        typeof shot.alt === 'string' &&
+        shot.alt.length <= 200 &&
+        Object.keys(shot).every((key) => key === 'url' || key === 'alt'),
+    )
+  );
 }
 
 async function inspectDir(dir) {
@@ -507,7 +535,7 @@ function validReadme(raw) {
   );
 }
 
-function pluginRecord({ id, name, description, tier, tags, homepage, icon, readme, versions }) {
+function pluginRecord({ id, name, description, tier, tags, homepage, icon, category, screenshots, readme, versions }) {
   const record = {
     id,
     name: String(name).slice(0, 60),
@@ -517,6 +545,9 @@ function pluginRecord({ id, name, description, tier, tags, homepage, icon, readm
   };
   if (typeof homepage === 'string' && homepage.trim()) record.homepage = homepage;
   if (typeof icon === 'string' && icon.trim()) record.icon = icon;
+  if (CATEGORIES.includes(category)) record.category = category;
+  if (validScreenshots(screenshots) && screenshots.length > 0)
+    record.screenshots = screenshots.map(({ url, alt }) => ({ url, alt }));
   if (validReadme(readme)) record.readme = { path: readme.path, sha256: readme.sha256, size: readme.size };
   record.latest = latestOf(versions);
   record.versions = sortVersions(versions);
@@ -613,6 +644,8 @@ export async function buildRepo(root, env = process.env) {
       tags: item.plugin.meta.tags,
       homepage: item.plugin.meta.homepage,
       icon: item.plugin.meta.icon,
+      category: item.plugin.meta.category,
+      screenshots: item.plugin.meta.screenshots,
       readme: item.readme,
       versions: item.versions,
     }),
@@ -629,6 +662,8 @@ export async function buildRepo(root, env = process.env) {
         tags: plugin.tags,
         homepage: plugin.homepage,
         icon: plugin.icon,
+        category: plugin.category,
+        screenshots: plugin.screenshots,
         readme: plugin.readme,
         versions,
       }),

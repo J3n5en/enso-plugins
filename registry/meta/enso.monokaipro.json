@@ -1,5 +1,6 @@
 {
   "tier": "community",
+  "category": "themes",
   "tags": ["theme", "ui"],
   "icon": "https://raw.githubusercontent.com/J3n5en/enso-plugins/main/packages/enso.monokaipro/assets/icon.svg"
 }

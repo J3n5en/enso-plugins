@@ -1,5 +1,6 @@
 {
   "tier": "community",
+  "category": "fun",
   "tags": ["ui", "video"],
   "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.hongguo.svg"
 }

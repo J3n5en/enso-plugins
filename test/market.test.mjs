@@ -152,6 +152,39 @@ test('README 作为独立文件发布并登记在插件记录上', async () => {
   }
 });
 
+test('元数据里的分类和截图写进索引，删包后沿用；未知分类或非 https 截图校验失败', async () => {
+  const root = await tempRoot();
+  try {
+    const screenshots = [{ url: 'https://cdn.example/notes.png', alt: '便签面板' }];
+    await writePlugin(
+      root,
+      { id: 'enso.example.notes', version: '1.0.0' },
+      { meta: { tier: 'official', tags: ['ui'], category: 'productivity', screenshots } },
+    );
+    const built = await buildRepo(root, { ...process.env, ENSO_INDEX_TIME: NOW });
+    assert.equal(built.index.plugins[0].category, 'productivity');
+    assert.deepEqual(built.index.plugins[0].screenshots, screenshots);
+
+    await rm(join(root, 'packages/enso.example.notes'), { recursive: true });
+    await rm(join(root, 'registry/meta/enso.example.notes.json'));
+    const kept = await buildRepo(root, { ...process.env, ENSO_INDEX_TIME: '2026-11-03T00:00:00.000Z' });
+    assert.equal(kept.index.plugins[0].category, 'productivity');
+    assert.deepEqual(kept.index.plugins[0].screenshots, screenshots);
+
+    await writePlugin(root, { id: 'enso.example.games', version: '1.0.0' }, { meta: { tier: 'community', category: 'games' } });
+    await writePlugin(
+      root,
+      { id: 'enso.example.shots', version: '1.0.0' },
+      { meta: { tier: 'community', screenshots: [{ url: 'http://x/a.png', alt: 'a' }] } },
+    );
+    const validated = await validateRepo(root, { catalog: false });
+    assert.match(validated.errors.join('\n'), /category 不合法/);
+    assert.match(validated.errors.join('\n'), /screenshots 不合法/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('同一内容的索引与 zip 可复现', async () => {
   const left = await tempRoot();
   const right = await tempRoot();

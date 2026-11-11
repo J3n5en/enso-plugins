@@ -1,5 +1,6 @@
 {
   "tier": "official",
+  "category": "agent",
   "tags": ["review", "bugbot", "git", "code-quality", "subagent"],
   "icon": "registry/icons/enso.bugbot.svg"
 }
