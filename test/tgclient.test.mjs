@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { activate, deactivate, parseProxy, planWatchRetry } from '../packages/enso.tgclient/main.mjs';
+import { activate, deactivate, parseProxy, planWatchRetry, watchDelayMs } from '../packages/enso.tgclient/main.mjs';
 
 test('解析代理', () => {
   assert.equal(parseProxy(''), undefined);
@@ -41,6 +41,22 @@ test('投递失败时保留订阅并退避重试', () => {
   assert.deepEqual(plans.map((p) => p.notify), [null, null, null, null, 'failed', null, null, null]);
   assert.equal(planWatchRetry(failed(), { failures: 5, failNotified: true }).notify, null);
   assert.match(plans[0].error, /INJECT_FAILED 会话没在运行/);
+});
+
+test('订阅可设安静期与最小投递间隔', () => {
+  // 默认安静 3 秒
+  assert.equal(watchDelayMs({}, 0), 3_000);
+  assert.equal(watchDelayMs({ debounceSec: 30 }, 0), 30_000);
+  // 最小间隔没到：等到间隔满
+  assert.equal(watchDelayMs({ minIntervalSec: 60, lastAt: 1_000 }, 11_000), 50_000);
+  // 安静期比剩余间隔更晚时以安静期为准
+  assert.equal(watchDelayMs({ debounceSec: 90, minIntervalSec: 60, lastAt: 1_000 }, 1_000), 90_000);
+  // 间隔已过，只等安静期
+  assert.equal(watchDelayMs({ minIntervalSec: 60, lastAt: 1_000 }, 121_000), 3_000);
+  // 越界收敛
+  assert.equal(watchDelayMs({ debounceSec: 9_999 }, 0), 300_000);
+  assert.equal(watchDelayMs({ debounceSec: 0 }, 0), 1_000);
+  assert.equal(watchDelayMs({ minIntervalSec: 9_999, lastAt: 0 }, 0), 3_000);
 });
 
 test('未登录时停在登录页，校验参数，轮询立即返回状态', async () => {

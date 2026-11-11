@@ -142,6 +142,24 @@ const RETRY_MS = 5000;
 const MAX_RETRY_MS = 5 * 60_000;
 /** 连续失败这么多次才打扰用户一次 */
 const FAIL_NOTIFY_AT = 5;
+/** 默认安静期：最后一条消息之后等这么久再投递，把连发的几条合成一批 */
+const DEBOUNCE_SEC = 3;
+
+const clampSec = (v, lo, hi, fallback) => {
+  const n = Number(v);
+  return Number.isFinite(n) && String(v ?? '').trim() !== '' ? Math.min(Math.max(Math.round(n), lo), hi) : fallback;
+};
+
+/**
+ * 下一次投递还要等多久：安静期（debounceSec）与两次投递的最小间隔（minIntervalSec）
+ * 取较晚的那个，避免消息多时每几秒就唤醒一次 agent。
+ */
+export function watchDelayMs(watch, now = Date.now()) {
+  const debounce = clampSec(watch?.debounceSec, 1, 300, DEBOUNCE_SEC) * 1000;
+  const gap = clampSec(watch?.minIntervalSec, 0, 3600, 0) * 1000;
+  const wait = gap && watch?.lastAt ? Math.max(0, watch.lastAt + gap - now) : 0;
+  return Math.max(debounce, wait);
+}
 
 /**
  * 一次投递失败后怎么处置：消息一律放回队列，订阅绝不因为单次失败被删除。
@@ -1830,9 +1848,9 @@ function createApp(enso) {
   };
   const watchOf = (w) => {
     const cs = chatsOf(w);
-    return { chat: chatLabel(w), ...(cs.length > 1 ? { chats: cs.map((x) => x.id) } : {}), directOnly: !!w.directOnly, includeMuted: !!w.includeMuted, ...(w.note ? { note: w.note } : {}) };
+    return { chat: chatLabel(w), ...(cs.length > 1 ? { chats: cs.map((x) => x.id) } : {}), directOnly: !!w.directOnly, includeMuted: !!w.includeMuted, debounceSec: w.debounceSec ?? DEBOUNCE_SEC, minIntervalSec: w.minIntervalSec ?? 0, ...(w.note ? { note: w.note } : {}) };
   };
-  const FIELDS = ['chat', 'title', 'chats', 'directOnly', 'includeMuted', 'note', 'project', 'since', 'delivered', 'lastAt', 'error', 'failures', 'failNotified'];
+  const FIELDS = ['chat', 'title', 'chats', 'directOnly', 'includeMuted', 'debounceSec', 'minIntervalSec', 'note', 'project', 'since', 'delivered', 'lastAt', 'error', 'failures', 'failNotified'];
   const fieldsOf = (w) => Object.fromEntries(FIELDS.filter((k) => w[k] !== undefined).map((k) => [k, w[k]]));
   const saveWatches = () => {
     account.watches = [...watches].map(([sessionId, w]) => ({ sessionId, ...fieldsOf(w) }));
@@ -1852,7 +1870,7 @@ function createApp(enso) {
     for (const [sid, w] of watches) {
       if (!matches(w, it)) continue;
       if (w.queue.length < 200) w.queue.push(m);
-      w.timer ??= setTimeout(() => void flushWatch(sid), 3000);
+      w.timer ??= setTimeout(() => void flushWatch(sid), watchDelayMs(w));
     }
   }
 
@@ -1892,7 +1910,7 @@ function createApp(enso) {
       w.timer = setTimeout(() => void flushWatch(sid), plan.delayMs);
       return;
     }
-    w.timer = w.queue.length ? setTimeout(() => void flushWatch(sid), 5000) : null;
+    w.timer = w.queue.length ? setTimeout(() => void flushWatch(sid), watchDelayMs(w)) : null;
   }
 
   tool('tg_wait_messages', async (args, ctx) => {
@@ -1950,6 +1968,8 @@ function createApp(enso) {
       ...(chats.length > 1 ? { chats } : {}),
       directOnly: !!args.directOnly,
       includeMuted: !chats.length && !!args.includeMuted,
+      debounceSec: clampSec(args.debounceSec, 1, 300, DEBOUNCE_SEC),
+      minIntervalSec: clampSec(args.minIntervalSec, 0, 3600, 0),
       note: cut(String(args.note ?? '').trim(), 500) || undefined,
       project: ctx.projectRoot ? basename(ctx.projectRoot) : undefined,
       since: Date.now(),
@@ -1962,7 +1982,7 @@ function createApp(enso) {
     return {
       watching: watchOf(w),
       ...(old ? { replaced: watchOf(old) } : {}),
-      hint: '新消息每攒约 3 秒投递一次到本会话并自动开始新一轮；需要在 设置 → 插件 → Telegram 客户端 打开「允许向任意运行中的会话发送消息」',
+      hint: `新消息攒 ${w.debounceSec} 秒后投递到本会话并自动开始新一轮${w.minIntervalSec ? `，两次投递至少间隔 ${w.minIntervalSec} 秒（中间的消息合并成一批）` : ''}；需要在 设置 → 插件 → Telegram 客户端 打开「允许向任意运行中的会话发送消息」`,
     };
   });
 
