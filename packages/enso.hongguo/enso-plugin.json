@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "enso.hongguo",
   "name": "红果短剧",
-  "version": "0.2.13",
+  "version": "0.2.14",
   "icon": "icon.svg",
   "description": "在侧栏里浏览、搜索并播放红果短剧（基于 openhongguo 匿名 SDK）。仅供学习研究。",
   "main": "main.mjs",

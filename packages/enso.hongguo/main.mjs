@@ -51,7 +51,7 @@ export function activate(enso) {
       AUTHENTICATION_REQUIRED: '该内容需要登录',
       CHALLENGE_REQUIRED: '服务端要求验证，匿名无法继续',
     };
-    return new Error(map[e?.code] ?? e?.message ?? String(e));
+    return Object.assign(new Error(map[e?.code] ?? e?.message ?? String(e)), { code: e?.code });
   };
 
   // 设备受限时换新设备并退避重试；并发失败只重置一次
@@ -89,15 +89,14 @@ export function activate(enso) {
     hasMore: Boolean(p.has_more),
   });
   const empty = (e) => e?.code === 'ANONYMOUS_LIMITED' || e?.code === 'END_OF_LIST';
-  const list = (fn) =>
-    client().then((c) =>
-      fn(c).then(page, (e) => {
-        if (empty(e)) return { items: [], hasMore: false };
-        throw friendly(e);
-      })
-    );
+  // 推荐不会真的为空：受限时换设备重试；搜索为空可能只是没结果
+  const list = (fn, retry) =>
+    (retry ? sdk(fn) : client().then(fn)).then(page, (e) => {
+      if (empty(e)) return { items: [], hasMore: false };
+      throw friendly(e);
+    });
 
-  enso.renderer.handle('discover', (a) => list((c) => c.discover({ cursor: a?.cursor || undefined })));
+  enso.renderer.handle('discover', (a) => list((c) => c.discover({ cursor: a?.cursor || undefined }), true));
 
   // 侧栏按会话各开一个页面实例：记住唯一在播的实例和进度，其余实例据此接力
   let now = null;
