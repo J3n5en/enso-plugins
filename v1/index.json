@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-11T16:57:47.347Z",
-  "sequence": 75,
+  "generatedAt": "2026-11-11T17:16:32.725Z",
+  "sequence": 76,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -133,11 +133,11 @@
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.bridge.svg",
       "category": "agent",
       "readme": {
-        "path": "packages/enso.bridge/1.0.0.readme.md",
+        "path": "packages/enso.bridge/1.0.1.readme.md",
         "sha256": "737fe30a22f69c2ec2bdb28871c4b37939717d3b37bf0ebdc6565b99f8ecdbf8",
         "size": 1434
       },
-      "latest": "1.0.0",
+      "latest": "1.0.1",
       "versions": [
         {
           "version": "1.0.0",
@@ -154,6 +154,22 @@
           "sha256": "5f3d9f78b684b09f37e88909fe36fc6629c210fb61455adf881db6f862ce9be1",
           "size": 76586,
           "publishedAt": "2026-11-09T09:46:38.932Z"
+        },
+        {
+          "version": "1.0.1",
+          "permissions": [
+            "ui.view",
+            "process.background",
+            "agent.tool",
+            "agent.inject",
+            "agent.observe",
+            "session.read",
+            "session.focus"
+          ],
+          "path": "packages/enso.bridge/1.0.1.zip",
+          "sha256": "7f767981e0e4d331114571a630547f6dfd7925866a171f45e17b66130402d048",
+          "size": 76757,
+          "publishedAt": "2026-11-11T17:16:32.725Z"
         }
       ]
     },
