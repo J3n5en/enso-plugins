@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { activate, deactivate, parseProxy } from '../packages/enso.tgclient/main.mjs';
+import { activate, deactivate, parseProxy, planWatchRetry, watchDelayMs } from '../packages/enso.tgclient/main.mjs';
 
 test('解析代理', () => {
   assert.equal(parseProxy(''), undefined);
@@ -12,6 +12,52 @@ test('解析代理', () => {
   assert.deepEqual(parseProxy('tg://proxy?server=a.b&port=443&secret=ee00'), { ip: 'a.b', port: 443, secret: 'ee00', MTProxy: true });
   assert.deepEqual(parseProxy('https://t.me/proxy?server=a.b&port=443&secret=dd11'), { ip: 'a.b', port: 443, secret: 'dd11', MTProxy: true });
   assert.throws(() => parseProxy('http://127.0.0.1:8080'));
+});
+
+test('投递失败时保留订阅并退避重试', () => {
+  const denied = Object.assign(new Error('permission'), { code: 'PERMISSION_DENIED' });
+  const first = planWatchRetry(denied, {});
+  assert.equal(first.notify, 'permission');
+  assert.equal(first.delayMs, 300_000);
+  assert.match(first.error, /授权后补投/);
+  assert.equal(planWatchRetry(denied, { warned: true }).notify, null);
+
+  const rate = planWatchRetry(Object.assign(new Error('flood'), { code: 'RATE_LIMITED' }), { failures: 3 });
+  assert.equal(rate.delayMs, 5_000);
+  assert.equal(rate.failures, 3);
+  assert.equal(rate.notify, null);
+
+  // 会话没在跑 / 注入失败：从 5 秒指数退避到 5 分钟封顶，连续 5 次才提醒一次
+  const failed = () => Object.assign(new Error('会话没在运行'), { code: 'INJECT_FAILED' });
+  const state = {};
+  const plans = [];
+  for (let i = 0; i < 8; i++) {
+    const plan = planWatchRetry(failed(), state);
+    plans.push(plan);
+    Object.assign(state, { failures: plan.failures, ...(plan.notify === 'failed' ? { failNotified: true } : {}) });
+  }
+  assert.deepEqual(plans.map((p) => p.delayMs), [5_000, 10_000, 20_000, 40_000, 80_000, 160_000, 300_000, 300_000]);
+  assert.deepEqual(plans.map((p) => p.failures), [1, 2, 3, 4, 5, 6, 7, 8]);
+  assert.deepEqual(plans.map((p) => p.notify), [null, null, null, null, 'failed', null, null, null]);
+  assert.equal(planWatchRetry(failed(), { failures: 5, failNotified: true }).notify, null);
+  assert.match(plans[0].error, /INJECT_FAILED 会话没在运行/);
+});
+
+test('订阅可设安静期与最小投递间隔', () => {
+  // 默认安静 3 秒
+  assert.equal(watchDelayMs({}, 0), 3_000);
+  assert.equal(watchDelayMs({ debounceSec: 30 }, 0), 30_000);
+  // 最小间隔没到：等到间隔满
+  assert.equal(watchDelayMs({ minIntervalSec: 60, lastAt: 1_000 }, 11_000), 50_000);
+  // 安静期比剩余间隔更晚时以安静期为准
+  assert.equal(watchDelayMs({ debounceSec: 90, minIntervalSec: 60, lastAt: 1_000 }, 1_000), 90_000);
+  // 间隔已过，只等安静期
+  assert.equal(watchDelayMs({ minIntervalSec: 60, lastAt: 1_000 }, 121_000), 3_000);
+  // 越界收敛：安静期封顶 1 小时，最小间隔封顶 24 小时
+  assert.equal(watchDelayMs({ debounceSec: 9_999 }, 0), 3_600_000);
+  assert.equal(watchDelayMs({ debounceSec: 0 }, 0), 1_000);
+  assert.equal(watchDelayMs({ minIntervalSec: 1e9, lastAt: 1_000 }, 1_000), 86_400_000);
+  assert.equal(watchDelayMs({ minIntervalSec: 1_800, lastAt: 1_000 }, 1_000), 1_800_000);
 });
 
 test('未登录时停在登录页，校验参数，轮询立即返回状态', async () => {
