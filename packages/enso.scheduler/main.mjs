@@ -240,7 +240,8 @@ export function activate(enso) {
     return { valid: runs.length > 0, description: describeCron(cron), runs };
   });
 
-  enso.renderer.handle('save', (args, ctx) =>
+  /** 侧栏表单与 cron_create 共用：新建或按 id 更新当前会话的任务 */
+  const upsert = (args, ctx) =>
     locked(async () => {
       const name = String(args?.name ?? '').trim().slice(0, 60);
       const prompt = String(args?.prompt ?? '').trim().slice(0, MAX_PROMPT);
@@ -272,9 +273,10 @@ export function activate(enso) {
       });
       arm(task);
       await save(tasks);
-      return view(tasks, ctx);
-    })
-  );
+      return { tasks, task };
+    });
+
+  enso.renderer.handle('save', async (args, ctx) => view((await upsert(args, ctx)).tasks, ctx));
 
   const mutate = (fn) => (args, ctx) =>
     locked(async () => {
@@ -298,4 +300,62 @@ export function activate(enso) {
     mutate((task, tasks) => tasks.filter((t) => t !== task))
   );
   enso.renderer.handle('runNow', mutate(runOne));
+
+  // ---- Agent 工具：模型自己建/看/删定时任务，等价于侧栏表单（任务同样绑当前会话） ----
+  const mine = (tasks, ctx) => tasks.filter((t) => ctx?.sessionId && t.sessionId === ctx.sessionId);
+  const brief = (t) => {
+    const cron = parseCron(t.schedule);
+    const prompt = String(t.prompt ?? '');
+    return {
+      id: t.id,
+      name: t.name,
+      schedule: t.schedule,
+      description: cron ? describeCron(cron) : t.schedule,
+      action: t.action === 'notify' ? 'notify' : 'prompt',
+      prompt: prompt.length > 400 ? `${prompt.slice(0, 400)}…` : prompt,
+      enabled: t.enabled !== false,
+      notify: !!t.notify,
+      nextRunAt: t.nextRunAt ?? null,
+      lastRunAt: t.lastRunAt ?? null,
+      lastStatus: t.lastStatus ?? null,
+      lastError: t.lastError ?? null,
+    };
+  };
+  const requireSession = (ctx) => {
+    if (!ctx?.sessionId) throw new Error('只能在会话里调用，任务会绑定到该会话');
+    return ctx.sessionId;
+  };
+
+  enso.tools.register('cron_create', async (args, ctx) => {
+    const { tasks, task } = await upsert(args, ctx);
+    const cron = parseCron(task.schedule);
+    return {
+      ok: true,
+      task: brief(task),
+      followingAt: cron && task.nextRunAt ? nextRun(cron, task.nextRunAt) : null,
+      total: mine(tasks, ctx).length,
+      hint: '到点后宿主会向本会话注入提示词；应用没运行超过 10 分钟的任务算错过不补跑。',
+    };
+  });
+
+  enso.tools.register('cron_list', async (_args, ctx) => {
+    requireSession(ctx);
+    const tasks = mine(await load(), ctx);
+    return { now: Date.now(), tasks: tasks.map(brief) };
+  });
+
+  enso.tools.register('cron_delete', async (args, ctx) => {
+    const sessionId = requireSession(ctx);
+    const id = String(args?.id ?? '').trim();
+    if (!id) throw new Error('请提供要删除的任务 id（cron_list 可查）');
+    const { tasks, task } = await locked(async () => {
+      const all = await load();
+      const hit = all.find((t) => t.id === id && t.sessionId === sessionId);
+      if (!hit) throw new Error('任务不存在');
+      const kept = all.filter((t) => t !== hit);
+      await save(kept);
+      return { tasks: kept, task: hit };
+    });
+    return { ok: true, deleted: { id: task.id, name: task.name }, remaining: mine(tasks, ctx).length };
+  });
 }
