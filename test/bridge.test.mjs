@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -108,6 +109,37 @@ test('bridge_sessions 列出同项目活跃会话并标明当前会话与对端�
     assert.ok(res.content.includes('前端组件 C'));
     assert.equal(res.details.current, 'sess-a');
     assert.equal(res.details.peers.length, 2);
+  });
+});
+
+test('bridge_sessions activeOnly 只把最近群聊参与者算作活跃，久远参与者不再计入', async () => {
+  await withDir(async (dir) => {
+    const now = Date.now();
+    const key = createHash('sha256').update('/proj').digest('hex').slice(0, 16);
+    await mkdir(join(dir, 'rooms'), { recursive: true });
+    await writeFile(
+      join(dir, 'rooms', `${key}.json`),
+      JSON.stringify({
+        rev: 1,
+        messages: [
+          { id: 'req-old', kind: 'question', fromId: 'sess-a', targets: [{ id: 'sess-b' }], createdAt: now - 2 * 60 * 60 * 1000 },
+          { id: 'req-new', kind: 'question', fromId: 'sess-a', targets: [{ id: 'sess-c' }], createdAt: now - 60 * 1000 },
+        ],
+      })
+    );
+    const h = createHarness(dir, {
+      sessions: [
+        { id: 'sess-a', title: '主控 A', updatedAt: 4000, state: 'running', running: true },
+        { id: 'sess-b', title: '久远成员 B', updatedAt: 3000, state: 'idle', running: false },
+        { id: 'sess-c', title: '最近成员 C', updatedAt: 2000, state: 'idle', running: false },
+        { id: 'sess-d', title: '无关会话 D', updatedAt: 1000, state: 'idle', running: false },
+      ],
+    });
+    const res = await h.tools.bridge_sessions({ activeOnly: true }, { sessionId: 'sess-a', projectRoot: '/proj' });
+    assert.deepEqual(
+      res.details.peers.map((s) => s.id),
+      ['sess-c']
+    );
   });
 });
 

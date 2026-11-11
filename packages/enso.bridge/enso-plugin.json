@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "enso.bridge",
   "name": "Session Bridge",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "icon": "icon.svg",
   "description": "跨会话桥：同项目的多个会话可在侧栏群聊室中互相提问、委托与回传结论。",
   "main": "main.mjs",
@@ -41,7 +41,7 @@
             },
             "activeOnly": {
               "type": "boolean",
-              "description": "Only return currently running/busy sessions or sessions that participated in the bridge room (default false)"
+              "description": "Only return currently running/busy sessions or sessions that took part in the bridge room within the last 30 minutes (default false)"
             },
             "query": {
               "type": "string",

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 
 const MAX_MESSAGES = 200;
 const MAX_TEXT = 24_000;
+const RECENT_MEMBER_MS = 30 * 60 * 1000;
 const PERMISSION_HINT =
   '未允许向其他会话发送消息：请到「设置 → 插件 → Session Bridge」打开“允许向任意运行中的会话发送消息”';
 
@@ -418,7 +419,10 @@ export function activate(enso) {
       locked(() => loadRoom(ctx?.projectRoot ?? null)),
     ]);
     const selfId = current || rootIdOf(ctx?.sessionId);
-    const participantIds = collectParticipantIds(room.messages);
+    const since = Date.now() - RECENT_MEMBER_MS;
+    const participantIds = collectParticipantIds(
+      room.messages.filter((m) => Number(m?.createdAt) >= since)
+    );
     const ranked = rankSessions(sessions, selfId, participantIds);
     const query = String(args?.query ?? '').trim().toLowerCase();
     const activeOnly = Boolean(args?.activeOnly);
