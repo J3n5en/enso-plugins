@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { activate, deactivate, parseProxy, planWatchRetry, watchDelayMs } from '../packages/enso.tgclient/main.mjs';
+import { activate, deactivate, keywordHit, normalizeKeywords, parseProxy, planWatchRetry, watchDelayMs } from '../packages/enso.tgclient/main.mjs';
 
 test('解析代理', () => {
   assert.equal(parseProxy(''), undefined);
@@ -92,4 +92,21 @@ test('未登录时停在登录页，校验参数，轮询立即返回状态', as
     await deactivate();
     await rm(dataDir, { recursive: true, force: true });
   }
+});
+
+test('关键词过滤：整理关键词', () => {
+  assert.equal(normalizeKeywords(undefined), undefined);
+  assert.equal(normalizeKeywords([' ', '']), undefined);
+  assert.deepEqual(normalizeKeywords([' EnsoCode ', 'ensocode', 'Bug', 3]), ['EnsoCode', 'Bug', '3']);
+  assert.equal(normalizeKeywords(Array.from({ length: 50 }, (_, i) => `k${i}`)).length, 20);
+});
+
+test('关键词过滤：命中关键词或被提及', () => {
+  const kw = ['EnsoCode', 'bug'];
+  assert.equal(keywordHit({ message: '新版 ensocode 好用' }, kw), true);
+  assert.equal(keywordHit({ message: '发现个 BUG' }, kw), true);
+  assert.equal(keywordHit({ message: '英伟达新芯片' }, kw), false);
+  assert.equal(keywordHit({ message: '你看下这个', mentioned: true }, kw), true);
+  assert.equal(keywordHit({ message: undefined }, kw), false);
+  assert.equal(keywordHit({ message: '随便聊' }, undefined), true);
 });

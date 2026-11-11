@@ -622,7 +622,7 @@
       function renderWatches(box) {
         if (!S.watches.length) return closeCtx();
         box.innerHTML = '<div class="rd">Agent 订阅的新消息</div>' + S.watches.map((w) => {
-          const scope = [w.directOnly && '只看私聊、@我和回复我', w.includeMuted && !w.chat && !w.chats?.length && '含静音聊天',
+          const scope = [w.directOnly && '只看私聊、@我和回复我', w.keywords?.length && `关键词 ${w.keywords.join('、')}（及 @我、回复我）`, w.includeMuted && !w.chat && !w.chats?.length && '含静音聊天',
             w.debounceSec && `安静 ${w.debounceSec} 秒合并投递`, w.minIntervalSec && `两次投递至少间隔 ${w.minIntervalSec} 秒`].filter(Boolean).join('，');
           const label = w.chats?.length ? w.chats.map((x) => x.title || x.id).join('、') : w.chat ? w.title || w.chat : '所有未静音的聊天';
           const stat = [w.project && `项目 ${w.project}`, w.since && `${ago(w.since)}开始`, `已投递 ${w.delivered ?? 0} 条`, w.lastAt && `最近 ${ago(w.lastAt)}`, w.pending && `待投递 ${w.pending} 条`].filter(Boolean).join(' · ');
