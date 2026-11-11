@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, open, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
-import { createClient } from 'openhongguo';
+import { createClient } from './vendor/openhongguo/index.js';
 import { Remuxer } from './remux.mjs';
 
 // base64 of 46KB stays under the 64KB UI payload cap
