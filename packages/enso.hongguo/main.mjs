@@ -54,16 +54,25 @@ export function activate(enso) {
     return new Error(map[e?.code] ?? e?.message ?? String(e));
   };
 
+  // 设备受限时换新设备并退避重试；并发失败只重置一次
+  let gen = 0;
+  let resetting;
+  const reset = (c, seen) => {
+    if (seen !== gen) return resetting ?? Promise.resolve();
+    gen++;
+    return (resetting = c.resetDevice().finally(() => (resetting = undefined)));
+  };
   const sdk = async (fn) => {
     const c = await client();
-    try {
-      return await fn(c);
-    } catch (e) {
-      if (e?.code === 'DEVICE_REJECTED') {
-        await c.resetDevice();
-        return fn(c).catch((err) => Promise.reject(friendly(err)));
+    for (let i = 0; ; i++) {
+      const seen = gen;
+      try {
+        return await fn(c);
+      } catch (e) {
+        if (!['ANONYMOUS_LIMITED', 'DEVICE_REJECTED'].includes(e?.code) || i >= 3) throw friendly(e);
+        await reset(c, seen).catch((err) => console.warn('resetDevice failed', err?.message));
+        await sleep(500 * 2 ** i);
       }
-      throw friendly(e);
     }
   };
 
@@ -201,17 +210,7 @@ export function activate(enso) {
     }
   });
 
-  const resolve = async (episodeId) => {
-    const c = await client();
-    for (let i = 0; ; i++) {
-      try {
-        return await c.resolvePlayback(episodeId);
-      } catch (e) {
-        if (!['ANONYMOUS_LIMITED', 'DEVICE_REJECTED'].includes(e?.code) || i >= 2) throw friendly(e);
-        await c.resetDevice();
-      }
-    }
-  };
+  const resolve = (episodeId) => sdk((c) => c.resolvePlayback(episodeId));
 
   const pick = (streams, quality) => {
     const rank = (s) => QUALITIES.indexOf(s.definition);
