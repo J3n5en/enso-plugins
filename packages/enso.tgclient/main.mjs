@@ -144,6 +144,9 @@ const MAX_RETRY_MS = 5 * 60_000;
 const FAIL_NOTIFY_AT = 5;
 /** 默认安静期：最后一条消息之后等这么久再投递，把连发的几条合成一批 */
 const DEBOUNCE_SEC = 3;
+/** 安静期上限 1 小时，最小投递间隔上限 24 小时（一天最多唤醒一次） */
+const MAX_DEBOUNCE_SEC = 3600;
+const MAX_INTERVAL_SEC = 86_400;
 
 const clampSec = (v, lo, hi, fallback) => {
   const n = Number(v);
@@ -155,8 +158,8 @@ const clampSec = (v, lo, hi, fallback) => {
  * 取较晚的那个，避免消息多时每几秒就唤醒一次 agent。
  */
 export function watchDelayMs(watch, now = Date.now()) {
-  const debounce = clampSec(watch?.debounceSec, 1, 300, DEBOUNCE_SEC) * 1000;
-  const gap = clampSec(watch?.minIntervalSec, 0, 3600, 0) * 1000;
+  const debounce = clampSec(watch?.debounceSec, 1, MAX_DEBOUNCE_SEC, DEBOUNCE_SEC) * 1000;
+  const gap = clampSec(watch?.minIntervalSec, 0, MAX_INTERVAL_SEC, 0) * 1000;
   const wait = gap && watch?.lastAt ? Math.max(0, watch.lastAt + gap - now) : 0;
   return Math.max(debounce, wait);
 }
@@ -1968,8 +1971,8 @@ function createApp(enso) {
       ...(chats.length > 1 ? { chats } : {}),
       directOnly: !!args.directOnly,
       includeMuted: !chats.length && !!args.includeMuted,
-      debounceSec: clampSec(args.debounceSec, 1, 300, DEBOUNCE_SEC),
-      minIntervalSec: clampSec(args.minIntervalSec, 0, 3600, 0),
+      debounceSec: clampSec(args.debounceSec, 1, MAX_DEBOUNCE_SEC, DEBOUNCE_SEC),
+      minIntervalSec: clampSec(args.minIntervalSec, 0, MAX_INTERVAL_SEC, 0),
       note: cut(String(args.note ?? '').trim(), 500) || undefined,
       project: ctx.projectRoot ? basename(ctx.projectRoot) : undefined,
       since: Date.now(),
