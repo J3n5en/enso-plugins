@@ -2,13 +2,56 @@
   "schemaVersion": 1,
   "id": "enso.scheduler",
   "name": "Scheduler",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "icon": "icon.svg",
   "description": "定时任务：按 cron 到点向会话发送提示词或弹出系统通知，侧栏显示下次运行时间与倒计时。",
   "main": "main.mjs",
-  "permissions": ["ui.view", "process.background", "agent.inject", "ui.notify"],
+  "permissions": ["agent.tool", "ui.view", "process.background", "agent.inject", "ui.notify"],
   "contributes": {
     "views": [{ "id": "scheduler", "title": "定时任务", "entry": "scheduler.html" }],
-    "schedules": [{ "id": "tick", "intervalSeconds": 60, "timeoutMs": 90000 }]
+    "schedules": [{ "id": "tick", "intervalSeconds": 60, "timeoutMs": 90000 }],
+    "agentTools": [
+      {
+        "name": "cron_create",
+        "description": "Create or update a recurring task of this session: at the cron time the host injects the prompt into this session (optionally also shows a system notification). Same storage as the Scheduler sidebar, at most 50 tasks. Cron is 5 fields (minute hour day month weekday, local time). Returns the task with its next run time.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string", "description": "Task name shown in the sidebar, max 60 chars" },
+            "schedule": {
+              "type": "string",
+              "description": "5-field cron in local time, e.g. '*/10 * * * *' (every 10 minutes), '0 9 * * 1-5' (weekdays 09:00), '30 18 * * *'"
+            },
+            "prompt": {
+              "type": "string",
+              "description": "Text injected into this session at each run (max 8000 chars); for action=notify it is the notification body"
+            },
+            "action": {
+              "type": "string",
+              "enum": ["prompt", "notify"],
+              "description": "Default prompt: inject into the session. notify: only show a system notification"
+            },
+            "notify": { "type": "boolean", "description": "Also show a system notification when action=prompt" },
+            "id": { "type": "string", "description": "Update this existing task instead of creating one (id from cron_list)" }
+          },
+          "required": ["name", "schedule", "prompt"]
+        },
+        "timeoutMs": 30000
+      },
+      {
+        "name": "cron_list",
+        "description": "List the recurring tasks of this session with their cron description, enabled state, next/last run and last error.",
+        "parameters": { "type": "object", "properties": {} }
+      },
+      {
+        "name": "cron_delete",
+        "description": "Delete one recurring task of this session by id.",
+        "parameters": {
+          "type": "object",
+          "properties": { "id": { "type": "string", "description": "Task id from cron_list" } },
+          "required": ["id"]
+        }
+      }
+    ]
   }
 }
