@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-11T13:47:27.384Z",
-  "sequence": 72,
+  "generatedAt": "2026-11-11T13:47:42.574Z",
+  "sequence": 73,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -1260,11 +1260,11 @@
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.tgclient.svg",
       "category": "integrations",
       "readme": {
-        "path": "packages/enso.tgclient/0.2.0.readme.md",
-        "sha256": "b1544bd8577b2df1830dfc19cdae8784ea45b89b16013f808faa3b2dd70fa3fd",
-        "size": 3137
+        "path": "packages/enso.tgclient/0.3.1.readme.md",
+        "sha256": "cfafcae6cc38635972553e25accb11fc8f517ba748a49c813f7c24acf70c5b86",
+        "size": 3734
       },
-      "latest": "0.2.0",
+      "latest": "0.3.1",
       "versions": [
         {
           "version": "0.1.0",
@@ -1319,6 +1319,24 @@
           "sha256": "2cf363fe949decd7570eb326316f15e36711d04a3de33696bd4142c7753a393b",
           "size": 1313888,
           "publishedAt": "2026-11-11T13:22:10.010Z"
+        },
+        {
+          "version": "0.3.1",
+          "engines": {
+            "enso": ">=0.2.14"
+          },
+          "permissions": [
+            "agent.tool",
+            "agent.inject",
+            "ui.view",
+            "ui.notify",
+            "ui.openExternal",
+            "process.background"
+          ],
+          "path": "packages/enso.tgclient/0.3.1.zip",
+          "sha256": "595ff0618a7fac3c262a2db5c75625c84f6ecc4245b6e04fc85cfda2389f0329",
+          "size": 1318409,
+          "publishedAt": "2026-11-11T13:47:42.574Z"
         }
       ]
     },
