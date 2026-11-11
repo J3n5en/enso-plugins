@@ -1791,11 +1791,18 @@ function createApp(enso) {
   const inboxWaiters = new Set();
   const watches = new Map();
   let iseq = 0;
-  const matches = (f, it) =>
-    (f.chat ? it.chat === f.chat : f.includeMuted || !mutedNow(it.chat)) &&
-    (!f.directOnly || it.m.mentioned || entities.get(it.chat) instanceof Api.User);
-  const watchOf = (w) => ({ chat: w.chat ? `${w.title} (${w.chat})` : '所有未静音的聊天', directOnly: !!w.directOnly, includeMuted: !!w.includeMuted, ...(w.note ? { note: w.note } : {}) });
-  const FIELDS = ['chat', 'title', 'directOnly', 'includeMuted', 'note', 'project', 'since', 'delivered', 'lastAt', 'error'];
+  const chatsOf = (w) => (w.chats?.length ? w.chats : w.chat ? [{ id: w.chat, title: w.title }] : []);
+  const chatLabel = (w) => { const cs = chatsOf(w); return cs.length ? cs.map((x) => `${x.title ?? x.id} (${x.id})`).join('、') : '所有未静音的聊天'; };
+  const matches = (f, it) => {
+    const ids = f.chats?.map((x) => x.id);
+    const hit = ids ? ids.includes(it.chat) : f.chat ? it.chat === f.chat : f.includeMuted || !mutedNow(it.chat);
+    return hit && (!f.directOnly || it.m.mentioned || entities.get(it.chat) instanceof Api.User);
+  };
+  const watchOf = (w) => {
+    const cs = chatsOf(w);
+    return { chat: chatLabel(w), ...(cs.length > 1 ? { chats: cs.map((x) => x.id) } : {}), directOnly: !!w.directOnly, includeMuted: !!w.includeMuted, ...(w.note ? { note: w.note } : {}) };
+  };
+  const FIELDS = ['chat', 'title', 'chats', 'directOnly', 'includeMuted', 'note', 'project', 'since', 'delivered', 'lastAt', 'error'];
   const fieldsOf = (w) => Object.fromEntries(FIELDS.filter((k) => w[k] !== undefined).map((k) => [k, w[k]]));
   const saveWatches = () => {
     account.watches = [...watches].map(([sessionId, w]) => ({ sessionId, ...fieldsOf(w) }));
@@ -1896,14 +1903,20 @@ function createApp(enso) {
   tool('tg_watch', async (args, ctx) => {
     const c = await agentClient();
     if (!ctx?.sessionId) throw new Error('只能在会话里调用');
-    const chat = args.chat ? await chatOf(c, args.chat) : null;
+    const wanted = (Array.isArray(args.chats) ? args.chats : args.chat ? [args.chat] : []).map((x) => String(x ?? '').trim()).filter(Boolean).slice(0, 20);
+    const chats = [];
+    for (const x of wanted) {
+      const chat = await chatOf(c, x);
+      if (!chats.some((v) => v.id === chat.id)) chats.push({ id: chat.id, title: chat.title });
+    }
     const old = watches.get(ctx.sessionId);
     if (old) clearTimeout(old.timer);
     const w = {
-      chat: chat?.id,
-      title: chat?.title,
+      chat: chats[0]?.id,
+      title: chats.length ? chats.map((x) => x.title).join('、') : undefined,
+      ...(chats.length > 1 ? { chats } : {}),
       directOnly: !!args.directOnly,
-      includeMuted: !!args.includeMuted,
+      includeMuted: !chats.length && !!args.includeMuted,
       note: cut(String(args.note ?? '').trim(), 500) || undefined,
       project: ctx.projectRoot ? basename(ctx.projectRoot) : undefined,
       since: Date.now(),
