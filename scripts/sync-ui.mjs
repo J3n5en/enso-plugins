@@ -19,6 +19,7 @@ export const UI_PACKAGES = [
   'enso.linear',
   'enso.openspec',
   'enso.scheduler',
+  'enso.tasklauncher',
   'enso.telegram',
   'enso.tgclient',
   'enso.walkthrough',

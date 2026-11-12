@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="tl-b" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3F3F46"/>
+      <stop offset="1" stop-color="#09090B"/>
+    </linearGradient>
+    <linearGradient id="tl-h" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".22"/>
+      <stop offset=".5" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="15" fill="url(#tl-b)"/>
+  <rect width="64" height="64" rx="15" fill="url(#tl-h)"/>
+  <rect x=".5" y=".5" width="63" height="63" rx="14.5" fill="none" stroke="#fff" stroke-opacity=".18"/>
+  <path fill="#fff" d="M32 11c6.6 4.6 11 14 11 20.6 0 3-1 5.8-2.4 8.1L32 50.5l-8.6-10.8c-1.4-2.3-2.4-5.1-2.4-8.1C21 25 25.4 15.6 32 11z"/>
+  <circle cx="32" cy="27.2" r="3.3" fill="#09090B"/>
+  <path fill="#fff" fill-opacity=".92" d="M21.4 36.4 15 43.2c3.6 1.1 6.8.4 9-1.6l-2.6-5.2zm21.2 0L48 43.2c-3.6 1.1-6.8.4-9-1.6l2.6-5.2z"/>
+  <path fill="#fff" d="M29.3 46.4h5.4l-1.1 6.8h-3.2z"/>
+</svg>

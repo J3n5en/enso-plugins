@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "id": "enso.tasklauncher",
+  "name": "任务启动",
+  "version": "0.1.0",
+  "icon": "icon.svg",
+  "description": "从当前项目的 GitHub issue 用可编辑的提示词启动 Enso 会话：列出 origin 的 issue，套用提示词模板，再新建会话并聚焦。可选在干净的工作区创建并切换分支。不创建 worktree，也不替代 GitHub 插件。",
+  "engines": {
+    "enso": ">=0.2.14"
+  },
+  "main": "main.mjs",
+  "permissions": ["agent.tool", "net.fetch", "ui.view", "ui.openExternal", "session.create", "session.focus"],
+  "net": {
+    "domains": ["github.com", "api.github.com"]
+  },
+  "contributes": {
+    "configuration": [
+      {
+        "key": "token",
+        "title": "Personal Access Token（可选）",
+        "description": "不想用设备码登录时填写。读取 issue 即可；私有仓库需要对应仓库的访问权限",
+        "secret": true
+      }
+    ],
+    "views": [{ "id": "launcher", "title": "任务启动", "entry": "view.html" }],
+    "methods": [
+      { "name": "state", "timeoutMs": 30000 },
+      { "name": "login", "timeoutMs": 20000 },
+      { "name": "cancelLogin", "timeoutMs": 5000 },
+      { "name": "logout", "timeoutMs": 10000 },
+      { "name": "list", "timeoutMs": 30000 },
+      { "name": "templates", "timeoutMs": 15000 },
+      { "name": "saveTemplate", "timeoutMs": 15000 },
+      { "name": "deleteTemplate", "timeoutMs": 15000 },
+      { "name": "selectTemplate", "timeoutMs": 15000 },
+      { "name": "prefs", "timeoutMs": 15000 },
+      { "name": "preview", "timeoutMs": 30000 },
+      { "name": "launch", "timeoutMs": 60000 },
+      { "name": "open", "timeoutMs": 10000 }
+    ],
+    "agentTools": [
+      {
+        "name": "task_list",
+        "description": "List GitHub issues for a repository (defaults to the current project's origin). Pull requests are omitted. Returns number, title, state, author, labels, assignees, suggestedBranch, and url. Does not start a session.",
+        "readOnly": true,
+        "timeoutMs": 30000,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "repo": { "type": "string", "description": "owner/name; omit to use the current project's GitHub origin" },
+            "state": { "type": "string", "enum": ["open", "closed", "all"], "description": "Default open" },
+            "query": { "type": "string", "description": "Case-insensitive filter on title, number, author, labels, and assignees" }
+          }
+        }
+      },
+      {
+        "name": "task_preview",
+        "description": "Render the saved prompt template for one GitHub issue and report whether creating a branch in the current checkout would be blocked by uncommitted changes. Does not create a branch, worktree, or session. Starting a session requires the Task Launcher sidebar (session.create needs a user gesture).",
+        "readOnly": true,
+        "timeoutMs": 30000,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "repo": { "type": "string", "description": "owner/name; omit to use the current project's GitHub origin" },
+            "number": { "type": "integer" },
+            "body": { "type": "string", "description": "Template override. Placeholders: {{issue_url}} {{issue_number}} {{issue_title}} {{issue_body}} {{repo}} {{branch}}" },
+            "createBranch": { "type": "boolean", "description": "When true, report the branch that would be created or switched to. Never creates a worktree." }
+          },
+          "required": ["number"]
+        }
+      }
+    ]
+  }
+}
