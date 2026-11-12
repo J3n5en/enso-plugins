@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-12T05:57:52.847Z",
-  "sequence": 92,
+  "generatedAt": "2026-11-12T06:08:24.659Z",
+  "sequence": 93,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -2091,6 +2091,7 @@
       ],
       "homepage": "https://github.com/mediocrebaby/Astronauts",
       "icon": "https://raw.githubusercontent.com/mediocrebaby/Astronauts/0d3911af2fd9b725493a07bd7424cbf1e097593a/marketplace/space.astronaut/themes/lunar/helmet.png",
+      "category": "themes",
       "readme": {
         "path": "packages/space.astronaut/1.4.0.readme.md",
         "sha256": "f255dd46ad56dd2a9b07e42e2c925386a8ed799b5c9f7e0daa3470bf1c908b18",
