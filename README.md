@@ -41,6 +41,7 @@ EnsoCode 官方插件市场的源仓库 · [浏览插件](https://enso-plugins.j
 | Notes | `enso.example.notes` | 1.0.3 | 官方 | 侧栏里的便签：存在插件自己的数据目录，可一键插入输入框。 |
 | Sage Focus · 鼠尾草·专注（仅深色模式） | `enso.example.sagefocus` | 1.0.3 | 社区 | 仅在深色模式下生效，浅色模式沿用 Enso 默认配色。低饱和暖灰绿主题，不修改编辑器语法高亮或终端配色。 |
 | Word Stats | `enso.example.wordstats` | 1.0.3 | 官方 | 统计项目里文本文件的字数、行数与高频词，结果以卡片展示；提供条形图代码块。 |
+| Excalidraw | `enso.excalidraw` | 0.1.0 | 官方 | 在编辑器里打开并修改 .excalidraw、.excalidraw.json 和 .excalidraw.svg 白板。改动写回文件草稿，仍由 Enso 保存。 |
 | 番茄小说 | `enso.fanqie` | 0.1.2 | 社区 | 在侧栏里浏览、搜索并阅读番茄免费小说（基于 openfanqie 匿名 SDK）。仅供学习研究。 |
 | GitHub | `enso.github` | 0.2.1 | 官方 | 在侧栏查看、回复、关闭和重开当前项目的 GitHub issue 与 PR，也可查看 Actions 运行、失败原因与日志，并重跑或取消。会话里的 agent 也能调用。支持设备码登录，已登录的 gh CLI 可直接复用。 |
 | 红果短剧 | `enso.hongguo` | 0.2.14 | 社区 | 在侧栏里浏览、搜索并播放红果短剧（基于 openhongguo 匿名 SDK）。仅供学习研究。 |

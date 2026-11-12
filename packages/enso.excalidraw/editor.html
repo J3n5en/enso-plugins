@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="editor.css" />
+    <style>
+      html, body, #root { height: 100%; margin: 0; }
+      body { overflow: hidden; background: #fff; }
+      html[data-theme='dark'] body { background: #121212; }
+      .excalidraw-error {
+        box-sizing: border-box;
+        display: flex;
+        height: 100%;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        text-align: center;
+        font: 13px/1.5 system-ui, sans-serif;
+        color: #5c5c66;
+      }
+      html[data-theme='dark'] .excalidraw-error { color: #c6c6d0; }
+      /* 形状库的「浏览」会打开外站，沙箱到不了。 */
+      .library-menu-browse-button { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script src="editor.js"></script>
+  </body>
+</html>
