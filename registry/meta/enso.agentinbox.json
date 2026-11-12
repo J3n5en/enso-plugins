@@ -1,0 +1,7 @@
+{
+  "tier": "official",
+  "category": "productivity",
+  "tags": ["inbox", "sessions", "approvals"],
+  "homepage": "https://github.com/J3n5en/enso-plugins/tree/main/packages/enso.agentinbox",
+  "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.agentinbox.svg"
+}

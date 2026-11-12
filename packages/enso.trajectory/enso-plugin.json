@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "enso.trajectory",
+  "name": "会话轨迹",
+  "version": "0.1.0",
+  "icon": "icon.svg",
+  "description": "查看当前会话的轨迹：每一轮的用户提示、模型请求、工具与子代理调用、token、缓存命中和耗时。",
+  "engines": { "enso": ">=0.3.0" },
+  "main": "main.mjs",
+  "permissions": ["ui.view", "agent.observe", "session.read"],
+  "contributes": {
+    "views": [{ "id": "trajectory", "title": "轨迹", "entry": "trajectory.html" }],
+    "events": [
+      { "event": "input" },
+      { "event": "tool_call" },
+      { "event": "tool_result" },
+      { "event": "agent_start" },
+      { "event": "agent_end" },
+      { "event": "context_usage" },
+      { "event": "session_status" },
+      { "event": "model_select" },
+      { "event": "before_compact" },
+      { "event": "after_compact" }
+    ],
+    "methods": [
+      { "name": "snapshot", "timeoutMs": 20000 },
+      { "name": "detail", "timeoutMs": 20000 }
+    ]
+  }
+}
