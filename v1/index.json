@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-12T08:17:38.127Z",
-  "sequence": 96,
+  "generatedAt": "2026-11-12T08:56:53.638Z",
+  "sequence": 97,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -134,11 +134,11 @@
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.agentinbox.svg",
       "category": "productivity",
       "readme": {
-        "path": "packages/enso.agentinbox/0.1.0.readme.md",
+        "path": "packages/enso.agentinbox/0.1.1.readme.md",
         "sha256": "c7f1fdebca8638ec5fbad6751afd2997d192de2134f821906ce5b434067aec34",
         "size": 4058
       },
-      "latest": "0.1.0",
+      "latest": "0.1.1",
       "versions": [
         {
           "version": "0.1.0",
@@ -156,6 +156,23 @@
           "sha256": "a889583e9af01ac93c515458b445eec7b1acf35d6c3a4a9a62e168b0e6689fdf",
           "size": 62776,
           "publishedAt": "2026-11-12T05:55:42.142Z"
+        },
+        {
+          "version": "0.1.1",
+          "engines": {
+            "enso": ">=0.3.2"
+          },
+          "permissions": [
+            "ui.view",
+            "agent.observe",
+            "process.background",
+            "session.readAll",
+            "session.focus"
+          ],
+          "path": "packages/enso.agentinbox/0.1.1.zip",
+          "sha256": "88eaabefdd5d179dea7149f3cec6170afe69b4ea56a07b903a11bd53bdcdafa7",
+          "size": 62952,
+          "publishedAt": "2026-11-12T08:56:53.638Z"
         }
       ]
     },
