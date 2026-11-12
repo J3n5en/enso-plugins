@@ -48,6 +48,7 @@ EnsoCode 官方插件市场的源仓库 · [浏览插件](https://enso-plugins.j
 | 奶蛙 | `enso.naiwa` | 0.1.2 | 官方 | 奶蛙主题：荷叶绿配奶黄，奶蛙在输入框后面探头、在侧栏爬行、思考时托腮，干完活就捧腹大笑。 |
 | [pstack](https://github.com/cursor/plugins/tree/main/pstack) | `enso.pstack` | 0.3.3 | 官方 | Lauren Tan 的 pstack 0.15.36（MIT）：poteto-mode 按任务挑选 playbook，配套 arena、interrogate、architect 等 58 个 skill 和工程原则，先深挖再并行。只在输入框选了「pstack」预设的会话里加载。在输入框按钮里为某个会话打开后，该会话的每条消息自动展开 poteto-mode。 |
 | Scheduler | `enso.scheduler` | 1.1.0 | 官方 | 定时任务：按 cron 到点向会话发送提示词或弹出系统通知，侧栏显示下次运行时间与倒计时。 |
+| Spreadsheet | `enso.spreadsheet` | 0.1.0 | 官方 | 在文件面板里打开并编辑表格：网格、公式、插入删除行列，以及选区的计数、求和与平均。 |
 | Telegram | `enso.telegram` | 0.3.1 | 官方 | 用 Telegram Bot 远程使用 EnsoCode 会话：配对后发消息即进入会话，执行进度原位更新，回复以富文本发回；支持图片、群聊绑定、成员白名单与群聊上下文、插话、远程停止和双向同步。 |
 | Telegram 客户端 | `enso.tgclient` | 0.3.2 | 官方 | 在侧栏里用手机号登录自己的 Telegram 账号，像官方客户端一样聊天：会话列表与聊天分组、论坛话题、实时收发、相册、边下边播视频、表情与贴纸面板、编辑、回复、表情回应、已读详情、切换发言身份、机器人按钮与键盘、新消息系统通知；附带 Agent 工具，可查聊天、读写消息、订阅新消息。支持 socks5 与 MTProxy 代理。 |
 | 双语对照翻译 | `enso.translate` | 0.1.2 | 官方 | 把思考过程和回复正文译成目标语言，原文下面紧跟译文。代码、链接、路径和公式保持原样。 |
