@@ -191,7 +191,9 @@
           <label>加密
             <select class="ui-input" name="sslmode">
               <option value="disable">不加密</option>
-              <option value="require">加密，不校验证书</option>
+              <option value="prefer">优先加密</option>
+              <option value="require">加密但不校验证书</option>
+              <option value="verify-ca">加密并校验 CA</option>
               <option value="verify-full">加密并校验主机名</option>
             </select>
           </label>
@@ -200,7 +202,7 @@
           <label>项目里的文件
             <select class="ui-input" name="file"></select>
           </label>
-          <label>或路径<input class="ui-input" name="path" placeholder="相对项目的路径，或绝对路径" /></label>
+          <label>或路径<input class="ui-input" name="path" placeholder="相对项目的路径（绝对路径需在设置中允许）" /></label>
         </div>
         <div class="actions">
           <button id="remove" class="ui-btn ui-btn--destructive ui-btn--sm" type="button" hidden>删除</button>
@@ -208,6 +210,21 @@
           <button class="ui-btn ui-btn--sm" type="button" id="close-form">取消</button>
           <button class="ui-btn ui-btn--sm" type="button" id="test">测试</button>
           <button class="ui-btn ui-btn--primary ui-btn--sm" type="submit">保存</button>
+        </div>
+      </form>
+    </div>
+    <div id="confirm-dialog" class="dialog" hidden>
+      <form id="confirm-form">
+        <h3>确认执行</h3>
+        <p id="confirm-reason" class="muted"></p>
+        <p id="confirm-prod" class="muted" hidden></p>
+        <label id="confirm-type-wrap" hidden>请输入连接名以确认
+          <input class="ui-input" id="confirm-name" name="typed" autocomplete="off" />
+        </label>
+        <div class="actions">
+          <span class="spacer"></span>
+          <button class="ui-btn ui-btn--sm" type="button" id="confirm-cancel">取消</button>
+          <button class="ui-btn ui-btn--destructive ui-btn--sm" type="submit">确认执行</button>
         </div>
       </form>
     </div>

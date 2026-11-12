@@ -9,5 +9,7 @@ export function resolveSettings(config) {
     envVar,
     rowLimit: clampInt(source.rowLimit, 1, MAX_ROW_LIMIT, DEFAULT_ROW_LIMIT),
     queryTimeout: clampInt(source.queryTimeout, 1, MAX_TIMEOUT_SECONDS, DEFAULT_TIMEOUT_SECONDS),
+    allowOutsideSqlite: source.allowOutsideSqlite === true,
+    allowSqliteWrite: source.allowSqliteWrite === true,
   };
 }

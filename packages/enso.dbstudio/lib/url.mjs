@@ -1,4 +1,4 @@
-import { assertHost, assertPort, defaultPort, sslMode } from './target.mjs';
+import { assertHost, assertPort, defaultPort, parseSslMode } from './target.mjs';
 
 const SERVERS = {
   postgres: 'postgres',
@@ -19,7 +19,7 @@ function decodePart(value) {
 /**
  * 只认 URL 权威部分里的主机。查询参数里的 host、port、socket 一律忽略，
  * 避免 `?host=其他机器` 把连接带到用户没写在主机栏里的地址。
- * `sslmode=verify-ca` 按 require 处理：加密，但不校验证书（没有 CA 文件入口）。
+ * `prefer` 先试 TLS；`verify-ca` 保留 CA 校验，不降成 require。
  */
 export function parseServerUrl(input) {
   const text = String(input ?? '').trim();
@@ -43,12 +43,7 @@ export function parseServerUrl(input) {
   const database = decodePart(url.pathname.replace(/^\/+/, ''));
   if (database.includes('/') || database.includes('\0')) throw new Error('数据库名不合法');
   const rawSsl = (url.searchParams.get('sslmode') || url.searchParams.get('ssl') || '').toLowerCase();
-  let mode = 'disable';
-  if (rawSsl === '' || rawSsl === 'disable' || rawSsl === 'allow' || rawSsl === 'prefer') mode = 'disable';
-  else if (rawSsl === 'require' || rawSsl === 'verify-ca') mode = 'require';
-  else if (rawSsl === 'verify-full') mode = 'verify-full';
-  else throw new Error('不认识的 sslmode');
-  return { engine, host, port, user, password, database, sslmode: sslMode(mode) };
+  return { engine, host, port, user, password, database, sslmode: parseSslMode(rawSsl) };
 }
 
 export function sqlitePathFromUrl(input) {

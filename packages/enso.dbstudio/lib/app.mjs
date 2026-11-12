@@ -18,14 +18,14 @@ import { connectionFromEnv } from './envfile.mjs';
 import { packValue } from './format.mjs';
 import { selectStar } from './ident.mjs';
 import { CHUNK_ROWS, HARD_ROW_CAP } from './limits.mjs';
-import { applyLimit, statementsToRun } from './scan.mjs';
+import { applyLimit, confirmDestructive, sqliteBlockedReason, statementsToRun } from './scan.mjs';
 import { createMysql, createPostgres, isCancel } from './servers.mjs';
 import { resolveSettings } from './settings.mjs';
 import { newConnectionId, normalizeRecord, publicConnection } from './store.mjs';
 import { SqliteSession } from './sqlite-session.mjs';
 import { findSqliteFiles, resolveSqliteFile } from './sqlite.mjs';
 import { assertHost, assertPort } from './target.mjs';
-import { configFileFromDataDir, packVault, readVaultFile, redact, unpackVault, writeVaultFile } from './vault.mjs';
+import { configFileFromDataDir, readLegacyConfigFile, readVaultFile, redact, unpackVault, vaultFileFromDataDir, writeVaultFile } from './vault.mjs';
 
 const require = createRequire(import.meta.url);
 
@@ -59,6 +59,7 @@ function rowsOf(result) {
 export function createApp(enso, deps = {}) {
   const dataDir = enso.dataDir;
   const configFile = configFileFromDataDir(dataDir, enso.pluginId || 'enso.dbstudio');
+  const vaultFile = vaultFileFromDataDir(dataDir);
   const connectionsFile = dataDir ? join(dataDir, 'connections.json') : '';
   const vault = new Map();
   let connections = [];
@@ -84,16 +85,22 @@ export function createApp(enso, deps = {}) {
 
   async function loadVault() {
     vault.clear();
+    const disk = readVaultFile(vaultFile);
+    if (!disk.missing) {
+      for (const [id, password] of disk.map) vault.set(id, password);
+      return;
+    }
     try {
       for (const [id, password] of unpackVault(await enso.config.get())) vault.set(id, password);
     } catch (error) {
       fail(error);
     }
-    for (const [id, password] of readVaultFile(configFile)) vault.set(id, password);
+    for (const [id, password] of readLegacyConfigFile(configFile)) vault.set(id, password);
+    if (vault.size) writeVaultFile(vaultFile, vault);
   }
 
   async function persistVault() {
-    if (configFile) writeVaultFile(configFile, packVault(vault));
+    if (vaultFile) writeVaultFile(vaultFile, vault);
   }
 
   async function loadConnections() {
@@ -189,11 +196,12 @@ export function createApp(enso, deps = {}) {
   }
 
   async function sqliteSession(record, projectRoot) {
-    const file = await resolveSqliteFile(projectRoot, record.path);
-    const key = `${record.id}\0${file.real}`;
+    const current = await settings();
+    const file = await resolveSqliteFile(projectRoot, record.path, { allowOutside: current.allowOutsideSqlite });
+    const key = `${record.id}\0${file.real}\0${current.allowSqliteWrite ? 'w' : 'r'}`;
     let session = sqliteSessions.get(key);
     if (!session) {
-      session = new SqliteSession(file);
+      session = new SqliteSession(file, { allowWrite: current.allowSqliteWrite });
       sqliteSessions.set(key, session);
       trim(sqliteSessions);
     }
@@ -486,6 +494,24 @@ export function createApp(enso, deps = {}) {
     if (tableMode) statements = [{ text: selectStar(record.engine, schema, args.table, current.rowLimit) }];
     else statements = statementsToRun(args?.sql, args?.selectionStart, args?.selectionEnd, args?.cursor);
     if (!statements.length) throw new Error('没有可执行的语句');
+    if (record.engine === 'sqlite') {
+      for (const part of statements) {
+        const blocked = sqliteBlockedReason(part.text);
+        if (blocked) throw new Error(blocked);
+      }
+    }
+    if (!tableMode && args?.confirm !== true) {
+      const blocked = confirmDestructive(statements);
+      if (blocked) {
+        return {
+          needsConfirm: true,
+          reason: blocked.reason,
+          prod: record.env === 'prod',
+          connectionName: record.name,
+          database: record.engine === 'sqlite' ? record.path || 'main' : database || record.database || '',
+        };
+      }
+    }
     try {
       if (record.engine === 'sqlite') {
         return await runSqlite(record, ctx?.projectRoot, statements, current, tableMode, ctx?.signal);

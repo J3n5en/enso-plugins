@@ -1,3 +1,5 @@
+import { sslMode } from './target.mjs';
+
 const ENGINES = new Set(['postgres', 'mysql', 'mariadb', 'sqlite']);
 const ENVS = new Set(['', 'local', 'dev', 'staging', 'prod']);
 const PUBLIC_KEYS = ['id', 'name', 'engine', 'env', 'host', 'port', 'user', 'database', 'sslmode', 'path'];
@@ -40,7 +42,7 @@ export function normalizeRecord(input, id) {
   const port = Number(input.port);
   const user = String(input.user ?? '');
   const database = String(input.database ?? '').trim();
-  const sslmode = input.sslmode === 'require' || input.sslmode === 'verify-full' ? input.sslmode : 'disable';
+  const sslmode = sslMode(input.sslmode);
   if (user.length > 200 || database.length > 200) throw new Error('用户名或数据库名过长');
   if (/[\r\n\0]/.test(user) || /[\r\n\0]/.test(database)) throw new Error('用户名或数据库名不合法');
   return {

@@ -10,8 +10,9 @@ function aborted() {
 }
 
 export class SqliteSession {
-  constructor(file) {
+  constructor(file, options = {}) {
     this.file = file;
+    this.allowWrite = Boolean(options.allowWrite);
     this.worker = null;
     this.pending = new Map();
     this.seq = 0;
@@ -64,7 +65,7 @@ export class SqliteSession {
   }
 
   async open() {
-    const result = await this.call('open', { path: this.file.real, size: this.file.size });
+    const result = await this.call('open', { path: this.file.real, size: this.file.size, allowWrite: this.allowWrite });
     this.kind = result.kind;
     return result;
   }

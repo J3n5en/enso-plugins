@@ -1,6 +1,6 @@
 import { parentPort } from 'node:worker_threads';
 import { openDatabase, pullIterator } from './lib/sqlite.mjs';
-import { statementInfo } from './lib/scan.mjs';
+import { sqliteBlockedReason, statementInfo } from './lib/scan.mjs';
 
 let db = null;
 let iterator = null;
@@ -35,10 +35,14 @@ async function dispatch(message) {
     } catch {
       // 上一份已经关掉
     }
-    db = await openDatabase({ real: message.path, size: message.size });
+    db = await openDatabase({ real: message.path, size: message.size }, { allowWrite: Boolean(message.allowWrite) });
     return { kind: db.kind };
   }
   if (!db) throw new Error('数据库还没有打开');
+  if (message.sql) {
+    const blocked = sqliteBlockedReason(message.sql);
+    if (blocked) throw new Error(blocked);
+  }
   if (message.op === 'all') {
     const stmt = db.prepare(message.sql);
     const columns = stmt.columns();

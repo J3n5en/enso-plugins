@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "id": "enso.dbstudio",
   "name": "DB Studio",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "icon": "icon.svg",
-  "description": "在侧栏连接 PostgreSQL、MySQL/MariaDB 和 SQLite，浏览库表并运行 SQL。结果按页流式读取，可取消正在执行的查询。密码只放在 Enso 的密钥配置里。",
+  "description": "在侧栏连接 PostgreSQL、MySQL/MariaDB 和 SQLite，浏览库表并运行 SQL。结果按页流式读取，可取消正在执行的查询。密码保存在插件数据目录的 vault.json。",
   "engines": { "enso": ">=0.3.4" },
   "main": "main.mjs",
   "permissions": ["ui.view", "fs.read"],
@@ -36,27 +36,41 @@
         "max": 110
       },
       {
+        "key": "allowOutsideSqlite",
+        "title": "允许打开项目外的 SQLite 文件",
+        "description": "默认只打开当前项目里的相对路径。打开后才允许粘贴绝对路径。",
+        "type": "boolean",
+        "default": false
+      },
+      {
+        "key": "allowSqliteWrite",
+        "title": "允许写入",
+        "description": "默认以 query_only 打开 SQLite，禁止改数据。打开后才允许 INSERT/UPDATE/DELETE 等写入。",
+        "type": "boolean",
+        "default": false
+      },
+      {
         "key": "passwords",
         "title": "连接密码",
-        "description": "由侧栏写入的 JSON（连接 id → 密码）。Enso 把它当密钥保存，设置页只显示已设置。不要手改，除非你知道自己在替换整段 JSON。",
+        "description": "旧版迁移用，插件不再写入。新密码保存在插件数据目录的 vault.json。",
         "secret": true
       },
       {
         "key": "passwords2",
         "title": "连接密码（续 2）",
-        "description": "第一条密钥放不下时使用。由侧栏自动写入。",
+        "description": "旧版迁移用，插件不再写入。",
         "secret": true
       },
       {
         "key": "passwords3",
         "title": "连接密码（续 3）",
-        "description": "由侧栏自动写入。",
+        "description": "旧版迁移用，插件不再写入。",
         "secret": true
       },
       {
         "key": "passwords4",
         "title": "连接密码（续 4）",
-        "description": "由侧栏自动写入。",
+        "description": "旧版迁移用，插件不再写入。",
         "secret": true
       }
     ],

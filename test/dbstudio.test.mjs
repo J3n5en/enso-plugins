@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -8,22 +8,22 @@ import { packChunk } from '../packages/enso.dbstudio/lib/chunk.mjs';
 import { connectionFromEnv, parseEnv } from '../packages/enso.dbstudio/lib/envfile.mjs';
 import { packValue } from '../packages/enso.dbstudio/lib/format.mjs';
 import { selectStar } from '../packages/enso.dbstudio/lib/ident.mjs';
-import { applyLimit, splitStatements, statementAt, statementInfo, statementsToRun } from '../packages/enso.dbstudio/lib/scan.mjs';
+import { applyLimit, destructiveReason, splitStatements, statementAt, statementInfo, sqliteBlockedReason, statementsToRun } from '../packages/enso.dbstudio/lib/scan.mjs';
 import { isCancel } from '../packages/enso.dbstudio/lib/servers.mjs';
 import { resolveSettings } from '../packages/enso.dbstudio/lib/settings.mjs';
 import { publicConnection } from '../packages/enso.dbstudio/lib/store.mjs';
-import { pullIterator } from '../packages/enso.dbstudio/lib/sqlite.mjs';
-import { killQuerySql, mysqlOptions, postgresOptions } from '../packages/enso.dbstudio/lib/target.mjs';
+import { pullIterator, resolveSqliteFile } from '../packages/enso.dbstudio/lib/sqlite.mjs';
+import { killQuerySql, mysqlOptions, mysqlSsl, parseSslMode, postgresOptions, postgresSsl, sslNote } from '../packages/enso.dbstudio/lib/target.mjs';
 import { parseConnectionInput, parseServerUrl } from '../packages/enso.dbstudio/lib/url.mjs';
-import { configFileFromDataDir, mergeConfigText, packVault, redact, unpackVault } from '../packages/enso.dbstudio/lib/vault.mjs';
+import { configFileFromDataDir, redact, vaultFileFromDataDir } from '../packages/enso.dbstudio/lib/vault.mjs';
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 
 const manifest = JSON.parse(readFileSync(new URL('../packages/enso.dbstudio/enso-plugin.json', import.meta.url), 'utf8'));
 
 async function harness(options = {}) {
-  const root = await mkdtemp(join(tmpdir(), 'dbstudio-'));
-  const dataDir = join(root, 'data', 'enso.dbstudio');
+  const root = options.root || (await mkdtemp(join(tmpdir(), 'dbstudio-')));
+  const dataDir = options.dataDir || join(root, 'data', 'enso.dbstudio');
   await mkdir(dataDir, { recursive: true });
   const project = join(root, 'project');
   await mkdir(project, { recursive: true });
@@ -52,10 +52,10 @@ async function harness(options = {}) {
   return { root, project, dataDir, texts, config, enso, app, events };
 }
 
-test('清单只申请侧栏和项目读取，版本是 0.1.0，密码走密钥配置', () => {
+test('清单只申请侧栏和项目读取，版本是 0.1.1，密码走 vault.json', () => {
   assert.equal(manifest.schemaVersion, 1);
   assert.equal(manifest.id, 'enso.dbstudio');
-  assert.equal(manifest.version, '0.1.0');
+  assert.equal(manifest.version, '0.1.1');
   assert.deepEqual(manifest.permissions, ['ui.view', 'fs.read']);
   assert.deepEqual(manifest.fs.read, ['.']);
   assert.equal(manifest.fs.write, undefined);
@@ -64,6 +64,16 @@ test('清单只申请侧栏和项目读取，版本是 0.1.0，密码走密钥�
   assert.equal(manifest.contributes.fileViewers[0].default, undefined);
   const secrets = manifest.contributes.configuration.filter((item) => item.secret).map((item) => item.key);
   assert.deepEqual(secrets, ['passwords', 'passwords2', 'passwords3', 'passwords4']);
+  for (const key of secrets) {
+    const item = manifest.contributes.configuration.find((entry) => entry.key === key);
+    assert.match(item.description, /旧版迁移用/);
+  }
+  const outside = manifest.contributes.configuration.find((item) => item.key === 'allowOutsideSqlite');
+  assert.equal(outside.type, 'boolean');
+  assert.equal(outside.default, false);
+  const writable = manifest.contributes.configuration.find((item) => item.key === 'allowSqliteWrite');
+  assert.equal(writable.type, 'boolean');
+  assert.equal(writable.default, false);
   const rowLimit = manifest.contributes.configuration.find((item) => item.key === 'rowLimit');
   assert.equal(rowLimit.type, 'number');
   assert.equal(rowLimit.default, 100);
@@ -71,11 +81,15 @@ test('清单只申请侧栏和项目读取，版本是 0.1.0，密码走密钥�
     rowLimit: 1000,
     queryTimeout: 1,
     envVar: 'DATABASE_URL',
+    allowOutsideSqlite: false,
+    allowSqliteWrite: false,
   });
   assert.deepEqual(resolveSettings({ rowLimit: 'nope', queryTimeout: 9.5, envVar: 'DB_URL' }), {
     rowLimit: 100,
     queryTimeout: 30,
     envVar: 'DB_URL',
+    allowOutsideSqlite: false,
+    allowSqliteWrite: false,
   });
 });
 
@@ -107,6 +121,29 @@ test('解析 postgres / mysql URL，忽略查询参数里的主机，sqlite 只�
   assert.equal(mysqlOptions(mysql, 'secret').uri, undefined);
   assert.equal(killQuerySql('42'), 'KILL QUERY 42');
   assert.throws(() => killQuerySql('1; DROP'), /不合法/);
+  assert.equal(parseSslMode(''), 'disable');
+  assert.equal(parseSslMode('allow'), 'disable');
+  assert.equal(parseSslMode('prefer'), 'prefer');
+  assert.equal(parseSslMode('require'), 'require');
+  assert.equal(parseSslMode('verify-ca'), 'verify-ca');
+  assert.equal(parseSslMode('verify-full'), 'verify-full');
+  assert.throws(() => parseSslMode('nope'), /sslmode/);
+  assert.equal(parseServerUrl('postgres://u@h/db?sslmode=prefer').sslmode, 'prefer');
+  assert.equal(parseServerUrl('postgres://u@h/db?sslmode=verify-ca').sslmode, 'verify-ca');
+  assert.equal(parseServerUrl('postgres://u@h/db?sslmode=disable').sslmode, 'disable');
+  assert.equal(postgresSsl('prefer'), 'prefer');
+  assert.equal(postgresSsl('require'), 'require');
+  assert.equal(postgresSsl('verify-full'), 'verify-full');
+  assert.equal(postgresSsl('verify-ca').rejectUnauthorized, true);
+  assert.equal(typeof postgresSsl('verify-ca').checkServerIdentity, 'function');
+  assert.deepEqual(mysqlSsl('require'), { rejectUnauthorized: false });
+  assert.deepEqual(mysqlSsl('prefer'), { rejectUnauthorized: false });
+  assert.deepEqual(mysqlSsl('verify-ca'), { rejectUnauthorized: true, verifyIdentity: false });
+  assert.deepEqual(mysqlSsl('verify-full'), { rejectUnauthorized: true, verifyIdentity: true });
+  assert.equal(mysqlSsl('disable'), undefined);
+  assert.equal(sslNote('require'), '加密但不校验证书');
+  assert.equal(mysqlOptions({ host: '127.0.0.1', port: 3306, sslmode: 'require' }, '').ssl.rejectUnauthorized, false);
+  assert.equal(mysqlOptions({ host: '127.0.0.1', port: 3306, sslmode: 'verify-ca' }, '').ssl.rejectUnauthorized, true);
 });
 
 test('语句切分、光标和 LIMIT 上限', () => {
@@ -131,6 +168,20 @@ test('语句切分、光标和 LIMIT 上限', () => {
   assert.equal(statementInfo('INSERT INTO t SELECT 1 RETURNING id').rows, true);
   assert.equal(selectStar('postgres', 'public', 'odd"name', 100), 'SELECT * FROM "public"."odd""name" LIMIT 100');
   assert.equal(selectStar('mysql', 'shop', 'order_items', 50), 'SELECT * FROM `shop`.`order_items` LIMIT 50');
+  assert.match(destructiveReason('DELETE FROM customers'), /WHERE/);
+  assert.match(destructiveReason('UPDATE customers SET x = 1 RETURNING *'), /WHERE/);
+  assert.equal(destructiveReason('DELETE FROM customers WHERE id = 1'), '');
+  assert.match(destructiveReason('DROP TABLE customers'), /DROP/);
+  assert.match(destructiveReason('TRUNCATE TABLE customers'), /TRUNCATE/);
+  assert.match(destructiveReason('GRANT SELECT ON t TO u'), /GRANT/);
+  assert.match(destructiveReason('REVOKE SELECT ON t FROM u'), /REVOKE/);
+  assert.match(destructiveReason('ALTER TABLE t ADD COLUMN x int'), /ALTER/);
+  assert.equal(destructiveReason('SELECT * FROM t'), '');
+  assert.match(sqliteBlockedReason('ATTACH DATABASE \'/tmp/x.db\' AS extra'), /ATTACH/);
+  assert.match(sqliteBlockedReason('/* comment */ DeTaCh extra'), /DETACH/);
+  assert.match(sqliteBlockedReason("SELECT load_extension('mod')"), /load_extension/);
+  assert.equal(sqliteBlockedReason('SELECT 1 -- ATTACH DATABASE x'), '');
+  assert.equal(sqliteBlockedReason("SELECT 'ATTACH'"), '');
 });
 
 test('结果按块截断，取消会停住迭代', async () => {
@@ -189,7 +240,7 @@ test('大整数和小数按原文显示', () => {
   assert.equal(blob.v, '00ff');
 });
 
-test('密码只进入密钥配置，连接清单和环境变量连接都不留密码', async () => {
+test('密码只进入插件数据目录 vault.json，连接清单和环境变量连接都不留密码', async () => {
   const { root, dataDir, texts, app, events } = await harness();
   try {
     const saved = await app.handlers.save({
@@ -209,12 +260,18 @@ test('密码只进入密钥配置，连接清单和环境变量连接都不留�
     assert.equal(JSON.stringify(stored).includes('s3cret-value'), false);
     assert.equal(stored[0].host, '127.0.0.1');
     assert.equal(Object.hasOwn(stored[0], 'password'), false);
-    const file = configFileFromDataDir(dataDir, 'enso.dbstudio');
+    const file = vaultFileFromDataDir(dataDir);
     const raw = JSON.parse(await readFile(file, 'utf8'));
-    assert.equal(unpackVault(raw).get(saved.connection.id), 's3cret-value');
+    assert.equal(raw[saved.connection.id], 's3cret-value');
     assert.equal((await stat(file)).mode & 0o777, 0o600);
+    await assert.rejects(readFile(configFileFromDataDir(dataDir, 'enso.dbstudio')));
     assert.match(redact('failed for s3cret-value at postgres://shop:s3cret-value@127.0.0.1/shop', ['s3cret-value']), /\[redacted\]/);
     assert.equal(redact('postgres://shop:s3cret-value@127.0.0.1/shop', []).includes('s3cret-value'), false);
+    assert.equal(redact('login ab failed', ['ab']).includes('ab'), false);
+    assert.equal(redact('keep empty', ['']), 'keep empty');
+    assert.equal(redact('postgres://u:p@ss/word@h/db', []).includes('p@ss/word'), false);
+    assert.match(redact('postgres://h/db?password=secret&x=1', []), /password=\[redacted\]/);
+    assert.match(redact('mysql://h/db?pwd=secret', []), /pwd=\[redacted\]/);
 
     texts.set('.env', 'DATABASE_URL=postgres://envuser:env-pass@127.0.0.1:5432/envdb\n');
     texts.set('.env.local', 'DATABASE_URL="mysql://local:local-pass@10.0.0.8/app"\n');
@@ -229,7 +286,6 @@ test('密码只进入密钥配置，连接清单和环境变量连接都不留�
 
     const parsed = parseEnv('export #nope\nexport DATABASE_URL=postgres://a:b@h/db\n# comment\nOTHER=1');
     assert.equal(parsed.DATABASE_URL, 'postgres://a:b@h/db');
-    assert.equal(mergeConfigText('{"rowLimit":25}\n', packVault(new Map([[saved.connection.id, 's3cret-value']]))).includes('"rowLimit":25'), true);
     assert.equal(events.length, 0);
   } finally {
     await app.dispose();
@@ -415,4 +471,114 @@ test('打包后的驱动是纯 JavaScript', () => {
   const loaded = require('../packages/enso.dbstudio/vendor/drivers.cjs');
   assert.equal(typeof loaded.postgres, 'function');
   assert.equal(typeof loaded.createConnection, 'function');
+});
+
+async function sqliteFile(dir, name = 'shop.db') {
+  const { DatabaseSync } = await import('node:sqlite');
+  const file = join(dir, name);
+  const db = new DatabaseSync(file);
+  db.exec('CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT)');
+  db.prepare('INSERT INTO customers (id, name) VALUES (?, ?)').run(1n, 'Ada');
+  db.close();
+  return file;
+}
+
+test('旧密钥槽迁进 vault.json，之后不再读宿主配置', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'dbstudio-'));
+  const dataDir = join(root, 'data', 'enso.dbstudio');
+  await mkdir(dataDir, { recursive: true });
+  const id = `c_${'ab'.repeat(12)}`;
+  const configDir = join(root, 'config');
+  await mkdir(configDir, { recursive: true });
+  await writeFile(join(configDir, 'enso.dbstudio.json'), `${JSON.stringify({ passwords: JSON.stringify({ [id]: 'legacy-secret' }) })}\n`);
+  const { app } = await harness({ root, dataDir });
+  try {
+    assert.equal(app.vault.get(id), 'legacy-secret');
+    const vault = JSON.parse(await readFile(join(dataDir, 'vault.json'), 'utf8'));
+    assert.equal(vault[id], 'legacy-secret');
+    app.vault.delete(id);
+    await app.handlers.save({
+      name: 'Empty',
+      engine: 'postgres',
+      host: '127.0.0.1',
+      port: 5432,
+      user: 'x',
+      database: 'x',
+      password: 'fresh',
+    });
+    assert.equal(JSON.parse(await readFile(join(dataDir, 'vault.json'), 'utf8'))[id], undefined);
+  } finally {
+    await app.dispose();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('SQLite 绝对路径默认拒绝，query_only 阻止写入，ATTACH 被拒', async () => {
+  const { root, project, app } = await harness();
+  try {
+    const inside = await sqliteFile(project, 'shop.db');
+    const outsideDir = join(root, 'outside');
+    await mkdir(outsideDir, { recursive: true });
+    const outside = await sqliteFile(outsideDir, 'other.db');
+    await assert.rejects(resolveSqliteFile(project, outside), /项目外/);
+    await assert.rejects(resolveSqliteFile(project, outside, { allowOutside: false }), /项目外/);
+    const allowed = await resolveSqliteFile(project, outside, { allowOutside: true });
+    assert.equal(allowed.real, await realpath(outside));
+    const relative = await resolveSqliteFile(project, 'shop.db');
+    assert.equal(relative.real, await realpath(inside));
+
+    const saved = await app.handlers.save({ name: 'QA SQLite', engine: 'sqlite', env: 'dev', path: 'shop.db' });
+    await assert.rejects(
+      app.handlers.query(
+        { connectionId: saved.connection.id, sql: "INSERT INTO customers (id, name) VALUES (2, 'x')", cursor: 0 },
+        { projectRoot: project },
+      ),
+      /readonly|只读|query_only|readonly database/i,
+    );
+    await assert.rejects(
+      app.handlers.query(
+        { connectionId: saved.connection.id, sql: "ATTACH DATABASE 'other.db' AS extra", cursor: 0 },
+        { projectRoot: project },
+      ),
+      /ATTACH/,
+    );
+  } finally {
+    await app.dispose();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('破坏性语句先返回 needsConfirm，确认后才执行；prod 带连接名', async () => {
+  const { root, project, app } = await harness({ config: { allowSqliteWrite: true } });
+  try {
+    await sqliteFile(project, 'shop.db');
+    const saved = await app.handlers.save({ name: 'Prod Shop', engine: 'sqlite', env: 'prod', path: 'shop.db' });
+    const pending = await app.handlers.query(
+      { connectionId: saved.connection.id, sql: 'DELETE FROM customers', cursor: 0 },
+      { projectRoot: project },
+    );
+    assert.equal(pending.needsConfirm, true);
+    assert.match(pending.reason, /WHERE/);
+    assert.equal(pending.prod, true);
+    assert.equal(pending.connectionName, 'Prod Shop');
+    const still = await app.handlers.query(
+      { connectionId: saved.connection.id, sql: 'SELECT name FROM customers', cursor: 0 },
+      { projectRoot: project },
+    );
+    assert.equal(still.rows.length, 1);
+    const done = await app.handlers.query(
+      { connectionId: saved.connection.id, sql: 'DELETE FROM customers', cursor: 0, confirm: true },
+      { projectRoot: project },
+    );
+    assert.equal(done.needsConfirm, undefined);
+    assert.equal(done.affected >= 1 || done.done, true);
+    const empty = await app.handlers.query(
+      { connectionId: saved.connection.id, sql: 'SELECT name FROM customers', cursor: 0 },
+      { projectRoot: project },
+    );
+    assert.equal(empty.rows.length, 0);
+  } finally {
+    await app.dispose();
+    await rm(root, { recursive: true, force: true });
+  }
 });

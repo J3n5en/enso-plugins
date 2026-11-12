@@ -22,8 +22,43 @@ export function defaultPort(engine) {
 }
 
 export function sslMode(value) {
-  if (value === 'require' || value === 'verify-full' || value === 'disable') return value;
+  if (value === 'require' || value === 'verify-full' || value === 'verify-ca' || value === 'prefer' || value === 'disable') return value;
   return 'disable';
+}
+
+/** 解析 URL / 表单里的 sslmode。空、disable、allow 为不加密；未知值报错。 */
+export function parseSslMode(raw) {
+  const text = String(raw ?? '').trim().toLowerCase();
+  if (text === '' || text === 'disable' || text === 'allow') return 'disable';
+  if (text === 'prefer' || text === 'require' || text === 'verify-ca' || text === 'verify-full') return text;
+  throw new Error('不认识的 sslmode');
+}
+
+export function sslNote(mode) {
+  const value = sslMode(mode);
+  if (value === 'prefer') return '优先尝试加密';
+  if (value === 'require') return '加密但不校验证书';
+  if (value === 'verify-ca') return '加密并校验 CA';
+  if (value === 'verify-full') return '加密并校验主机名';
+  return '不加密';
+}
+
+export function postgresSsl(mode) {
+  const value = sslMode(mode);
+  if (value === 'prefer') return 'prefer';
+  if (value === 'require') return 'require';
+  if (value === 'verify-full') return 'verify-full';
+  if (value === 'verify-ca') return { rejectUnauthorized: true, checkServerIdentity() {} };
+  return false;
+}
+
+export function mysqlSsl(mode) {
+  const value = sslMode(mode);
+  if (value === 'disable') return undefined;
+  if (value === 'prefer' || value === 'require') return { rejectUnauthorized: false };
+  if (value === 'verify-ca') return { rejectUnauthorized: true, verifyIdentity: false };
+  if (value === 'verify-full') return { rejectUnauthorized: true, verifyIdentity: true };
+  return undefined;
 }
 
 /**
@@ -45,7 +80,7 @@ export function postgresOptions(conn, password) {
     password: secret,
     pass: secret,
     database,
-    ssl: mode === 'verify-full' ? 'verify-full' : mode === 'require' ? 'require' : false,
+    ssl: postgresSsl(mode),
     max: 2,
     idle_timeout: null,
     connect_timeout: 15,
@@ -74,8 +109,8 @@ export function mysqlOptions(conn, password) {
     enableKeepAlive: true,
   };
   if (conn.database) options.database = String(conn.database);
-  if (mode === 'require') options.ssl = { rejectUnauthorized: false };
-  if (mode === 'verify-full') options.ssl = { rejectUnauthorized: true };
+  const ssl = mysqlSsl(mode);
+  if (ssl) options.ssl = ssl;
   return options;
 }
 

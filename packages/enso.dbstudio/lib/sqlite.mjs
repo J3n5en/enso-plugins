@@ -39,8 +39,8 @@ async function describe(real, label, size) {
   return { real, label, size };
 }
 
-/** 相对路径必须留在项目里。用户粘贴的绝对路径按原样打开。 */
-export async function resolveSqliteFile(projectRoot, input) {
+/** 相对路径必须留在项目里。绝对路径默认拒绝，仅当 allowOutside 为 true 时放行。 */
+export async function resolveSqliteFile(projectRoot, input, options = {}) {
   const raw = String(input ?? '').trim();
   if (!raw || raw.includes('\0') || raw.length > 4096) throw new Error('路径不合法');
   if (isProjectRelative(raw)) {
@@ -68,6 +68,7 @@ export async function resolveSqliteFile(projectRoot, input) {
     if (info.size > SQLITE_MAX_BYTES) throw new Error('SQLite 文件超过 8GB');
     return describe(real, parts.join('/'), info.size);
   }
+  if (!options.allowOutside) throw new Error('默认不允许打开项目外的 SQLite 文件。可在设置里打开「允许打开项目外的 SQLite 文件」。');
   const abs = resolve(raw);
   let real;
   try {
@@ -215,18 +216,22 @@ export function wrapSqlJs(db) {
   };
 }
 
-export async function openDatabase(file) {
+export async function openDatabase(file, options = {}) {
   const module = await loadSqliteModule();
+  let db;
   if (module.kind === 'node:sqlite') {
-    const db = new module.DatabaseSync(file.real, { readBigInts: true });
-    return wrapNode(db);
+    db = wrapNode(new module.DatabaseSync(file.real, { readBigInts: true }));
+  } else {
+    if (file.size > SQL_JS_MAX_BYTES) {
+      throw new Error('这个 Node 没有 node:sqlite。备用的 sql.js 只能把不超过 64MB 的库整个载入内存。');
+    }
+    const bytes = await readFile(file.real);
+    const SQL = await loadSqlJs();
+    db = wrapSqlJs(new SQL.Database(bytes));
   }
-  if (file.size > SQL_JS_MAX_BYTES) {
-    throw new Error('这个 Node 没有 node:sqlite。备用的 sql.js 只能把不超过 64MB 的库整个载入内存。');
-  }
-  const bytes = await readFile(file.real);
-  const SQL = await loadSqlJs();
-  return wrapSqlJs(new SQL.Database(bytes));
+  db.exec('PRAGMA query_only = ON');
+  if (options.allowWrite) db.exec('PRAGMA query_only = OFF');
+  return db;
 }
 
 export function pullIterator(iterator, count) {

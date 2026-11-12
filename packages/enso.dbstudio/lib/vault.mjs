@@ -1,8 +1,13 @@
 import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
-import { MAX_PASSWORD_CHARS, PASSWORD_SLOTS, SLOT_BUDGET } from './limits.mjs';
+import { MAX_PASSWORD_CHARS, PASSWORD_SLOTS } from './limits.mjs';
 
 const ID_RE = /^[A-Za-z0-9_-]{8,80}$/;
+
+export function vaultFileFromDataDir(dataDir) {
+  if (typeof dataDir !== 'string' || !dataDir) return '';
+  return join(dataDir, 'vault.json');
+}
 
 export function configFileFromDataDir(dataDir, pluginId) {
   if (typeof dataDir !== 'string' || !dataDir || typeof pluginId !== 'string' || !pluginId) return null;
@@ -32,68 +37,7 @@ export function unpackVault(config) {
   return map;
 }
 
-/** 把密码拆进若干个不超过 4000 字符的密钥字段。空地图会清空这些字段。 */
-export function packVault(map) {
-  const entries = [...map.entries()].filter(([id, password]) => ID_RE.test(id) && typeof password === 'string' && password.length > 0);
-  entries.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
-  const slots = PASSWORD_SLOTS.map(() => ({}));
-  let index = 0;
-  for (const [id, password] of entries) {
-    if (password.length > MAX_PASSWORD_CHARS) throw new Error('密码超过 1024 个字符，放不进 Enso 的密钥字段');
-    let placed = false;
-    for (let cursor = index; cursor < slots.length; cursor += 1) {
-      const trial = { ...slots[cursor], [id]: password };
-      if (JSON.stringify(trial).length <= SLOT_BUDGET) {
-        slots[cursor] = trial;
-        index = cursor;
-        placed = true;
-        break;
-      }
-      index = cursor + 1;
-    }
-    if (!placed) throw new Error('保存的密码太多，超过 4 个密钥字段的容量');
-  }
-  const patch = {};
-  PASSWORD_SLOTS.forEach((key, slot) => {
-    patch[key] = Object.keys(slots[slot]).length ? JSON.stringify(slots[slot]) : null;
-  });
-  return patch;
-}
-
-export function mergeConfigText(existingText, patch) {
-  let json = {};
-  if (existingText && String(existingText).trim()) {
-    const parsed = JSON.parse(existingText);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('配置文件不是对象');
-    json = { ...parsed };
-  }
-  for (const [key, value] of Object.entries(patch)) {
-    if (value === null) delete json[key];
-    else json[key] = value;
-  }
-  return `${JSON.stringify(json)}\n`;
-}
-
-/** 写入宿主的插件配置文件（权限 600）。只改密码字段，保留行数上限等其它项。 */
-export function writeVaultFile(file, patch) {
-  if (!file) return false;
-  mkdirSync(dirname(file), { recursive: true });
-  let existing = '';
-  try {
-    existing = readFileSync(file, 'utf8');
-  } catch {
-    existing = '';
-  }
-  const next = mergeConfigText(existing, patch);
-  const tmp = `${file}.${process.pid}.tmp`;
-  writeFileSync(tmp, next, { mode: 0o600 });
-  chmodSync(tmp, 0o600);
-  renameSync(tmp, file);
-  chmodSync(file, 0o600);
-  return true;
-}
-
-export function readVaultFile(file) {
+export function readLegacyConfigFile(file) {
   if (!file) return new Map();
   try {
     return unpackVault(JSON.parse(readFileSync(file, 'utf8')));
@@ -102,12 +46,57 @@ export function readVaultFile(file) {
   }
 }
 
+function mapFromObject(parsed) {
+  const map = new Map();
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return map;
+  for (const [id, password] of Object.entries(parsed)) {
+    if (!ID_RE.test(id) || typeof password !== 'string' || !password) continue;
+    map.set(id, password);
+  }
+  return map;
+}
+
+/** 读插件数据目录里的 vault.json。文件不存在时 missing=true。 */
+export function readVaultFile(file) {
+  if (!file) return { missing: true, map: new Map() };
+  try {
+    const parsed = JSON.parse(readFileSync(file, 'utf8'));
+    return { missing: false, map: mapFromObject(parsed) };
+  } catch (error) {
+    if (error && error.code === 'ENOENT') return { missing: true, map: new Map() };
+    throw new Error('密码文件无法读取');
+  }
+}
+
+/** 写入插件数据目录的 vault.json（权限 600）。临时文件 + rename 原子替换。 */
+export function writeVaultFile(file, map) {
+  if (!file) return false;
+  mkdirSync(dirname(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.tmp`;
+  const obj = {};
+  for (const [id, password] of map) {
+    if (!ID_RE.test(id) || typeof password !== 'string' || !password) continue;
+    if (password.length > MAX_PASSWORD_CHARS) throw new Error('密码超过 1024 个字符');
+    obj[id] = password;
+  }
+  writeFileSync(tmp, `${JSON.stringify(obj)}\n`, { mode: 0o600 });
+  chmodSync(tmp, 0o600);
+  renameSync(tmp, file);
+  chmodSync(file, 0o600);
+  return true;
+}
+
 /** 日志和错误信息里去掉密码，以及 URL 里的 userinfo。 */
 export function redact(text, secrets) {
   let out = String(text ?? '');
-  const list = [...secrets].filter((item) => typeof item === 'string' && item.length >= 4);
+  const list = [...secrets].filter((item) => typeof item === 'string' && item.length >= 1);
   list.sort((a, b) => b.length - a.length);
   for (const secret of list) out = out.split(secret).join('[redacted]');
-  out = out.replace(/\b([a-z][a-z0-9+.-]*):\/\/([^\s/@]+):([^\s/@]+)@/gi, '$1://$2:[redacted]@');
+  out = out.replace(/\b([a-z][a-z0-9+.-]*):\/\/([^?#\s]+)@/gi, (match, scheme, userinfo) => {
+    const colon = userinfo.indexOf(':');
+    if (colon === -1) return match;
+    return `${scheme}://${userinfo.slice(0, colon)}:[redacted]@`;
+  });
+  out = out.replace(/([?&](?:password|pwd)=)([^&\s]*)/gi, '$1[redacted]');
   return out;
 }

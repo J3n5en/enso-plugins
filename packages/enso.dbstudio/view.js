@@ -399,6 +399,43 @@ async function openCell(row, column, element) {
   $('cell').textContent = shown;
 }
 
+function askConfirm(payload) {
+  return new Promise((resolve) => {
+    const dialog = $('confirm-dialog');
+    const form = $('confirm-form');
+    const input = $('confirm-name');
+    $('confirm-reason').textContent = payload.reason || '这条语句会改数据或结构';
+    const prod = $('confirm-prod');
+    const wrap = $('confirm-type-wrap');
+    input.value = '';
+    if (payload.prod) {
+      prod.hidden = false;
+      prod.textContent = `这是生产环境连接「${payload.connectionName || ''}」，数据库 ${payload.database || '（未指定）'}。请输入连接名才能继续。`;
+      wrap.hidden = false;
+    } else {
+      prod.hidden = true;
+      wrap.hidden = true;
+    }
+    dialog.hidden = false;
+    const finish = (ok) => {
+      dialog.hidden = true;
+      form.onsubmit = null;
+      $('confirm-cancel').onclick = null;
+      resolve(ok);
+    };
+    form.onsubmit = (event) => {
+      event.preventDefault();
+      if (payload.prod && input.value.trim() !== String(payload.connectionName || '')) {
+        setBanner('请输入完全一致的连接名');
+        return;
+      }
+      finish(true);
+    };
+    $('confirm-cancel').onclick = () => finish(false);
+    if (payload.prod) input.focus();
+  });
+}
+
 async function runQuery(extra) {
   if (!active || running) return;
   running = true;
@@ -407,7 +444,7 @@ async function runQuery(extra) {
   setBanner('');
   const started = performance.now();
   try {
-    const payload = await enso.call('query', {
+    const request = {
       connectionId: active,
       database,
       schema,
@@ -416,7 +453,16 @@ async function runQuery(extra) {
       selectionEnd: sqlInput.selectionEnd,
       cursor: sqlInput.selectionStart,
       ...extra,
-    });
+    };
+    let payload = await enso.call('query', request);
+    if (payload?.needsConfirm) {
+      const ok = await askConfirm(payload);
+      if (!ok) {
+        renderStatus('已取消');
+        return;
+      }
+      payload = await enso.call('query', { ...request, confirm: true });
+    }
     result = { ...payload, offset: 0 };
     if (payload.cancelled) {
       renderStatus('已取消');
@@ -567,7 +613,10 @@ function parseUrl(text) {
       user: decodeURIComponent(url.username),
       password: decodeURIComponent(url.password),
       database: decodeURIComponent(url.pathname.replace(/^\/+/, '')),
-      sslmode: ssl === 'verify-full' ? 'verify-full' : ssl === 'require' || ssl === 'verify-ca' ? 'require' : 'disable',
+      sslmode:
+        ssl === 'verify-full' || ssl === 'verify-ca' || ssl === 'require' || ssl === 'prefer'
+          ? ssl
+          : 'disable',
     };
   } catch {
     return null;

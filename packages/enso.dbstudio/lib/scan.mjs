@@ -162,6 +162,7 @@ function inspect(sql) {
   let limit = false;
   let fetch = false;
   let returning = false;
+  let where = false;
   let i = 0;
   while (i < text.length) {
     const char = text[i];
@@ -202,6 +203,7 @@ function inspect(sql) {
         if (word === 'limit') limit = true;
         if (word === 'fetch') fetch = true;
         if (word === 'returning') returning = true;
+        if (word === 'where') where = true;
       }
       continue;
     }
@@ -213,13 +215,88 @@ function inspect(sql) {
     if (verb == null || verb === 'with') verb = word;
     else break;
   }
-  return { verb, limit, fetch, returning };
+  return { verb, limit, fetch, returning, where };
+}
+
+function eachIdent(sql, onWord) {
+  const text = String(sql ?? '');
+  let depth = 0;
+  let i = 0;
+  while (i < text.length) {
+    const char = text[i];
+    const next = text[i + 1];
+    if (char === '-' && next === '-') {
+      i = skipLine(text, i);
+      continue;
+    }
+    if (char === '/' && next === '*') {
+      i = skipBlock(text, i);
+      continue;
+    }
+    if (char === "'" || char === '"' || char === '`') {
+      i = skipQuote(text, i, char);
+      continue;
+    }
+    if (char === '$' && dollarTagAt(text, i)) {
+      i = skipDollar(text, i);
+      continue;
+    }
+    if (char === '(') {
+      depth += 1;
+      i += 1;
+      continue;
+    }
+    if (char === ')') {
+      depth = Math.max(0, depth - 1);
+      i += 1;
+      continue;
+    }
+    if (/[A-Za-z_]/.test(char)) {
+      const begin = i;
+      i += 1;
+      while (i < text.length && isIdent(text[i])) i += 1;
+      onWord(text.slice(begin, i).toLowerCase(), depth);
+      continue;
+    }
+    i += 1;
+  }
 }
 
 export function statementInfo(sql) {
   const info = inspect(sql);
   const rows = info.returning || ROW_VERBS.has(info.verb);
   return { ...info, rows };
+}
+
+const ALWAYS_DESTRUCTIVE = new Set(['drop', 'truncate', 'grant', 'revoke', 'alter']);
+
+export function destructiveReason(sql) {
+  const info = statementInfo(sql);
+  if (ALWAYS_DESTRUCTIVE.has(info.verb)) {
+    return `${info.verb.toUpperCase()} 会改结构或权限`;
+  }
+  if ((info.verb === 'delete' || info.verb === 'update') && !info.where) {
+    return info.verb === 'delete' ? '没有 WHERE 的 DELETE 会删掉整张表的数据' : '没有 WHERE 的 UPDATE 会改掉整张表的数据';
+  }
+  return '';
+}
+
+export function confirmDestructive(statements) {
+  for (const part of statements) {
+    const reason = destructiveReason(part.text);
+    if (reason) return { needsConfirm: true, reason };
+  }
+  return null;
+}
+
+export function sqliteBlockedReason(sql) {
+  let blocked = '';
+  eachIdent(sql, (word) => {
+    if (blocked) return;
+    if (word === 'attach' || word === 'detach') blocked = `不允许执行 ${word.toUpperCase()}`;
+    else if (word === 'load_extension') blocked = '不允许执行 load_extension';
+  });
+  return blocked;
 }
 
 /**
