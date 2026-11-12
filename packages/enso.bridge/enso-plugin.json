@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "enso.bridge",
   "name": "Session Bridge",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "icon": "icon.svg",
   "description": "跨会话桥：同项目的多个会话可在侧栏群聊室中互相提问、委托与回传结论。",
   "main": "main.mjs",
@@ -31,6 +31,7 @@
     "agentTools": [
       {
         "name": "bridge_sessions",
+        "readOnly": true,
         "description": "List sessions in the current project (prioritizing running and recent sessions) so you can pick target sessions for cross-session questions.",
         "parameters": {
           "type": "object",
@@ -94,6 +95,7 @@
       },
       {
         "name": "bridge_history",
+        "readOnly": true,
         "description": "Read recent cross-session group chat messages in the current project.",
         "parameters": {
           "type": "object",
