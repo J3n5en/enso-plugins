@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-12T05:54:40.245Z",
-  "sequence": 81,
+  "generatedAt": "2026-11-12T05:54:58.136Z",
+  "sequence": 82,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -1631,6 +1631,45 @@
           "sha256": "998a26df1952d503dcc269cb2b3dbfbbf1beed171ab74985068a10f489840876",
           "size": 27592,
           "publishedAt": "2026-11-11T13:09:59.296Z"
+        }
+      ]
+    },
+    {
+      "id": "enso.walkthrough",
+      "name": "Walkthrough",
+      "description": "把 Git diff、提交范围或当前会话的改动收成一步步的讲解：每步有标题、说明和对应代码，可以改文字，一次看一步。",
+      "tier": "official",
+      "tags": [
+        "git",
+        "diff",
+        "review",
+        "walkthrough"
+      ],
+      "icon": "registry/icons/enso.walkthrough.svg",
+      "category": "productivity",
+      "readme": {
+        "path": "packages/enso.walkthrough/0.1.0.readme.md",
+        "sha256": "3fefbf507987978473b45e5e0dd905dfbf08e903e9805ff4269a7d12829b6353",
+        "size": 1862
+      },
+      "latest": "0.1.0",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "engines": {
+            "enso": ">=0.2.0"
+          },
+          "permissions": [
+            "ui.view",
+            "ui.clipboard",
+            "fs.read",
+            "session.read",
+            "agent.tool"
+          ],
+          "path": "packages/enso.walkthrough/0.1.0.zip",
+          "sha256": "de848ee39926031cef204acd9378bbbb8631ed4177239a2ba7ada3cc80ba2dfc",
+          "size": 107158,
+          "publishedAt": "2026-11-12T05:54:58.136Z"
         }
       ]
     },
