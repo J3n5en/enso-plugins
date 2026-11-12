@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "enso.github",
   "name": "GitHub",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "icon": "icon.svg",
   "description": "在侧栏查看、回复、关闭和重开当前项目的 GitHub issue 与 PR，也可查看 Actions 运行、失败原因与日志，并重跑或取消。会话里的 agent 也能调用。支持设备码登录，已登录的 gh CLI 可直接复用。",
   "engines": {
@@ -38,6 +38,7 @@
     "agentTools": [
       {
         "name": "github_list",
+        "readOnly": true,
         "description": "List GitHub issues or pull requests of a repository (defaults to the current project's origin). Returns number, title, state, author, labels, url.",
         "parameters": {
           "type": "object",
@@ -50,6 +51,7 @@
       },
       {
         "name": "github_view",
+        "readOnly": true,
         "description": "View one GitHub issue or pull request with its body and comments.",
         "parameters": {
           "type": "object",
@@ -90,6 +92,7 @@
       },
       {
         "name": "github_runs",
+        "readOnly": true,
         "description": "List recent GitHub Actions workflow runs of a repository (defaults to the current project's origin). Returns id, name, title, number, status, conclusion, branch, and url.",
         "parameters": {
           "type": "object",
@@ -102,6 +105,7 @@
       },
       {
         "name": "github_run",
+        "readOnly": true,
         "description": "Get one Actions run with its jobs, steps, and annotations for failed jobs. Use github_job_log to read a job log.",
         "parameters": {
           "type": "object",
@@ -114,6 +118,7 @@
       },
       {
         "name": "github_job_log",
+        "readOnly": true,
         "description": "Read an Actions job log via the gh CLI. Returns lines around ##[error] when present, otherwise the last lines (default 150).",
         "parameters": {
           "type": "object",
