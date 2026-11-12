@@ -15,6 +15,7 @@ export const UI_PACKAGES = [
   'enso.github',
   'enso.hongguo',
   'enso.kanban',
+  'enso.linear',
   'enso.scheduler',
   'enso.telegram',
   'enso.tgclient',
