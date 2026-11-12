@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="enso-ui.css" />
+    <style>
+      body { padding: 10px; font-size: 12px; }
+      #app { display: flex; flex-direction: column; gap: 8px; }
+      .card { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+      .row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+      .grow { flex: 1; min-width: 0; }
+      .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .m { color: var(--muted-foreground); font-size: 11px; line-height: 1.45; }
+      .err { color: var(--destructive); font-size: 11px; word-break: break-word; }
+      .ok { color: var(--success); font-size: 11px; word-break: break-word; }
+      .code { font-size: 22px; font-weight: 600; letter-spacing: 4px; text-align: center; padding: 10px 0; border-radius: var(--radius-md); background: var(--muted); user-select: all; }
+      .ui-btn--block { width: 100%; height: 32px; }
+      h2 { margin: 0; font-size: 13px; font-weight: 600; }
+      .list { display: flex; flex-direction: column; gap: 2px; margin: 0 -6px; }
+      .item { display: flex; gap: 8px; align-items: flex-start; padding: 6px; border-radius: var(--radius-md); text-align: left; width: 100%; }
+      .item.on { background: var(--hover); }
+      .item .title { font-weight: 500; }
+      .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; margin-top: 4px; background: var(--muted-foreground); }
+      .dot.open { background: #22c55e; }
+      .dot.closed { background: #a855f7; }
+      textarea.ui-input { height: auto; min-height: 108px; padding: 6px 8px; resize: vertical; font: inherit; line-height: 1.5; }
+      .vars { display: flex; flex-wrap: wrap; gap: 4px; }
+      .vars button { cursor: pointer; }
+      pre.prompt { margin: 0; max-height: 180px; overflow: auto; white-space: pre-wrap; word-break: break-word; padding: 8px 10px; border-radius: var(--radius-md); background: var(--muted); font: 11px/1.5 var(--font-mono); }
+      .switch { gap: 8px; }
+    </style>
+  </head>
+  <body>
+    <div id="app"><div class="ui-card card"><div class="ui-skeleton" style="height: 14px; width: 60%"></div></div></div>
+    <script src="enso-ui.js"></script>
+    <script>
+      const app = document.getElementById('app');
+      const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+      const ago = (t) => {
+        const s = (Date.now() - Date.parse(t)) / 1000;
+        if (!Number.isFinite(s) || s < 0) return '';
+        if (s < 3600) return `${Math.max(1, Math.round(s / 60))} 分钟前`;
+        if (s < 86400) return `${Math.round(s / 3600)} 小时前`;
+        return `${Math.round(s / 86400)} 天前`;
+      };
+      const VARS = ['issue_url', 'issue_number', 'issue_title', 'issue_body', 'repo', 'branch'];
+      const SOURCES = { device: '设备码登录', config: 'PAT', env: '环境变量', gh: 'gh CLI' };
+      const ui = {
+        auth: null, repo: '', state: 'open', query: '', items: null, templates: null,
+        templateId: '', templateName: '', draft: '', createBranch: false, selected: null,
+        preview: null, notice: '', error: '', busy: false, animated: false,
+      };
+      let typedRepo = false;
+      let previewGen = 0;
+      let previewTimer = 0;
+      ensoUI.tooltip();
+
+      const call = (method, args) => window.enso.call(method, args ?? {});
+      const repoArg = () => (ui.repo ? { repo: ui.repo } : {});
+      const selectedTpl = () => ui.templates?.templates?.find((tpl) => tpl.id === ui.templateId) ?? null;
+
+      function snapshot() {
+        const active = document.activeElement;
+        return { id: active?.id || '', start: active?.selectionStart, end: active?.selectionEnd };
+      }
+      function restore(pos) {
+        const tpl = document.getElementById('tpl');
+        const name = document.getElementById('tplName');
+        const query = document.getElementById('q');
+        if (tpl) tpl.value = ui.draft;
+        if (name) name.value = ui.templateName;
+        if (query) query.value = ui.query;
+        const el = pos?.id ? document.getElementById(pos.id) : null;
+        if (!el) return;
+        el.focus();
+        if (pos.start != null && el.setSelectionRange) el.setSelectionRange(pos.start, pos.end);
+      }
+
+      function hit(issue) {
+        const q = ui.query.trim().toLowerCase();
+        if (!q) return true;
+        return [issue.title, `#${issue.number}`, issue.number, issue.author, ...(issue.labels ?? []), ...(issue.assignees ?? [])]
+          .join('\n').toLowerCase().includes(q);
+      }
+
+      async function act(fn) {
+        if (ui.busy) return;
+        ui.busy = true;
+        ui.error = '';
+        ui.notice = '';
+        render();
+        try { await fn(); } catch (e) { ui.error = e?.message ?? String(e); }
+        finally { ui.busy = false; render(); }
+      }
+
+      function applyTemplates(pack, replaceDraft) {
+        ui.templates = pack;
+        ui.templateId = pack.selectedId;
+        ui.createBranch = pack.createBranch === true;
+        const cur = pack.templates.find((tpl) => tpl.id === pack.selectedId);
+        ui.templateName = cur?.name ?? '';
+        if (replaceDraft) ui.draft = cur?.body ?? '';
+      }
+
+      const loadList = () => act(async () => {
+        const result = await call('list', { ...repoArg(), state: ui.state });
+        ui.repo = result.repo;
+        ui.items = result.items;
+        if (ui.selected && !result.items.some((issue) => issue.number === ui.selected)) {
+          ui.selected = null;
+          ui.preview = null;
+        }
+      });
+
+      async function loadPreview() {
+        const number = ui.selected;
+        if (!number) return;
+        const gen = ++previewGen;
+        const body = ui.draft;
+        const createBranch = ui.createBranch;
+        try {
+          const result = await call('preview', { ...repoArg(), number, body, createBranch, name: ui.templateName });
+          if (gen !== previewGen || ui.selected !== number) return;
+          ui.preview = result;
+          ui.error = '';
+        } catch (e) {
+          if (gen !== previewGen) return;
+          ui.preview = null;
+          ui.error = e?.message ?? String(e);
+        }
+        render();
+      }
+      function schedulePreview() {
+        clearTimeout(previewTimer);
+        if (!ui.selected) return;
+        previewTimer = setTimeout(() => loadPreview(), 350);
+      }
+
+      async function boot() {
+        ui.busy = true;
+        render();
+        try {
+          ui.auth = await call('state');
+          if (!typedRepo && ui.auth?.repo) ui.repo = ui.auth.repo;
+          if (ui.auth?.source) {
+            applyTemplates(await call('templates', repoArg()), true);
+            if (ui.repo) {
+              const result = await call('list', { ...repoArg(), state: ui.state });
+              ui.repo = result.repo;
+              ui.items = result.items;
+            }
+          }
+        } catch (e) {
+          ui.error = e?.message ?? String(e);
+        } finally {
+          ui.busy = false;
+          render();
+        }
+      }
+
+      function authView(auth) {
+        if (auth.pending) {
+          const left = Math.max(0, Math.round((auth.pending.expiresAt - Date.now()) / 1000));
+          return `<div class="ui-card card ui-enter"><b>在 GitHub 页面输入验证码</b>
+            <div class="code ui-mono">${esc(auth.pending.userCode)}</div>
+            <button type="button" class="ui-btn ui-btn--primary ui-btn--block" data-open="${esc(auth.pending.uri)}">打开 GitHub 授权页</button>
+            <div class="row"><span class="m grow">${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')} 后失效</span><button type="button" class="ui-btn ui-btn--sm" data-cancel>取消</button></div></div>`;
+        }
+        return `<div class="ui-card card ui-enter"><b>登录 GitHub</b>
+          <div class="m">用设备码授权；也可以在插件设置里填 PAT，或安装 gh 并执行 gh auth login 后自动复用。令牌只存在本插件里。</div>
+          <button type="button" class="ui-btn ui-btn--primary ui-btn--block" data-login>登录 GitHub</button></div>`;
+      }
+
+      function templateView() {
+        const options = (ui.templates?.templates ?? []).map((tpl) =>
+          `<option value="${esc(tpl.id)}" ${tpl.id === ui.templateId ? 'selected' : ''}>${esc(tpl.name)}</option>`).join('');
+        const vars = VARS.map((name) => `<button type="button" class="ui-badge" data-var="{{${name}}}">${name}</button>`).join('');
+        const canDelete = (ui.templates?.templates?.length ?? 0) > 1;
+        return `<div class="ui-card card"><h2>提示词模板</h2>
+          <div class="row"><select class="ui-input grow" id="tplPick">${options}</select>
+            <button type="button" class="ui-btn ui-btn--sm" data-new>新建</button></div>
+          <input class="ui-input" id="tplName" placeholder="模板名称" />
+          <textarea class="ui-input" id="tpl" spellcheck="false"></textarea>
+          <div class="vars">${vars}</div>
+          <div class="m">占位符在启动时替换。每个仓库记住自己选中的模板，模板正文在仓库之间共用。</div>
+          <div class="row"><button type="button" class="ui-btn ui-btn--sm ui-btn--primary" data-save>保存</button>
+            ${canDelete ? '<button type="button" class="ui-btn ui-btn--sm" data-del>删除</button>' : ''}<span class="grow"></span></div></div>`;
+      }
+
+      function launchView() {
+        const blocked = ui.createBranch && ui.preview?.blocked;
+        return `<div class="ui-card card"><label class="row switch"><input type="checkbox" class="ui-switch" id="branch" ${ui.createBranch ? 'checked' : ''} /><span>先创建并切换分支</span></label>
+          <div class="m">勾选后从当前 HEAD 执行 git switch，工作区必须干净；已经在目标分支上则不动。不会创建 worktree：session.create 只能在当前项目开会话，旁边的目录不会成为新会话的工作区。提示词只填进输入框，需要你确认后才发送。</div>
+          ${blocked ? `<div class="err">${esc(ui.preview.reason)}</div>` : ''}</div>`;
+      }
+
+      function listView() {
+        const items = (ui.items ?? []).filter(hit);
+        const body = ui.items == null
+          ? '<div class="ui-skeleton" style="height: 14px"></div>'
+          : items.length
+            ? `<div class="list${ui.animated ? '' : ' ui-stagger'}" data-feed>${items.map((issue) => {
+              const labels = issue.labels.slice(0, 3).map((label) => `<span class="ui-badge">${esc(label)}</span>`).join('');
+              const more = issue.labels.length > 3 ? `<span class="m">+${issue.labels.length - 3}</span>` : '';
+              const who = [issue.author, ...issue.assignees].filter(Boolean).join(' · ');
+              return `<div class="item${issue.number === ui.selected ? ' on' : ''}" data-fill data-pick="${issue.number}">
+                <span class="dot ${issue.state === 'open' ? 'open' : 'closed'}"></span>
+                <span class="grow"><span class="title">${esc(issue.title)}</span>
+                  <div class="m ellipsis"><span class="ui-mono">#${issue.number}</span> ${esc(who)} · ${ago(issue.updatedAt)} · <span class="ui-mono">${esc(issue.suggestedBranch)}</span></div>
+                  <div class="row" style="margin-top:4px">${labels}${more}</div></span>
+                <button type="button" class="ui-btn ui-btn--sm ui-btn--primary" data-go="${issue.number}" ${ui.busy ? 'disabled' : ''}>启动</button></div>`;
+            }).join('')}</div>`
+            : `<div class="ui-empty">${ui.query.trim() ? '没有匹配的 issue' : '没有 issue'}</div>`;
+        const seg = (value, label) => `<button type="button" aria-pressed="${ui.state === value}" data-set="${value}">${label}</button>`;
+        return `<div class="row"><input class="ui-input grow" id="q" placeholder="筛选标题、编号、作者、标签" />
+          <div class="ui-seg">${seg('open', '打开')}${seg('closed', '关闭')}${seg('all', '全部')}</div></div>
+          <div class="ui-card card">${body}</div>`;
+      }
+
+      function previewView() {
+        const preview = ui.preview;
+        if (!preview || preview.number !== ui.selected) return '';
+        const branch = preview.blocked
+          ? `<div class="err">${esc(preview.reason)} 目标分支 <span class="ui-mono">${esc(preview.suggestedBranch)}</span></div>`
+          : preview.createBranch
+            ? `<div class="m">${preview.action === 'create' ? '将创建并切换到' : preview.action === 'switch' ? '将切换到已有分支' : '已在分支'} <span class="ui-mono">${esc(preview.branch)}</span></div>`
+            : `<div class="m">保持当前分支 <span class="ui-mono">${esc(preview.branch || '（游离 HEAD）')}</span></div>`;
+        return `<div class="ui-card card ui-enter" id="preview"><div class="row"><b class="grow ellipsis">${esc(preview.title)} <span class="m ui-mono">#${preview.number}</span></b>
+            <button type="button" class="ui-btn ui-btn--sm" data-open="${esc(preview.url)}">在浏览器打开</button>
+            <button type="button" class="ui-btn ui-btn--sm ui-btn--primary" data-go="${preview.number}" ${ui.busy || preview.blocked ? 'disabled' : ''}>启动会话</button></div>
+          ${branch}<pre class="prompt">${esc(preview.prompt)}</pre></div>`;
+      }
+
+      function render() {
+        const pos = snapshot();
+        const auth = ui.auth;
+        if (!auth) {
+          app.innerHTML = ui.error ? `<div class="ui-empty err">${esc(ui.error)}</div>` : '<div class="ui-empty">加载中…</div>';
+          return;
+        }
+        const account = auth.source
+          ? `<span class="ui-badge" data-tip="${SOURCES[auth.source] ?? ''}">${esc(auth.login ?? SOURCES[auth.source] ?? auth.source)}</span>${auth.source === 'device' ? '<button type="button" class="ui-btn ui-btn--sm" data-logout>退出</button>' : ''}`
+          : '';
+        const head = `<div class="row"><input class="ui-input grow ui-mono" id="repo" placeholder="owner/name" value="${esc(ui.repo)}" />
+          <button type="button" class="ui-btn ui-btn--sm" data-reload ${ui.busy ? 'disabled' : ''}>${ui.busy ? '…' : '刷新'}</button>${account}</div>`;
+        const body = !auth.source ? authView(auth) : `${templateView()}${launchView()}${listView()}${previewView()}`;
+        app.innerHTML = head + body
+          + (ui.notice ? `<div class="ok">${esc(ui.notice)}</div>` : '')
+          + (ui.error ? `<div class="err">${esc(ui.error)}</div>` : '')
+          + (auth.error && !auth.pending ? `<div class="err">${esc(auth.error)}</div>` : '');
+        restore(pos);
+        ensoUI.seg(app.querySelector('.ui-seg'));
+        const feed = app.querySelector('[data-feed]');
+        ensoUI.fill(feed);
+        if (feed && !ui.animated) {
+          ensoUI.stagger(feed);
+          ui.animated = true;
+        }
+      }
+
+      async function launch(number) {
+        const body = document.getElementById('tpl')?.value ?? ui.draft;
+        const name = document.getElementById('tplName')?.value ?? ui.templateName;
+        const createBranch = document.getElementById('branch')?.checked ?? ui.createBranch;
+        ui.draft = body;
+        ui.templateName = name;
+        ui.createBranch = createBranch;
+        const result = await call('launch', { ...repoArg(), number, body, name, templateId: ui.templateId, createBranch });
+        const moved = result.action === 'create' ? `已创建并切换到 ${result.branch}。` : result.action === 'switch' ? `已切换到 ${result.branch}。` : '';
+        ui.notice = `${moved}已新建会话并聚焦。提示词在输入框里，确认后才会发送。`;
+        ui.templates = await call('templates', repoArg());
+        ui.templateId = ui.templates.selectedId;
+      }
+
+      app.addEventListener('click', (event) => {
+        const variable = event.target.closest('[data-var]');
+        if (variable) {
+          const tpl = document.getElementById('tpl');
+          const token = variable.dataset.var;
+          const start = tpl.selectionStart ?? tpl.value.length;
+          const end = tpl.selectionEnd ?? start;
+          tpl.value = tpl.value.slice(0, start) + token + tpl.value.slice(end);
+          ui.draft = tpl.value;
+          const pos = start + token.length;
+          tpl.focus();
+          tpl.setSelectionRange(pos, pos);
+          schedulePreview();
+          return;
+        }
+        const button = event.target.closest('button');
+        if (!button || button.disabled) {
+          const row = event.target.closest('[data-pick]');
+          if (!row || event.target.closest('button')) return;
+          ui.selected = Number(row.dataset.pick);
+          ui.preview = null;
+          render();
+          loadPreview();
+          return;
+        }
+        const data = button.dataset;
+        if ('login' in data) act(async () => { await call('login'); ui.auth = await call('state'); });
+        else if ('cancel' in data) act(async () => { await call('cancelLogin'); ui.auth = await call('state'); });
+        else if ('logout' in data) act(async () => {
+          await call('logout');
+          ui.items = null;
+          ui.preview = null;
+          ui.auth = await call('state');
+        });
+        else if (data.open) call('open', { url: data.open }).catch((e) => { ui.error = e?.message ?? String(e); render(); });
+        else if ('reload' in data) loadList();
+        else if (data.set) {
+          if (ui.state !== data.set) { ui.state = data.set; ui.items = null; ui.animated = false; loadList(); }
+        } else if (data.go) act(() => launch(Number(data.go)));
+        else if ('save' in data) act(async () => {
+          applyTemplates(await call('saveTemplate', { ...repoArg(), id: ui.templateId, name: ui.templateName, body: ui.draft }), false);
+          ui.notice = '模板已保存';
+        });
+        else if ('new' in data) act(async () => {
+          applyTemplates(await call('saveTemplate', { ...repoArg(), name: '未命名', body: ui.draft || '请处理 {{issue_url}}。' }), true);
+        });
+        else if ('del' in data) act(async () => {
+          applyTemplates(await call('deleteTemplate', { ...repoArg(), id: ui.templateId }), true);
+          schedulePreview();
+        });
+      });
+
+      app.addEventListener('change', (event) => {
+        if (event.target.id === 'repo') {
+          ui.repo = event.target.value.trim();
+          typedRepo = Boolean(ui.repo);
+          ui.items = null;
+          ui.selected = null;
+          ui.preview = null;
+          ui.animated = false;
+          if (ui.auth?.source) loadList();
+        } else if (event.target.id === 'tplPick') {
+          const next = ui.templates.templates.find((tpl) => tpl.id === event.target.value);
+          if (!next || next.id === ui.templateId) return;
+          ui.templateId = next.id;
+          ui.templateName = next.name;
+          ui.draft = next.body;
+          const tpl = document.getElementById('tpl');
+          if (tpl) tpl.value = next.body;
+          act(async () => { applyTemplates(await call('selectTemplate', { ...repoArg(), id: next.id }), false); });
+          schedulePreview();
+        } else if (event.target.id === 'branch') {
+          ui.createBranch = event.target.checked;
+          call('prefs', { ...repoArg(), createBranch: ui.createBranch }).catch(() => {});
+          schedulePreview();
+        }
+      });
+      app.addEventListener('input', (event) => {
+        if (event.target.id === 'tpl') { ui.draft = event.target.value; schedulePreview(); }
+        else if (event.target.id === 'tplName') ui.templateName = event.target.value;
+        else if (event.target.id === 'q') { ui.query = event.target.value; render(); }
+        else if (event.target.id === 'repo') ui.repo = event.target.value.trim();
+      });
+
+      boot();
+      (function loop() {
+        setTimeout(async () => {
+          const prev = ui.auth;
+          try { ui.auth = await call('state'); } catch { /* 保持上一帧 */ }
+          if (ui.auth?.source && !prev?.source) {
+            try {
+              applyTemplates(await call('templates', repoArg()), true);
+              if (!typedRepo && ui.auth.repo) ui.repo = ui.auth.repo;
+              if (ui.repo) {
+                const result = await call('list', { ...repoArg(), state: ui.state });
+                ui.repo = result.repo;
+                ui.items = result.items;
+              }
+            } catch (e) {
+              ui.error = e?.message ?? String(e);
+            }
+            render();
+          } else if (!typedRepo && ui.auth?.repo && ui.auth.repo !== ui.repo && !ui.items && ui.auth.source) {
+            ui.repo = ui.auth.repo;
+            loadList();
+          } else if (JSON.stringify(ui.auth) !== JSON.stringify(prev)) render();
+          else if (ui.auth?.pending) render();
+          loop();
+        }, ui.auth?.pending ? 1500 : 5000);
+      })();
+      setInterval(() => ui.auth?.pending && render(), 1000);
+    </script>
+  </body>
+</html>
