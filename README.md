@@ -65,7 +65,7 @@ EnsoCode 官方插件市场的源仓库 · [浏览插件](https://enso-plugins.j
 | 双语对照翻译 | `enso.translate` | 0.1.2 | 官方 | 把思考过程和回复正文译成目标语言，原文下面紧跟译文。代码、链接、路径和公式保持原样。 |
 | Walkthrough | `enso.walkthrough` | 0.1.0 | 官方 | 把 Git diff、提交范围或当前会话的改动收成一步步的讲解：每步有标题、说明和对应代码，可以改文字，一次看一步。 |
 | [深海女仆工坊](https://github.com/Small-tailqwq/dsh-deep-whale) | `enso.whalemaid` | 0.1.1 | 官方 | 鲸鱼娘女仆主题：深海蓝配金色描边，水晶宫殿作背景，两位女仆站在对话两侧，输入框系着蝴蝶结。美术 CC BY-NC-SA 4.0，禁止商用。 |
-| [Astronaut 宇航员](https://github.com/mediocrebaby/Astronauts) | `space.astronaut` | 1.4.0 | 社区 · [`mediocrebaby/Astronauts`](https://github.com/mediocrebaby/Astronauts) | Lunar 月白：黑白宇航员与中性灰阶主题。 |
+| [Astronaut 宇航员](https://github.com/mediocrebaby/Astronauts) | `space.astronaut` | 1.5.0 | 社区 · [`mediocrebaby/Astronauts`](https://github.com/mediocrebaby/Astronauts) | Lunar 月白：黑白宇航员与中性灰阶主题。 |
 | [YCE Prompt Enhance](https://github.com/xiamuwnagwang/enso-yce) | `yce.enhance` | 0.1.1 | 社区 · [`xiamuwnagwang/enso-yce`](https://github.com/xiamuwnagwang/enso-yce) | YCE 提示词增强：复用宿主已配置的 yce-mcp，在输入框一键将模糊草稿改写为清晰、结构化的提示词。 |
 <!-- plugins:end -->
 
