@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "id": "enso.dbstudio",
+  "name": "DB Studio",
+  "version": "0.1.0",
+  "icon": "icon.svg",
+  "description": "在侧栏连接 PostgreSQL、MySQL/MariaDB 和 SQLite，浏览库表并运行 SQL。结果按页流式读取，可取消正在执行的查询。密码只放在 Enso 的密钥配置里。",
+  "engines": { "enso": ">=0.3.4" },
+  "main": "main.mjs",
+  "permissions": ["ui.view", "fs.read"],
+  "fs": { "read": ["."] },
+  "contributes": {
+    "configuration": [
+      {
+        "key": "envVar",
+        "title": "环境变量名",
+        "description": "从项目 .env 和 .env.local 读取连接串的变量名。用的时候重新读文件，不把连接串抄进插件数据。",
+        "default": "DATABASE_URL"
+      },
+      {
+        "key": "rowLimit",
+        "title": "默认行数上限",
+        "description": "打开表，以及没有自己的 LIMIT 的查询，最多返回这么多行。",
+        "type": "number",
+        "default": 100,
+        "min": 1,
+        "max": 1000
+      },
+      {
+        "key": "queryTimeout",
+        "title": "查询超时（秒）",
+        "description": "超时后向数据库发出取消。PostgreSQL 用 CancelRequest，MySQL/MariaDB 用 KILL QUERY，SQLite 结束查询线程。",
+        "type": "number",
+        "default": 30,
+        "min": 1,
+        "max": 110
+      },
+      {
+        "key": "passwords",
+        "title": "连接密码",
+        "description": "由侧栏写入的 JSON（连接 id → 密码）。Enso 把它当密钥保存，设置页只显示已设置。不要手改，除非你知道自己在替换整段 JSON。",
+        "secret": true
+      },
+      {
+        "key": "passwords2",
+        "title": "连接密码（续 2）",
+        "description": "第一条密钥放不下时使用。由侧栏自动写入。",
+        "secret": true
+      },
+      {
+        "key": "passwords3",
+        "title": "连接密码（续 3）",
+        "description": "由侧栏自动写入。",
+        "secret": true
+      },
+      {
+        "key": "passwords4",
+        "title": "连接密码（续 4）",
+        "description": "由侧栏自动写入。",
+        "secret": true
+      }
+    ],
+    "views": [{ "id": "dbstudio", "title": "DB Studio", "entry": "view.html" }],
+    "fileViewers": [
+      {
+        "id": "sql",
+        "title": "DB Studio",
+        "entry": "view.html",
+        "extensions": [".sql"]
+      }
+    ],
+    "methods": [
+      { "name": "state", "timeoutMs": 20000 },
+      { "name": "save", "timeoutMs": 20000 },
+      { "name": "remove", "timeoutMs": 20000 },
+      { "name": "files", "timeoutMs": 30000 },
+      { "name": "ping", "timeoutMs": 30000 },
+      { "name": "tree", "timeoutMs": 60000 },
+      { "name": "columns", "timeoutMs": 60000 },
+      { "name": "query", "timeoutMs": 120000 },
+      { "name": "more", "timeoutMs": 120000 },
+      { "name": "cancel", "timeoutMs": 15000 },
+      { "name": "cell", "timeoutMs": 20000 }
+    ]
+  }
+}

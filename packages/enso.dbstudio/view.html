@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="enso-ui.css" />
+    <style>
+      html, body { height: 100%; }
+      body {
+        height: 100%;
+        overflow: hidden;
+        background: var(--background);
+        color: var(--foreground);
+      }
+      button, input, textarea, select { font: inherit; color: inherit; }
+      button { background: none; border: 0; padding: 0; cursor: pointer; }
+      [hidden] { display: none !important; }
+      #app { height: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 232px; }
+      main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+      header, .status {
+        display: flex; align-items: center; gap: 8px;
+        padding: 8px 12px; min-width: 0;
+      }
+      header { border-bottom: 1px solid var(--border); }
+      header h1 { margin: 0; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .hint, .muted { color: var(--muted-foreground); font-size: 11px; }
+      .hint { white-space: nowrap; }
+      .spacer { flex: 1; }
+      .editor {
+        display: grid; grid-template-columns: 36px minmax(0, 1fr);
+        min-height: 120px; max-height: 42%;
+        border-bottom: 1px solid var(--border);
+      }
+      .gutter, .paint, textarea.sql {
+        font: 12px/1.5 var(--font-mono);
+        tab-size: 2;
+      }
+      .gutter {
+        margin: 0; padding: 8px 0;
+        text-align: right; color: var(--muted-foreground);
+        background: color-mix(in oklch, var(--muted) 65%, transparent);
+        user-select: none; overflow: hidden;
+      }
+      .code { position: relative; min-width: 0; min-height: 0; }
+      .paint, textarea.sql {
+        margin: 0; padding: 8px 10px; border: 0;
+        white-space: pre; overflow: auto;
+        position: absolute; inset: 0;
+      }
+      .paint { pointer-events: none; color: var(--foreground); }
+      textarea.sql {
+        resize: none; background: transparent; color: transparent;
+        caret-color: var(--foreground);
+      }
+      textarea.sql:focus { outline: none; }
+      .kw { color: var(--brand); }
+      .str { color: var(--success); }
+      .num { color: var(--warning); }
+      .com { color: var(--muted-foreground); }
+      .suggest {
+        position: absolute; z-index: 3; left: 12px; bottom: 8px;
+        min-width: 180px; max-height: 160px; overflow: auto;
+        background: var(--popover); color: var(--popover, var(--foreground));
+        border: 1px solid var(--border); border-radius: var(--radius-md);
+        box-shadow: var(--shadow-sm);
+      }
+      .suggest button { display: block; width: 100%; text-align: left; padding: 4px 8px; font-size: 12px; }
+      .suggest button[aria-selected='true'], .suggest button:hover { background: var(--hover); }
+      .grid-wrap { flex: 1; min-height: 80px; overflow: auto; }
+      table.data { border-collapse: separate; border-spacing: 0; font-size: 12px; min-width: max-content; }
+      table.data th, table.data td {
+        height: 28px; max-width: 280px; padding: 0 8px;
+        border-bottom: 1px solid var(--border); border-right: 1px solid var(--border);
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+      }
+      table.data th { position: sticky; top: 0; background: var(--background); font-weight: 600; text-align: left; }
+      table.data td.rowno, table.data th.rowno { color: var(--muted-foreground); text-align: right; position: sticky; left: 0; background: var(--background); }
+      table.data tr:hover td { background: var(--hover); }
+      table.data td.null { color: var(--brand); font-style: italic; }
+      table.data td.on { outline: 1px solid var(--ring); outline-offset: -1px; }
+      .cell, .banner {
+        margin: 0; padding: 8px 12px; border-top: 1px solid var(--border);
+        font: 12px/1.45 var(--font-mono); white-space: pre-wrap; word-break: break-word;
+        max-height: 140px; overflow: auto;
+      }
+      .banner { font-family: inherit; color: var(--destructive); background: color-mix(in oklch, var(--destructive) 10%, transparent); }
+      .status { border-top: 1px solid var(--border); font-size: 11px; color: var(--muted-foreground); }
+      aside {
+        min-height: 0; overflow: auto; border-left: 1px solid var(--border);
+        padding: 8px; display: flex; flex-direction: column; gap: 6px;
+      }
+      aside h2 { margin: 2px 4px; font-size: 11px; letter-spacing: 0.04em; color: var(--muted-foreground); }
+      .node, .conn {
+        display: flex; align-items: center; gap: 6px; width: 100%;
+        padding: 4px 6px; border-radius: var(--radius-sm); text-align: left; font-size: 12px;
+      }
+      .node:hover, .conn:hover, .conn:focus-visible { background: var(--hover); }
+      .node[aria-current='true'] { font-weight: 600; }
+      .kind { margin-left: auto; color: var(--muted-foreground); font-size: 10px; }
+      .env-local { background: color-mix(in oklch, var(--success) 18%, transparent); color: var(--success); }
+      .env-dev { background: color-mix(in oklch, var(--brand) 18%, transparent); color: var(--brand); }
+      .env-staging { background: color-mix(in oklch, var(--warning) 22%, transparent); color: var(--warning); }
+      .env-prod { background: color-mix(in oklch, var(--destructive) 16%, transparent); color: var(--destructive); }
+      .dialog {
+        position: fixed; inset: 0; background: color-mix(in oklch, var(--background) 30%, transparent);
+        display: flex; align-items: center; justify-content: center; padding: 12px;
+      }
+      .dialog form {
+        width: min(420px, 100%); max-height: 100%; overflow: auto;
+        background: var(--background); border: 1px solid var(--border);
+        border-radius: var(--radius-lg); padding: 12px; display: flex; flex-direction: column; gap: 8px;
+        box-shadow: var(--shadow-sm);
+      }
+      .dialog h3 { margin: 0; font-size: 13px; }
+      label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--muted-foreground); }
+      .row2 { display: grid; grid-template-columns: 1fr 88px; gap: 8px; }
+      .actions { display: flex; gap: 6px; justify-content: flex-end; }
+      @media (max-width: 720px) {
+        #app { grid-template-columns: 1fr; grid-template-rows: 160px minmax(0, 1fr); }
+        aside { border-left: 0; border-bottom: 1px solid var(--border); order: -1; }
+        .hint { display: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <main>
+        <header>
+          <span id="badge" class="ui-badge" hidden></span>
+          <h1 id="title">DB Studio</h1>
+          <span class="spacer"></span>
+          <button id="run" class="ui-btn ui-btn--primary ui-btn--sm" type="button">运行</button>
+          <button id="cancel" class="ui-btn ui-btn--sm" type="button" disabled>取消</button>
+          <span class="hint">选区或光标所在语句 · Ctrl/⌘ Enter</span>
+        </header>
+        <div class="editor">
+          <pre id="gutter" class="gutter" aria-hidden="true">1</pre>
+          <div class="code">
+            <pre id="paint" class="paint"></pre>
+            <textarea id="sql" class="sql" spellcheck="false" aria-label="SQL" placeholder="SELECT * FROM …"></textarea>
+            <div id="suggest" class="suggest" hidden></div>
+          </div>
+        </div>
+        <div id="banner" class="banner" hidden></div>
+        <div id="grid" class="grid-wrap"></div>
+        <pre id="cell" class="cell" hidden></pre>
+        <div id="status" class="status">还没有结果</div>
+      </main>
+      <aside>
+        <div style="display:flex;align-items:center;gap:6px">
+          <h2 style="flex:1">连接</h2>
+          <button id="add" class="ui-btn ui-btn--sm" type="button">新建</button>
+        </div>
+        <div id="tree"></div>
+        <p class="muted">在已保存的连接上按 Enter 编辑或删除。</p>
+      </aside>
+    </div>
+    <div id="dialog" class="dialog" hidden>
+      <form id="form">
+        <h3 id="form-title">新建连接</h3>
+        <label>名称<input class="ui-input" name="name" required /></label>
+        <div class="row2">
+          <label>类型
+            <select class="ui-input" name="engine">
+              <option value="postgres">PostgreSQL</option>
+              <option value="mysql">MySQL</option>
+              <option value="mariadb">MariaDB</option>
+              <option value="sqlite">SQLite</option>
+            </select>
+          </label>
+          <label>环境
+            <select class="ui-input" name="env">
+              <option value="">无</option>
+              <option value="local">local</option>
+              <option value="dev">dev</option>
+              <option value="staging">staging</option>
+              <option value="prod">prod</option>
+            </select>
+          </label>
+        </div>
+        <label>粘贴连接串<input class="ui-input" name="url" placeholder="postgres:// 或 mysql:// 或 sqlite:" /></label>
+        <div id="server-fields">
+          <div class="row2">
+            <label>主机<input class="ui-input" name="host" placeholder="127.0.0.1" /></label>
+            <label>端口<input class="ui-input" name="port" inputmode="numeric" /></label>
+          </div>
+          <label>用户<input class="ui-input" name="user" autocomplete="off" /></label>
+          <label>密码<input class="ui-input" name="password" type="password" autocomplete="new-password" placeholder="留空则不改已保存的密码" /></label>
+          <label>数据库<input class="ui-input" name="database" /></label>
+          <label>加密
+            <select class="ui-input" name="sslmode">
+              <option value="disable">不加密</option>
+              <option value="require">加密，不校验证书</option>
+              <option value="verify-full">加密并校验主机名</option>
+            </select>
+          </label>
+        </div>
+        <div id="sqlite-fields" hidden>
+          <label>项目里的文件
+            <select class="ui-input" name="file"></select>
+          </label>
+          <label>或路径<input class="ui-input" name="path" placeholder="相对项目的路径，或绝对路径" /></label>
+        </div>
+        <div class="actions">
+          <button id="remove" class="ui-btn ui-btn--destructive ui-btn--sm" type="button" hidden>删除</button>
+          <span class="spacer"></span>
+          <button class="ui-btn ui-btn--sm" type="button" id="close-form">取消</button>
+          <button class="ui-btn ui-btn--sm" type="button" id="test">测试</button>
+          <button class="ui-btn ui-btn--primary ui-btn--sm" type="submit">保存</button>
+        </div>
+      </form>
+    </div>
+    <script src="enso-ui.js"></script>
+    <script src="view.js"></script>
+  </body>
+</html>
