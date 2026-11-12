@@ -81,7 +81,10 @@ export function activate(enso) {
         .catch((error) => console.error('状态项更新失败', errorText(error)));
       Promise.resolve()
         .then(() => enso.ui.view.emit('inbox', { at: model.updatedAt }))
-        .catch((error) => console.error('侧栏通知失败', errorText(error)));
+        .catch((error) => {
+          // 激活时的首次刷新不在宿主调用内，侧栏也尚未打开，打开后会自行拉取快照
+          if (error?.code !== 'NO_INVOCATION') console.error('侧栏通知失败', errorText(error));
+        });
     });
   };
 

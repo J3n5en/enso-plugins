@@ -96,8 +96,8 @@
         failure: { label: '失败', badge: 'ui-badge ui-badge--destructive' },
       };
       const $ = (id) => document.getElementById(id);
-      const enso = window.enso;
-      if (!enso || typeof enso.call !== 'function') {
+      const host = window.enso;
+      if (!host || typeof host.call !== 'function') {
         $('loading').replaceChildren(Object.assign(document.createElement('div'), {
           className: 'ui-empty',
           textContent: '请在 EnsoCode 的侧栏里打开收件箱。',
@@ -110,13 +110,13 @@
         let notes = {};
         let booted = false;
         try {
-          const saved = JSON.parse(enso.storage.get('view') || 'null');
+          const saved = JSON.parse(host.storage.get('view') || 'null');
           if (saved && ['all', 'approval', 'ask', 'failure'].includes(saved.kind)) filter = saved.kind;
           if (saved?.unreadOnly === true) unreadOnly = true;
         } catch { /* 筛选记不住就用默认 */ }
 
         const saveView = () => {
-          try { enso.storage.set('view', JSON.stringify({ kind: filter, unreadOnly })); } catch { /* 配额满时忽略 */ }
+          try { host.storage.set('view', JSON.stringify({ kind: filter, unreadOnly })); } catch { /* 配额满时忽略 */ }
         };
         const rel = (ts) => {
           if (!ts) return '';
@@ -225,7 +225,7 @@
           for (const rows of list.querySelectorAll('.rows')) ensoUI.fill(rows);
         };
         const pull = async (method = 'snapshot') => {
-          const data = await enso.call(method, { kind: filter, unreadOnly });
+          const data = await host.call(method, { kind: filter, unreadOnly });
           state = data || state;
           const live = new Set((state?.items || []).map((item) => item.id));
           notes = Object.fromEntries(Object.entries(notes).filter(([id]) => live.has(id)));
@@ -234,7 +234,7 @@
         const openItem = async (item, button) => {
           button.disabled = true;
           try {
-            const res = await enso.call('focus', { sessionId: item.sessionId, id: item.id });
+            const res = await host.call('focus', { sessionId: item.sessionId, id: item.id });
             if (res?.ok) delete notes[item.id];
             else if (res?.reason === 'other-project') notes[item.id] = `请先打开项目「${res.projectName || item.projectName}」。宿主只能切到当前项目的会话。`;
             else if (res?.reason === 'missing') notes[item.id] = '这个会话已经不在列表里。';
@@ -261,7 +261,7 @@
           pull().catch((error) => toast(error?.message || '刷新失败', true));
         });
         $('read').addEventListener('click', () => {
-          enso.call('markRead', { all: true, kind: filter, unreadOnly })
+          host.call('markRead', { all: true, kind: filter, unreadOnly })
             .then((data) => { state = data; notes = {}; render(); })
             .catch((error) => toast(error?.message || '标已读失败', true));
         });
@@ -272,7 +272,7 @@
             .finally(() => $('reload').classList.remove('ui-spin'));
         });
         window.addEventListener('resize', () => ensoUI.seg($('kinds')));
-        enso.on('inbox', () => {
+        host.on('inbox', () => {
           pull().catch((error) => toast(error?.message || '刷新失败', true));
         });
         setInterval(() => { if (state?.loaded) render(); }, 30_000);
