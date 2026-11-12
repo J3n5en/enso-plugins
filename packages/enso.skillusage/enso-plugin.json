@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "enso.skillusage",
+  "name": "Skill Usage",
+  "version": "0.1.0",
+  "icon": "icon.svg",
+  "description": "侧栏查看技能、MCP 和子代理真正被用了多少：哪些放进了上下文却很少或从未调用，以及它们大约占多少 token。",
+  "engines": { "enso": ">=0.2.0" },
+  "main": "main.mjs",
+  "permissions": ["ui.view"],
+  "contributes": {
+    "views": [{ "id": "usage", "title": "技能用量", "entry": "usage.html" }],
+    "methods": [{ "name": "report", "timeoutMs": 120000 }]
+  }
+}
