@@ -1,0 +1,737 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="enso-ui.css" />
+    <style>
+      :where(button) { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; border-radius: var(--radius-sm); padding: 0; }
+      svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+      .ui-btn--icon.ui-btn--sm svg { width: 13px; height: 13px; }
+      .ui-fill-host [data-fill]:hover { background: transparent; }
+
+      header {
+        position: sticky; top: 0; z-index: 3; display: flex; flex-direction: column; gap: 8px;
+        padding: 10px 12px 8px; background: color-mix(in oklch, var(--background) 88%, transparent); backdrop-filter: blur(12px);
+      }
+      .bar { display: flex; align-items: center; gap: 6px; min-width: 0; }
+      .bar h1 { margin: 0; flex: 1; min-width: 0; font-size: 13px; font-weight: 600; letter-spacing: -0.01em; }
+      .bar .stat { color: var(--muted-foreground); font: 500 11.5px/1.4 var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+      .tools { display: flex; gap: 6px; min-width: 0; }
+      .tools .query { flex: 1; min-width: 0; }
+      .tools select { width: 118px; flex: none; }
+      .seg-row { overflow-x: auto; }
+      .seg-row .ui-seg { flex: none; }
+      #clear[hidden] { display: none; }
+
+      .toasts { position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 40; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
+      .toast {
+        display: flex; align-items: center; gap: 8px; max-width: 100%; padding: 8px 12px;
+        border: 1px solid var(--border); border-radius: var(--radius-md);
+        background: var(--popover); box-shadow: var(--shadow-lg); font-size: 12px; pointer-events: auto;
+      }
+      .toast.error { color: var(--destructive); }
+
+      .mask { display: grid; place-items: center; padding: 16px; }
+      .modal { --origin-y: 50%; width: min(320px, 100%); padding: 16px; }
+      .modal h2 { margin: 0 0 4px; font-size: 13.5px; font-weight: 600; }
+      .modal p { margin: 0; color: var(--muted-foreground); font-size: 12px; word-break: break-word; }
+      .modal textarea { display: block; width: 100%; min-height: 72px; margin-top: 10px; }
+      .modal .actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 14px; }
+      .ui-btn.btn-danger { color: #fff; background: var(--destructive); box-shadow: var(--shadow-xs); }
+      .ui-btn.btn-danger:hover { background: color-mix(in oklch, var(--destructive) 88%, transparent); }
+
+      .menu { position: fixed; z-index: 25; width: min(280px, calc(100vw - 16px)); padding: 6px; }
+      .opt { display: flex; align-items: center; gap: 10px; padding: 7px 6px; border-radius: var(--radius-sm); font-size: 12px; cursor: pointer; }
+      .opt b { display: block; font-weight: 500; }
+      .opt small { display: block; margin-top: 1px; color: var(--muted-foreground); font-size: 11px; font-weight: 400; }
+      .opt > span { flex: 1; min-width: 0; }
+
+      .board { display: flex; flex-direction: column; gap: 10px; padding: 0 12px 16px; }
+      @media (min-width: 560px) {
+        .board { flex-direction: row; align-items: flex-start; overflow-x: auto; min-height: calc(100vh - 118px); }
+        .col, .new-col { flex: 0 0 260px; }
+      }
+      .col {
+        --dot: var(--brand);
+        padding: 4px 6px 6px; border-radius: var(--radius-lg);
+        background: color-mix(in oklch, var(--muted) 55%, transparent);
+        box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--border) 60%, transparent);
+        transition: box-shadow var(--dur-2) var(--ease-out), background-color var(--dur-2) var(--ease-out);
+      }
+      .col.over {
+        background: color-mix(in oklch, var(--dot) 8%, color-mix(in oklch, var(--muted) 55%, transparent));
+        box-shadow: inset 0 0 0 1.5px color-mix(in oklch, var(--dot) 55%, transparent);
+      }
+      .col-head { display: flex; align-items: center; gap: 4px; padding: 2px 0 6px; min-height: 30px; }
+      .col-head .dot { width: 7px; height: 7px; margin: 0 2px; border-radius: 50%; background: var(--dot); flex: none; box-shadow: 0 0 0 3px color-mix(in oklch, var(--dot) 18%, transparent); }
+      .col-head .name { font-weight: 600; font-size: 12.5px; padding: 2px 5px; border-radius: var(--radius-sm); cursor: text; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .col-head input.name { flex: 1; cursor: text; background: var(--card); box-shadow: 0 0 0 1px var(--ring), 0 0 0 4px color-mix(in oklch, var(--ring) 25%, transparent); }
+      .col-head .count { color: var(--muted-foreground); font: 500 11px/1 var(--font-mono); font-variant-numeric: tabular-nums; padding: 2px 5px; border-radius: 999px; background: color-mix(in oklch, var(--foreground) 6%, transparent); }
+      .col-head .mark { width: 7px; height: 7px; border-radius: 50%; background: var(--warning); flex: none; box-shadow: 0 0 0 3px color-mix(in oklch, var(--warning) 22%, transparent); }
+      .col-head .spacer { flex: 1; }
+      .col-head .tools { display: flex; opacity: 0; transition: opacity var(--dur-1) var(--ease-out); }
+      .col:hover .col-head .tools, .col-head .tools:focus-within, .col.folded .col-head .tools { opacity: 1; }
+      .collapse svg { transition: transform var(--dur-3) var(--ease-spring); }
+      .col.folded .collapse svg { transform: rotate(-90deg); }
+      .col.folded .cards { display: none; }
+
+      .cards { display: flex; flex-direction: column; gap: 6px; min-height: 6px; }
+      .card {
+        position: relative; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-md);
+        background: var(--card); box-shadow: var(--shadow-xs); cursor: pointer;
+        transition: box-shadow var(--dur-2) var(--ease-out), border-color var(--dur-2) var(--ease-out), background-color var(--dur-2) var(--ease-out), transform var(--dur-3) var(--ease-spring), opacity var(--dur-2) var(--ease-out);
+      }
+      .card:hover { border-color: color-mix(in oklch, var(--foreground) 16%, transparent); box-shadow: var(--shadow-sm); }
+      .card.current { box-shadow: 0 0 0 1.5px var(--dot), var(--shadow-xs); }
+      .card.unseen {
+        background: color-mix(in oklch, var(--warning) 16%, var(--card));
+        border-color: color-mix(in oklch, var(--warning) 46%, var(--border));
+      }
+      .card.closed { opacity: 0.72; }
+      .card.closed .title { color: var(--muted-foreground); }
+      .card.lift { transform: scale(1.02) rotate(1deg); box-shadow: var(--shadow-lg); transition: none; cursor: grabbing; }
+      .card.dragging { opacity: 0.3; transform: scale(0.98); box-shadow: none; }
+      .card.settle { animation: settle var(--dur-3) var(--ease-spring); }
+      @keyframes settle { from { scale: 1.02; rotate: 1deg; box-shadow: var(--shadow-lg); } }
+      .placeholder {
+        height: 46px; border-radius: var(--radius-md);
+        border: 1.5px dashed color-mix(in oklch, var(--dot) 50%, transparent);
+        background: color-mix(in oklch, var(--dot) 6%, transparent);
+        animation: ui-fade-in var(--dur-1) var(--ease-out);
+      }
+      .top { display: flex; align-items: flex-start; gap: 6px; }
+      .status { display: inline-grid; place-items: center; width: 16px; height: 16px; margin-top: 1px; flex: none; color: var(--muted-foreground); }
+      .status.run { color: var(--brand); }
+      .status.wait { color: var(--warning); }
+      .status.err { color: var(--destructive); }
+      .status svg { width: 14px; height: 14px; }
+      .title { flex: 1; min-width: 0; font-weight: 600; font-size: 12.5px; line-height: 1.45; word-break: break-word; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+      .mark.card-mark { width: 7px; height: 7px; margin-top: 5px; border-radius: 50%; background: var(--warning); flex: none; box-shadow: 0 0 0 3px color-mix(in oklch, var(--warning) 22%, transparent); }
+      .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 6px; color: var(--muted-foreground); font-size: 11px; }
+      .meta .proj { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .note {
+        margin: 6px 0 0; color: var(--muted-foreground); font-size: 12px; line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+        display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; cursor: text;
+      }
+      .note:hover { color: var(--foreground); }
+      .note-edit { margin-top: 6px; }
+      .note-edit textarea { display: block; width: 100%; min-height: 52px; max-height: 160px; font-size: 12px; }
+      .note-edit .row { display: flex; justify-content: flex-end; gap: 4px; margin-top: 4px; }
+      .ops {
+        position: absolute; top: 4px; right: 4px; display: flex; gap: 1px; padding: 1px; opacity: 0;
+        border-radius: var(--radius-md); background: var(--card);
+        translate: 0 -2px; transition: opacity var(--dur-1) var(--ease-out), translate var(--dur-2) var(--ease-out);
+      }
+      .card:hover .ops, .card .ops:focus-within { opacity: 1; translate: 0 0; }
+      .card.unseen .ops { background: color-mix(in oklch, var(--warning) 16%, var(--card)); }
+      .ui-btn.danger:hover { color: var(--destructive); }
+
+      .col-empty { padding: 14px 8px 8px; gap: 4px; font-size: 11.5px; }
+      .col-empty svg { width: 20px; height: 20px; }
+      .col.over .col-empty { display: none; }
+      .new-col {
+        display: flex; align-items: center; gap: 6px; padding: 6px 10px 6px 8px; border-radius: var(--radius-lg);
+        border: 1px dashed color-mix(in oklch, var(--foreground) 18%, transparent); color: var(--muted-foreground);
+        transition: border-color var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out);
+      }
+      .new-col:focus-within { border-style: solid; border-color: var(--ring); color: var(--foreground); box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 22%, transparent); }
+      .new-col input { min-height: 28px; border: 0; box-shadow: none; background: transparent; }
+      .new-col input:focus, .new-col input:focus-visible { box-shadow: none; }
+      .new-col > svg { flex: none; }
+      @media (prefers-reduced-motion: reduce) {
+        .status.run .ui-spin { animation: none; }
+        .card.settle { animation: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="bar">
+        <h1>会话看板</h1>
+        <span class="stat" id="stat"></span>
+        <button id="create" class="ui-btn ui-btn--primary ui-btn--sm" type="button">新建会话</button>
+        <button id="clear" class="ui-btn ui-btn--sm" type="button" hidden>清除已结束</button>
+        <button id="settings" class="ui-btn ui-btn--icon ui-btn--sm" type="button" data-tip="显示和归列" aria-label="显示和归列"></button>
+      </div>
+      <div class="tools">
+        <input id="query" class="ui-input query" placeholder="筛选标题、备注或项目" aria-label="筛选会话" />
+        <select id="project" class="ui-input" aria-label="按项目筛选"></select>
+      </div>
+      <div class="seg-row"><div id="segs" class="ui-seg" role="group" aria-label="筛选"></div></div>
+    </header>
+    <div id="toasts" class="toasts"></div>
+    <div id="board" class="board"></div>
+    <script src="enso-ui.js"></script>
+    <script>
+      const DOT = { backlog: '#71717a', doing: '#3b82f6', waiting: '#f59e0b', done: '#10b981' };
+      const PALETTE = ['#71717a', '#3b82f6', '#f59e0b', '#10b981', '#8b5cf6', '#ef4444', '#06b6d4', '#ec4899'];
+      const FILTERS = [
+        ['all', '全部'],
+        ['unseen', '未读'],
+        ['active', '进行中'],
+        ['needs', '等你处理'],
+        ['closed', '已结束'],
+      ];
+      const STATE_LABEL = { running: '进行中', waiting: '等你处理', error: '出错', idle: '空闲' };
+      const STATE_TIP = {
+        running: '进行中。含本会话的 coworker 和子会话',
+        waiting: '等你处理。有提问或审批，含 coworker',
+        error: '出错。主会话上一轮失败',
+        idle: '空闲',
+      };
+      const ICON = {
+        plus: '<path d="M12 5v14M5 12h14"/>',
+        trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/>',
+        left: '<path d="M15 6l-6 6 6 6"/>',
+        right: '<path d="M9 6l6 6-6 6"/>',
+        chevron: '<path d="M6 9l6 6 6-6"/>',
+        pencil: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4z"/>',
+        pin: '<path d="M12 17v5"/><path d="M9 10.5 7 17h10l-2-6.5"/><path d="M8 10h8l-1-5H9z"/>',
+        columns: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18"/>',
+        gear: '<circle cx="12" cy="12" r="3"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"/>',
+        inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+        hourglass: '<path d="M6 4h12M6 20h12"/><path d="M7 4c0 5 5 6 5 8s-5 3-5 8M17 4c0 5-5 6-5 8s5 3 5 8"/>',
+        alert: '<path d="M12 9v4M12 17h.01"/><path d="M10.3 4.8 2.8 18a2 2 0 0 0 1.7 3h15a2 2 0 0 0 1.7-3L13.7 4.8a2 2 0 0 0-3.4 0z"/>',
+        check: '<circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',
+        circle: '<circle cx="12" cy="12" r="8"/>',
+        off: '<circle cx="12" cy="12" r="9"/><path d="m5 5 14 14"/>',
+        spin: '<path d="M21 12a9 9 0 1 1-6.2-8.6"/>',
+      };
+      const UI_KEY = 'enso.chatboard.ui';
+      const uiDefault = { project: '', filter: 'all', showProject: true, showNote: true, showTime: true, hideIdleArchived: true, hideClosed: true };
+
+      const $ = (id) => document.getElementById(id);
+      const svg = (name, extra = '') => `<svg class="${extra}" viewBox="0 0 24 24">${ICON[name]}</svg>`;
+      const h = (tag, props = {}, ...kids) => {
+        const node = document.createElement(tag);
+        for (const [k, v] of Object.entries(props)) {
+          if (v == null || v === false) continue;
+          if (k === 'html') node.innerHTML = v;
+          else if (k === 'class') node.className = v;
+          else if (k.startsWith('on') && typeof v === 'function') node[k] = v;
+          else if (k === 'value' || k === 'checked') node[k] = v;
+          else node.setAttribute(k, v === true ? '' : v);
+        }
+        node.append(...kids.flat().filter((kid) => kid != null && kid !== false));
+        return node;
+      };
+      const iconBtn = (name, title, onclick, extra = '') =>
+        h('button', { type: 'button', class: `ui-btn ui-btn--icon ui-btn--sm ${extra}`, 'data-tip': title, 'aria-label': title, 'data-fill': '', html: svg(name), onclick });
+
+      $('settings').innerHTML = svg('gear');
+      ensoUI.tooltip();
+
+      let model = null;
+      let editing = null;
+      let drag = null;
+      let menu = null;
+      let seen = null;
+      let dropped = null;
+      let suppressClick = false;
+      let lastError = '';
+      let projectKey = '';
+      let fingerprint = '';
+      const ui = loadUi();
+
+      function loadUi() {
+        try {
+          const parsed = JSON.parse(localStorage.getItem(UI_KEY) || '{}');
+          const next = { ...uiDefault };
+          for (const key of Object.keys(uiDefault)) if (key in parsed) next[key] = parsed[key];
+          if (!FILTERS.some(([id]) => id === next.filter)) next.filter = 'all';
+          next.query = '';
+          return next;
+        } catch {
+          return { ...uiDefault, query: '' };
+        }
+      }
+      function saveUi() {
+        try {
+          const { query, ...rest } = ui;
+          localStorage.setItem(UI_KEY, JSON.stringify(rest));
+        } catch {}
+      }
+
+      function toast(message, kind = '') {
+        const node = h('div', { class: `toast ui-enter ${kind}` }, message);
+        $('toasts').append(node);
+        setTimeout(() => ensoUI.leave(node), kind === 'error' ? 4200 : 2000);
+      }
+      function busy() {
+        if (editing || drag || document.querySelector('.mask')) return true;
+        const el = document.activeElement;
+        return !!el && el.matches('input, textarea') && !!el.closest('#board');
+      }
+      async function run(method, args) {
+        try {
+          return await window.enso.call(method, args);
+        } catch (error) {
+          toast(error?.message || '操作失败', 'error');
+          return null;
+        }
+      }
+      function apply(next) {
+        if (!next) return;
+        const key = JSON.stringify(next);
+        const changed = key !== fingerprint;
+        fingerprint = key;
+        model = next;
+        renderChrome();
+        if (changed) renderBoard();
+      }
+
+      function ask(title, message, okText, trigger) {
+        return new Promise((resolve) => {
+          let closed = false;
+          const done = (value) => {
+            if (closed) return;
+            closed = true;
+            document.removeEventListener('keydown', onKey, true);
+            mask.setAttribute('data-leaving', '');
+            ensoUI.close(modal, value ? 'confirm' : undefined).then(() => mask.remove());
+            resolve(value);
+          };
+          const onKey = (event) => {
+            if (event.key === 'Escape') { event.stopPropagation(); done(false); }
+            if (event.key === 'Enter') { event.preventDefault(); done(true); }
+          };
+          const ok = h('button', { type: 'button', class: 'ui-btn btn-danger', onclick: () => done(true) }, okText);
+          const modal = h('div', { class: 'modal ui-card ui-pop' }, h('h2', {}, title), h('p', {}, message),
+            h('div', { class: 'actions' }, h('button', { type: 'button', class: 'ui-btn ui-btn--outline', onclick: () => done(false) }, '取消'), ok));
+          const mask = h('div', { class: 'mask ui-overlay', onmousedown: (event) => event.target === mask && done(false) }, modal);
+          document.body.append(mask);
+          ensoUI.pop(modal, trigger);
+          document.addEventListener('keydown', onKey, true);
+          ok.focus();
+        });
+      }
+
+      function closeMenu() {
+        if (!menu) return;
+        const node = menu;
+        menu = null;
+        ensoUI.close(node);
+      }
+      document.addEventListener('mousedown', (event) => {
+        if (menu && !menu.contains(event.target) && !event.target.closest('#settings')) closeMenu();
+      });
+      document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeMenu(); });
+
+      function openSettings(anchor) {
+        if (menu) return closeMenu();
+        const row = (title, hint, checked, onchange) => {
+          const input = h('input', { type: 'checkbox', class: 'ui-switch', checked });
+          input.setAttribute('aria-label', title);
+          input.onchange = onchange;
+          return h('label', { class: 'opt' }, h('span', {}, h('b', {}, title), hint ? h('small', {}, hint) : false), input);
+        };
+        const local = (key) => (event) => {
+          ui[key] = event.target.checked;
+          saveUi();
+          renderBoard();
+        };
+        const pref = (key) => async (event) => {
+          const value = event.target.checked;
+          const next = await run('prefs', {
+            followState: key === 'followState' ? value : model?.followState !== false,
+            moveOnStart: key === 'moveOnStart' ? value : model?.moveOnStart !== false,
+          });
+          if (!next) event.target.checked = !value;
+          else apply(next);
+        };
+        menu = h('div', { class: 'menu ui-card ui-pop', role: 'dialog', 'aria-label': '显示和归列' },
+          row('跟随状态归列', '没固定的卡片，按运行、等待和归档换列', model?.followState !== false, pref('followState')),
+          row('开始运行就离开待处理', '待处理里刚开始跑的会话，移到进行中', model?.moveOnStart !== false, pref('moveOnStart')),
+          row('显示项目', '', ui.showProject !== false, local('showProject')),
+          row('显示备注', '', ui.showNote !== false, local('showNote')),
+          row('显示时间', '', ui.showTime !== false, local('showTime')),
+          row('隐藏空闲的已归档', '还在等你或未读的仍会留下', ui.hideIdleArchived !== false, local('hideIdleArchived')),
+          row('隐藏已结束', '用「已结束」筛选可以再看', ui.hideClosed !== false, local('hideClosed')));
+        document.body.append(menu);
+        const rect = anchor.getBoundingClientRect();
+        const width = menu.offsetWidth;
+        const height = menu.offsetHeight;
+        menu.style.left = `${Math.max(8, Math.min(rect.right - width, document.documentElement.clientWidth - width - 8))}px`;
+        menu.style.top = `${rect.bottom + height + 8 > document.documentElement.clientHeight ? Math.max(8, rect.top - height - 6) : rect.bottom + 6}px`;
+        ensoUI.pop(menu, anchor);
+      }
+
+      function openCreate(anchor) {
+        let closed = false;
+        const done = () => {
+          if (closed) return;
+          closed = true;
+          document.removeEventListener('keydown', onKey, true);
+          ensoUI.close(modal).then(() => mask.remove());
+        };
+        const onKey = (event) => { if (event.key === 'Escape') { event.stopPropagation(); done(); } };
+        const text = h('textarea', { class: 'ui-input', placeholder: '可选：预填到新会话的输入框，由你确认后再发送' });
+        const ok = h('button', { type: 'button', class: 'ui-btn ui-btn--sm ui-btn--primary', onclick: async () => {
+          ok.disabled = true;
+          const next = await run('create', { text: text.value });
+          ok.disabled = false;
+          if (!next) return;
+          done();
+          apply(next);
+          toast('已新建会话');
+        } }, '新建');
+        const modal = h('div', { class: 'modal ui-card ui-pop' },
+          h('h2', {}, '新建会话'),
+          h('p', {}, '开在当前项目里，并切过去。'),
+          text,
+          h('div', { class: 'actions' }, h('button', { type: 'button', class: 'ui-btn ui-btn--outline ui-btn--sm', onclick: done }, '取消'), ok));
+        const mask = h('div', { class: 'mask ui-overlay', onmousedown: (event) => event.target === mask && done() }, modal);
+        document.body.append(mask);
+        ensoUI.pop(modal, anchor);
+        document.addEventListener('keydown', onKey, true);
+        text.focus();
+      }
+
+      function stateOf(card) {
+        if (card.closed) return 'closed';
+        return card.state || 'idle';
+      }
+      function stateTip(card) {
+        if (card.closed) return '会话已结束或已删除，备注还留在这里';
+        return STATE_TIP[card.state] || STATE_TIP.idle;
+      }
+      function statusIcon(card) {
+        if (card.closed) return svg('off');
+        if (card.state === 'running') return svg('spin', 'ui-spin');
+        if (card.state === 'waiting') return svg('hourglass');
+        if (card.state === 'error') return svg('alert');
+        if (card.archived || card.column === 'done') return svg('check');
+        return svg('circle');
+      }
+      function statusClass(card) {
+        if (card.closed) return 'off';
+        if (card.state === 'running') return 'run';
+        if (card.state === 'waiting') return 'wait';
+        if (card.state === 'error') return 'err';
+        return 'idle';
+      }
+      const ago = (t) => {
+        if (!t) return '';
+        const s = (Date.now() - t) / 1000;
+        if (s < 0) return '刚刚';
+        if (s < 60) return '刚刚';
+        if (s < 3600) return `${Math.floor(s / 60)} 分钟前`;
+        if (s < 86400) return `${Math.floor(s / 3600)} 小时前`;
+        return new Date(t).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
+      };
+      function haystack(card) {
+        return [card.title, card.note, card.projectName, card.id, STATE_LABEL[card.state] || '', card.closed ? '已结束' : '', card.archived ? '已归档' : '', card.unseenAt ? '未读' : '']
+          .join('\n')
+          .toLowerCase();
+      }
+      function visible(card) {
+        if (ui.project && card.projectId !== ui.project) return false;
+        const q = String(ui.query || '').trim().toLowerCase();
+        if (q && !haystack(card).includes(q)) return false;
+        if (ui.filter === 'unseen') return !!card.unseenAt;
+        if (ui.filter === 'active') return !card.closed && card.state === 'running';
+        if (ui.filter === 'needs') return !card.closed && (card.state === 'waiting' || card.state === 'error');
+        if (ui.filter === 'closed') return !!card.closed;
+        if (card.closed && ui.hideClosed !== false) return false;
+        if (ui.hideIdleArchived !== false && card.archived && !card.closed && card.state === 'idle' && !card.unseenAt && !card.current) return false;
+        return true;
+      }
+
+      function projectsOf() {
+        const map = new Map();
+        for (const card of model?.cards ?? []) {
+          if (!card.projectId) continue;
+          if (!map.has(card.projectId)) map.set(card.projectId, card.projectName || card.projectId);
+        }
+        return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1], 'zh'));
+      }
+
+      function renderChrome() {
+        const cards = model?.cards ?? [];
+        const unread = cards.filter((card) => card.unseenAt).length;
+        const closed = cards.filter((card) => card.closed).length;
+        const open = cards.length - closed;
+        ensoUI.swap($('stat'), model ? (unread ? `未读 ${unread}` : `${open} 个会话`) : '');
+        if (unread) $('stat').dataset.tip = '有会话停下来时你不在里面';
+        else delete $('stat').dataset.tip;
+        $('clear').hidden = closed === 0;
+        for (const [id, label] of FILTERS) {
+          const button = document.querySelector(`[data-filter="${id}"]`);
+          if (!button) continue;
+          const n = id === 'unseen' ? unread : id === 'closed' ? closed : 0;
+          button.textContent = n ? `${label} ${n}` : label;
+          button.setAttribute('aria-pressed', ui.filter === id ? 'true' : 'false');
+        }
+        const projects = projectsOf();
+        const key = projects.map(([id, name]) => `${id}:${name}`).join('|');
+        if (key !== projectKey) {
+          projectKey = key;
+          const select = $('project');
+          const current = ui.project;
+          select.replaceChildren(h('option', { value: '' }, '全部项目'), ...projects.map(([id, name]) => h('option', { value: id }, name)));
+          select.value = projects.some(([id]) => id === current) ? current : '';
+          if (select.value !== ui.project) { ui.project = select.value; saveUi(); }
+        }
+        requestAnimationFrame(() => ensoUI.seg($('segs')));
+      }
+
+      function noteEditor(card) {
+        const area = h('textarea', { class: 'ui-input', maxlength: '2000', value: card.note || '', placeholder: '写一句备注，方便下次接着看' });
+        let skip = false;
+        const finish = async (save) => {
+          if (skip) return;
+          skip = true;
+          editing = null;
+          if (!save || area.value === (card.note || '')) { renderBoard(); return; }
+          const next = await run('note', { id: card.id, note: area.value });
+          if (next) apply(next);
+          else renderBoard();
+        };
+        area.onkeydown = (event) => {
+          if (event.key === 'Escape') { event.stopPropagation(); finish(false); }
+          else if (event.key === 'Enter' && !event.isComposing && !event.shiftKey) { event.preventDefault(); finish(true); }
+        };
+        area.addEventListener('blur', () => setTimeout(() => { if (!skip) finish(true); }, 0));
+        const cancel = h('button', { type: 'button', class: 'ui-btn ui-btn--sm', onmousedown: (event) => event.preventDefault(), onclick: () => finish(false) }, '取消');
+        const save = h('button', { type: 'button', class: 'ui-btn ui-btn--sm ui-btn--primary', onmousedown: (event) => event.preventDefault(), onclick: () => finish(true) }, '保存');
+        requestAnimationFrame(() => { area.focus(); area.setSelectionRange(area.value.length, area.value.length); });
+        return h('div', { class: 'note-edit', onclick: (event) => event.stopPropagation() }, area, h('div', { class: 'row' }, cancel, save));
+      }
+
+      function cardEl(card, column) {
+        if (editing?.note === card.id) {
+          return h('article', { class: 'card', 'data-id': card.id },
+            h('div', { class: 'top' }, h('span', { class: `status ${statusClass(card)}`, html: statusIcon(card) }), h('div', { class: 'title' }, card.title || '未命名会话')),
+            noteEditor(card));
+        }
+        const unseen = !!card.unseenAt;
+        const enter = seen && !seen.has(card.id) ? 'ui-enter' : '';
+        const node = h('article', {
+          class: `card ${enter} ${unseen ? 'unseen' : ''} ${card.current ? 'current' : ''} ${card.closed ? 'closed' : ''} ${dropped === card.id ? 'settle' : ''}`,
+          draggable: 'true',
+          'data-id': card.id,
+        },
+          h('div', { class: 'top' },
+            h('span', { class: `status ${statusClass(card)}`, 'data-tip': stateTip(card), html: statusIcon(card) }),
+            h('div', { class: 'title', 'data-tip': card.title || '未命名会话' }, card.title || '未命名会话'),
+            unseen && h('i', { class: 'mark card-mark', 'data-tip': '还没看过。点开，或它再次开始运行后消失' })),
+          h('div', { class: 'meta' },
+            ui.showProject !== false && card.projectName && h('span', { class: 'proj', 'data-tip': card.projectName }, card.projectName),
+            ui.showTime !== false && card.updatedAt && h('span', { 'data-tip': new Date(card.updatedAt).toLocaleString('zh-CN') }, ago(card.updatedAt)),
+            card.manual && h('span', { class: 'ui-badge', 'data-tip': '已固定在此列，不跟随状态' }, '固定'),
+            card.archived && !card.closed && h('span', { class: 'ui-badge' }, '已归档'),
+            card.closed && h('span', { class: 'ui-badge' }, '已结束'),
+            card.current && h('span', { class: 'ui-badge ui-badge--brand' }, '当前')),
+          ui.showNote !== false && card.note && h('p', { class: 'note', 'data-tip': '点击编辑备注', onclick: (event) => { event.stopPropagation(); editing = { note: card.id }; renderBoard(); } }, card.note),
+          h('div', { class: 'ops' },
+            iconBtn('pencil', card.note ? '编辑备注' : '写备注', (event) => {
+              event.stopPropagation();
+              editing = { note: card.id };
+              renderBoard();
+            }),
+            card.manual && iconBtn('pin', '取消固定，重新跟随状态', async (event) => {
+              event.stopPropagation();
+              const next = await run('unpin', { id: card.id });
+              if (next) apply(next);
+            }),
+            card.closed && iconBtn('trash', '移除这张已结束的卡片', async (event) => {
+              event.stopPropagation();
+              if (!(await ask('移除卡片', `「${card.title || '未命名会话'}」的备注会一起删掉。`, '移除', event.currentTarget))) return;
+              const [next] = await Promise.all([run('remove', { id: card.id }), ensoUI.leave(node)]);
+              if (next) apply(next);
+              else renderBoard();
+            }, 'danger')));
+        ensoUI.fill(node.querySelector('.ops'));
+        node.onclick = (event) => {
+          if (suppressClick || event.target.closest('button, textarea, input, a, label')) return;
+          if (card.closed) { toast('这个会话已经结束，不能打开'); return; }
+          run('focus', { sessionId: card.id }).then((next) => next && !busy() && apply(next));
+        };
+        node.ondragstart = (event) => {
+          if (event.target.closest('button, textarea, input, a, label')) { event.preventDefault(); return; }
+          drag = { id: card.id, before: null };
+          event.dataTransfer.effectAllowed = 'move';
+          event.dataTransfer.setData('text/plain', card.id);
+          node.classList.add('lift');
+          requestAnimationFrame(() => { node.classList.remove('lift'); node.classList.add('dragging'); });
+        };
+        node.ondragend = () => {
+          suppressClick = true;
+          setTimeout(() => { suppressClick = false; }, 0);
+          drag = null;
+          renderBoard();
+        };
+        return node;
+      }
+
+      function columnName(column) {
+        if (editing?.rename !== column.id) {
+          return h('span', { class: 'name', 'data-tip': '点击改名', 'data-fill': '', onclick: () => { editing = { rename: column.id }; renderBoard(); } }, column.name);
+        }
+        const input = h('input', { class: 'name', value: column.name, 'aria-label': '列名' });
+        let done = false;
+        const finish = async (save) => {
+          if (done) return;
+          done = true;
+          editing = null;
+          const value = input.value.trim();
+          if (save && value && value !== column.name) {
+            const next = await run('column', { action: 'rename', id: column.id, name: value });
+            if (next) apply(next);
+            else renderBoard();
+          } else renderBoard();
+        };
+        input.onkeydown = (event) => {
+          if (event.key === 'Enter' && !event.isComposing) finish(true);
+          if (event.key === 'Escape') finish(false);
+        };
+        input.onblur = () => finish(true);
+        requestAnimationFrame(() => { input.focus(); input.select(); });
+        return input;
+      }
+
+      function columnEl(column, index) {
+        const all = model.cards.filter((card) => card.column === column.id).sort((a, b) => a.order - b.order || (a.id < b.id ? -1 : 1));
+        const cards = all.filter(visible);
+        const unseen = cards.some((card) => card.unseenAt);
+        const folded = column.collapsed === true;
+        const dot = DOT[column.id] || PALETTE[index % PALETTE.length];
+        const toggle = () => run('column', { action: 'collapse', id: column.id, collapsed: !folded }).then((next) => next && apply(next));
+        const move = (to) => run('column', { action: 'move', id: column.id, index: to }).then((next) => next && apply(next));
+        const emptyText = all.length && !cards.length ? '没有符合筛选的会话' : '暂无会话';
+        const list = h('div', { class: 'cards' }, ...cards.map((card) => cardEl(card, column)),
+          !cards.length && h('div', { class: 'ui-empty col-empty', html: svg('inbox') }, emptyText));
+        const col = h('section', { class: `col ${folded ? 'folded' : ''}`, style: `--dot:${dot}` },
+          h('div', { class: 'col-head' },
+            iconBtn('chevron', folded ? '展开' : '折叠', toggle, 'collapse'),
+            h('span', { class: 'dot' }),
+            columnName(column),
+            unseen && h('i', { class: 'mark', 'data-tip': '这一列有还没看的会话' }),
+            h('span', { class: 'count' }, String(cards.length)),
+            h('span', { class: 'spacer' }),
+            h('span', { class: 'tools' },
+              index > 0 && iconBtn('left', '前移', () => move(index - 1)),
+              index < model.columns.length - 1 && iconBtn('right', '后移', () => move(index + 1)),
+              iconBtn('trash', '删除列', async (event) => {
+                const neighbor = model.columns[index - 1] || model.columns[index + 1];
+                const hint = all.length && neighbor ? `里面 ${all.length} 张卡片会移到「${neighbor.name}」。` : '这一列是空的。';
+                if (!(await ask('删除列', `删除「${column.name}」？${hint}`, '删除', event.currentTarget))) return;
+                const next = await run('column', { action: 'delete', id: column.id });
+                if (next) apply(next);
+              }, 'danger'))),
+          list);
+        ensoUI.fill(col.querySelector('.col-head'));
+
+        const placeholder = h('div', { class: 'placeholder' });
+        const beforeOf = (y) => [...list.querySelectorAll('.card[data-id]')].find((item) => {
+          if (item.dataset.id === drag?.id) return false;
+          const rect = item.getBoundingClientRect();
+          return y < rect.top + rect.height / 2;
+        });
+        col.ondragover = (event) => {
+          if (!drag) return;
+          event.preventDefault();
+          document.querySelectorAll('.col.over').forEach((item) => item !== col && item.classList.remove('over'));
+          document.querySelectorAll('.placeholder').forEach((item) => item !== placeholder && item.remove());
+          col.classList.add('over');
+          if (folded) { drag.before = null; return; }
+          const before = beforeOf(event.clientY);
+          if (before) list.insertBefore(placeholder, before);
+          else list.append(placeholder);
+          drag.before = before?.dataset.id ?? null;
+        };
+        col.ondragleave = (event) => {
+          if (col.contains(event.relatedTarget)) return;
+          col.classList.remove('over');
+          placeholder.remove();
+        };
+        col.ondrop = async (event) => {
+          event.preventDefault();
+          if (!drag) return;
+          const { id, before } = drag;
+          drag = null;
+          const next = await run('move', { id, column: column.id, beforeId: before || undefined });
+          dropped = id;
+          if (next) apply(next);
+          else renderBoard();
+        };
+        return col;
+      }
+
+      function newColumnEl() {
+        const input = h('input', { class: 'ui-input', placeholder: '新建列…', 'aria-label': '新建列' });
+        const add = async () => {
+          const name = input.value.trim();
+          if (!name) return;
+          input.value = '';
+          const next = await run('column', { action: 'add', name });
+          if (next) apply(next);
+          requestAnimationFrame(() => document.querySelector('.new-col input')?.focus());
+        };
+        input.onkeydown = (event) => {
+          if (event.key === 'Enter' && !event.isComposing) add();
+          if (event.key === 'Escape') input.blur();
+        };
+        return h('div', { class: 'new-col', html: svg('columns') }, input);
+      }
+
+      function renderBoard() {
+        if (!model) {
+          $('board').replaceChildren(h('div', { class: 'ui-empty', html: svg('columns') }, '正在读取各个项目的会话…'));
+          return;
+        }
+        const first = seen === null;
+        $('board').replaceChildren(...model.columns.map(columnEl), newColumnEl());
+        $('board').classList.toggle('ui-stagger', first);
+        if (first) ensoUI.stagger($('board'));
+        seen = new Set(model.cards.map((card) => card.id));
+        dropped = null;
+      }
+
+      function bootFilters() {
+        $('segs').replaceChildren(...FILTERS.map(([id, label]) =>
+          h('button', { type: 'button', 'data-filter': id, 'aria-pressed': ui.filter === id ? 'true' : 'false', onclick: () => {
+            ui.filter = id;
+            saveUi();
+            renderChrome();
+            renderBoard();
+          } }, label)));
+        $('query').value = '';
+        $('query').oninput = () => { ui.query = $('query').value; renderBoard(); };
+        $('project').onchange = () => { ui.project = $('project').value; saveUi(); renderBoard(); };
+        $('settings').onclick = () => openSettings($('settings'));
+        $('create').onclick = () => openCreate($('create'));
+        $('clear').onclick = async (event) => {
+          const n = (model?.cards ?? []).filter((card) => card.closed).length;
+          if (!n) return;
+          if (!(await ask('清除已结束', `移除 ${n} 张已结束会话的卡片？备注会一起删掉。`, '清除', event.currentTarget))) return;
+          const next = await run('clearClosed');
+          if (next) apply(next);
+        };
+        window.addEventListener('resize', () => ensoUI.seg($('segs')));
+        renderChrome();
+      }
+
+      bootFilters();
+      renderBoard();
+
+      async function poll() {
+        if (!busy() && window.enso?.call) {
+          try {
+            const next = await window.enso.call('sync');
+            lastError = '';
+            if (next && !busy()) apply(next);
+          } catch (error) {
+            const message = error?.message || '读取会话失败';
+            if (message !== lastError) toast(message, 'error');
+            lastError = message;
+          }
+        }
+        setTimeout(poll, 2500);
+      }
+      poll();
+      setInterval(() => { if (model && !busy()) renderBoard(); }, 60000);
+    </script>
+  </body>
+</html>
