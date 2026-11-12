@@ -18,6 +18,7 @@ export type Plugin = {
   tags: string[];
   homepage?: string;
   icon?: string;
+  category?: string;
   readme?: { path: string; sha256: string; size: number };
   latest: string;
   versions: Version[];
@@ -31,6 +32,25 @@ export type MarketIndex = {
 };
 
 type State = { status: 'loading' } | { status: 'error' } | { status: 'ready'; index: MarketIndex };
+
+/** 与 EnsoCode 的 MARKET_CATEGORIES 同序同名；不在其中的归「其他」 */
+export const CATEGORY_LABELS = {
+  themes: '主题外观',
+  agent: 'Agent 能力',
+  productivity: '效率工作流',
+  integrations: '外部集成',
+  insights: '观测统计',
+  writing: '写作翻译',
+  fun: '休闲娱乐',
+  other: '其他',
+} as const;
+export type Category = keyof typeof CATEGORY_LABELS;
+export const CATEGORIES = Object.keys(CATEGORY_LABELS) as Category[];
+
+export function categoryOf(plugin: Plugin): Category {
+  const c = plugin.category;
+  return c && c !== 'other' && c in CATEGORY_LABELS ? (c as Category) : 'other';
+}
 
 export function useMarketIndex() {
   const [state, setState] = useState<State>({ status: 'loading' });
