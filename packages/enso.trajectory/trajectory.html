@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="enso-ui.css" />
+    <style>
+      :root {
+        --lane-input: oklch(0.646 0.222 41.116);
+        --lane-model: oklch(0.546 0.245 262.881);
+        --lane-tool: oklch(0.681 0.162 75.834);
+        --lane-agent: oklch(0.541 0.281 293.009);
+      }
+      :root[data-theme='dark'] {
+        --lane-input: oklch(0.837 0.128 66.29);
+        --lane-model: oklch(0.809 0.105 251.813);
+        --lane-tool: oklch(0.905 0.182 98.111);
+        --lane-agent: oklch(0.811 0.111 293.571);
+      }
+      body { padding: 10px; font-size: 12px; font-variant-numeric: tabular-nums; }
+      .card { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+      .top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      .top select { flex: 1 1 140px; min-width: 0; }
+      .top h1 { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: -0.02em; }
+      .top .grow { flex: 1; }
+      select.ui-input { height: 28px; padding: 0 8px; font-size: 12px; max-width: 100%; }
+      .sub { color: var(--muted-foreground); font-size: 11px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .lanes { display: flex; flex-direction: column; gap: 4px; }
+      .lane { display: grid; grid-template-columns: 28px 1fr; gap: 6px; align-items: center; }
+      .lane b { font-size: 10px; font-weight: 600; color: var(--muted-foreground); }
+      .track { position: relative; height: 8px; border-radius: 999px; background: var(--muted); overflow: hidden; }
+      .track i { position: absolute; top: 0; bottom: 0; border-radius: 999px; background: var(--c); min-width: 2px; opacity: 0.92; }
+      .track i.agent { background: var(--lane-agent); }
+      .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; border-radius: var(--radius-md); overflow: hidden; background: var(--border); border: 1px solid var(--border); }
+      .stat { display: flex; flex-direction: column; gap: 1px; padding: 6px 8px; background: var(--card); min-width: 0; }
+      .stat span { color: var(--muted-foreground); font-size: 10.5px; }
+      .stat b { font-size: 14px; font-weight: 600; letter-spacing: -0.02em; }
+      .tokens { color: var(--muted-foreground); font-size: 11px; }
+      .filters { display: flex; gap: 6px; align-items: center; }
+      .filters .ui-input { flex: 1; height: 28px; font-size: 12px; }
+      .filters .ui-seg { flex: none; }
+      .list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+      .turn { display: flex; flex-direction: column; gap: 1px; }
+      .row { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; padding: 4px 6px; border-radius: var(--radius-sm); cursor: pointer; }
+      .row:hover { background: var(--hover); }
+      .row.open { background: var(--muted); }
+      .kind { font-size: 10.5px; font-weight: 700; letter-spacing: 0.02em; color: var(--c, var(--muted-foreground)); }
+      .kind.user { --c: var(--lane-input); }
+      .kind.model { --c: var(--lane-model); }
+      .kind.tool { --c: var(--lane-tool); }
+      .kind.agent { --c: var(--lane-agent); }
+      .kind.compact { --c: var(--muted-foreground); }
+      .main { min-width: 0; }
+      .main .title { font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .main .preview { color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .row.user .main .title { font-weight: 600; }
+      .dur { color: var(--muted-foreground); font-family: var(--font-mono); font-size: 11px; white-space: nowrap; }
+      .dur.pending { color: var(--lane-model); }
+      .row.error .dur, .row.error .kind { color: var(--destructive); }
+      .detail { margin: 0 0 4px 58px; padding: 8px 10px; border-radius: var(--radius-md); background: var(--muted); display: flex; flex-direction: column; gap: 6px; }
+      .detail[hidden] { display: none; }
+      .detail h3 { margin: 0; font-size: 11px; color: var(--muted-foreground); font-weight: 600; }
+      .detail pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: var(--font-mono); font-size: 11px; line-height: 1.45; max-height: 220px; overflow: auto; }
+      .detail .err { color: var(--destructive); }
+      .child { border-top: 1px solid var(--border); padding-top: 6px; display: flex; flex-direction: column; gap: 3px; }
+      .child .mini { color: var(--muted-foreground); }
+      .note { color: var(--muted-foreground); font-size: 11px; }
+      .items { display: flex; flex-direction: column; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script src="enso-ui.js"></script>
+    <script src="trajectory.js"></script>
+  </body>
+</html>
