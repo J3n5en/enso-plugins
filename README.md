@@ -32,8 +32,11 @@ EnsoCode 官方插件市场的源仓库 · [浏览插件](https://enso-plugins.j
 | --- | --- | --- | --- | --- |
 | 爱丽丝的茶会 | `aierlanta.alicetheme` | 0.3.2 | 社区 | 爱丽丝的茶会主题：蓝白格纹配蕾丝，Alice 趴在输入框上，侧栏、待办和代码块各有茶会小摆件，随会话状态换表情。另有奶油黄配色的「爱丽丝的茶会 · 蜂蜜」，和带花园壁纸的「爱丽丝的茶会 · 花园」（深浅色和运行中、等待、出错各一张）。作者 Alice Aierlanta。 |
 | [BCE Prompt Enhance](https://github.com/linqiu919/dsh-bce) | `dsh.bce` | 0.1.5 | 社区 · [`linqiu919/dsh-bce`](https://github.com/linqiu919/dsh-bce) | Better Context Engine 提示词增强：增量索引项目，精准补全代码上下文，让提问更清楚、回答更准确。 |
+| [Agent Inbox](https://github.com/J3n5en/enso-plugins/tree/main/packages/enso.agentinbox) | `enso.agentinbox` | 0.1.0 | 官方 | 跨项目收件箱：把各会话里等你审批的工具调用、等你回答的提问，以及失败的主会话收成按项目分组的列表，带未读数，点击切回当前项目的会话。 |
+| Beads | `enso.beads` | 0.1.0 | 官方 | 在侧栏查看当前项目的 Beads 任务：就绪、进行中、阻塞和已关闭，支持表格、依赖、评论、认领、关闭，以及把任务交给新会话。数据来自本地 bd 或 .beads，不需要云服务。 |
 | Session Bridge | `enso.bridge` | 1.0.2 | 官方 | 跨会话桥：同项目的多个会话可在侧栏群聊室中互相提问、委托与回传结论。 |
 | Bugbot Review | `enso.bugbot` | 0.1.0 | 官方 | 移植自 Cursor review-bugbot 与 Agent Review：本地 Git diff 组装（自动识别默认基准分支、剔除 linguist-generated 文件、合并 .cursor/BUGBOT.md 规则与最小改动行数门禁）、只读 bugbot 审查子代理、/review-bugbot 技能以及侧栏 Findings 面板与一键 Fix in Chat。 |
+| Chat Board | `enso.chatboard` | 0.1.0 | 官方 | 跨项目会话看板：每张卡片就是一个会话（状态含 coworker），可分列、标未读、写备注，点卡片切换到该会话。 |
 | Context Window | `enso.context` | 0.1.3 | 官方 | 侧栏里看当前会话的上下文窗口：各部分占多少、还剩多少、提示词缓存命中率。 |
 | Notes | `enso.example.notes` | 1.0.3 | 官方 | 侧栏里的便签：存在插件自己的数据目录，可一键插入输入框。 |
 | Sage Focus · 鼠尾草·专注（仅深色模式） | `enso.example.sagefocus` | 1.0.3 | 社区 | 仅在深色模式下生效，浅色模式沿用 Enso 默认配色。低饱和暖灰绿主题，不修改编辑器语法高亮或终端配色。 |
@@ -42,16 +45,23 @@ EnsoCode 官方插件市场的源仓库 · [浏览插件](https://enso-plugins.j
 | GitHub | `enso.github` | 0.2.1 | 官方 | 在侧栏查看、回复、关闭和重开当前项目的 GitHub issue 与 PR，也可查看 Actions 运行、失败原因与日志，并重跑或取消。会话里的 agent 也能调用。支持设备码登录，已登录的 gh CLI 可直接复用。 |
 | 红果短剧 | `enso.hongguo` | 0.2.14 | 社区 | 在侧栏里浏览、搜索并播放红果短剧（基于 openhongguo 匿名 SDK）。仅供学习研究。 |
 | Kanban | `enso.kanban` | 1.0.4 | 官方 | 项目看板：同一项目的所有会话共享，人和会话都能创建、编辑、拖动卡片。 |
+| Linear | `enso.linear` | 0.1.0 | 官方 | 在侧栏查看 Linear 议题：我的、当前周期、待办和分拣。按当前 git 分支高亮对应议题，可看状态、子议题、链接和评论，并在 Enso 会话里开始处理。用 Personal API Key，或用 PKCE 登录自建 OAuth 应用（不需要 Client Secret）。 |
 | 噜噜和噜妹 | `enso.lulu` | 0.1.0 | 官方 | 噜噜和噜妹主题：奶油橘底配焦糖棕，两人在侧栏并排，噜噜在输入框后探头，思考时托腮。 |
 | Monokai Pro | `enso.monokaipro` | 1.0.0 | 社区 | Monokai Pro 风格深浅双色主题：炭黑/暖白画布，粉强调色，偏精致专业。 |
 | 奶龙 | `enso.nailong` | 0.1.5 | 官方 | 奶龙主题：奶油黄配巧克力棕，奶龙在输入框后面探头、在侧栏躺平、思考时「在忙」。 |
 | 奶蛙 | `enso.naiwa` | 0.1.2 | 官方 | 奶蛙主题：荷叶绿配奶黄，奶蛙在输入框后面探头、在侧栏爬行、思考时托腮，干完活就捧腹大笑。 |
+| OpenSpec | `enso.openspec` | 0.1.0 | 官方 | 侧栏按阶段查看当前项目的 OpenSpec 变更：任务进度、下一步、工单，以及文档里能识别的 PR。实现和收尾会把提示发到对应的 Enso 会话。 |
 | [pstack](https://github.com/cursor/plugins/tree/main/pstack) | `enso.pstack` | 0.3.3 | 官方 | Lauren Tan 的 pstack 0.15.36（MIT）：poteto-mode 按任务挑选 playbook，配套 arena、interrogate、architect 等 58 个 skill 和工程原则，先深挖再并行。只在输入框选了「pstack」预设的会话里加载。在输入框按钮里为某个会话打开后，该会话的每条消息自动展开 poteto-mode。 |
 | Scheduler | `enso.scheduler` | 1.1.1 | 官方 | 定时任务：按 cron 到点向会话发送提示词或弹出系统通知，侧栏显示下次运行时间与倒计时。 |
 | 雷霆战机 | `enso.skyfighter` | 0.1.0 | 官方 | 侧栏里的纵向弹幕战役：三种战机、五关空域、四色武器和关间强化。离线可玩。 |
+| Spreadsheet | `enso.spreadsheet` | 0.1.0 | 官方 | 在文件面板里打开并编辑表格：网格、公式、插入删除行列，以及选区的计数、求和与平均。 |
+| SQLite | `enso.sqlite` | 0.1.0 | 官方 | 浏览和查询 SQLite 数据库：可排序、筛选的表格，SQL 查询，以及表、视图、索引和触发器的 CREATE 语句。只读。 |
+| 任务启动 | `enso.tasklauncher` | 0.1.0 | 官方 | 从当前项目的 GitHub issue 用可编辑的提示词启动 Enso 会话：列出 origin 的 issue，套用提示词模板，再新建会话并聚焦。可选在干净的工作区创建并切换分支。不创建 worktree，也不替代 GitHub 插件。 |
 | Telegram | `enso.telegram` | 0.3.1 | 官方 | 用 Telegram Bot 远程使用 EnsoCode 会话：配对后发消息即进入会话，执行进度原位更新，回复以富文本发回；支持图片、群聊绑定、成员白名单与群聊上下文、插话、远程停止和双向同步。 |
 | Telegram 客户端 | `enso.tgclient` | 0.4.0 | 官方 | 在侧栏里用手机号登录自己的 Telegram 账号，像官方客户端一样聊天：会话列表与聊天分组、论坛话题、实时收发、相册、边下边播视频、表情与贴纸面板、编辑、回复、表情回应、已读详情、切换发言身份、机器人按钮与键盘、新消息系统通知；附带 Agent 工具，可查聊天、读写消息、订阅新消息。支持 socks5 与 MTProxy 代理。 |
+| 会话轨迹 | `enso.trajectory` | 0.1.0 | 官方 | 查看当前会话的轨迹：每一轮的用户提示、模型请求、工具与子代理调用、token、缓存命中和耗时。 |
 | 双语对照翻译 | `enso.translate` | 0.1.2 | 官方 | 把思考过程和回复正文译成目标语言，原文下面紧跟译文。代码、链接、路径和公式保持原样。 |
+| Walkthrough | `enso.walkthrough` | 0.1.0 | 官方 | 把 Git diff、提交范围或当前会话的改动收成一步步的讲解：每步有标题、说明和对应代码，可以改文字，一次看一步。 |
 | [深海女仆工坊](https://github.com/Small-tailqwq/dsh-deep-whale) | `enso.whalemaid` | 0.1.1 | 官方 | 鲸鱼娘女仆主题：深海蓝配金色描边，水晶宫殿作背景，两位女仆站在对话两侧，输入框系着蝴蝶结。美术 CC BY-NC-SA 4.0，禁止商用。 |
 | [Astronaut 宇航员](https://github.com/mediocrebaby/Astronauts) | `space.astronaut` | 1.4.0 | 社区 · [`mediocrebaby/Astronauts`](https://github.com/mediocrebaby/Astronauts) | Lunar 月白：黑白宇航员与中性灰阶主题。 |
 | [YCE Prompt Enhance](https://github.com/xiamuwnagwang/enso-yce) | `yce.enhance` | 0.1.1 | 社区 · [`xiamuwnagwang/enso-yce`](https://github.com/xiamuwnagwang/enso-yce) | YCE 提示词增强：复用宿主已配置的 yce-mcp，在输入框一键将模糊草稿改写为清晰、结构化的提示词。 |

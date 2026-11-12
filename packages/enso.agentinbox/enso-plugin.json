@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "enso.agentinbox",
+  "name": "Agent Inbox",
+  "version": "0.1.0",
+  "icon": "icon.svg",
+  "description": "跨项目收件箱：把各会话里等你审批的工具调用、等你回答的提问，以及失败的主会话收成按项目分组的列表，带未读数，点击切回当前项目的会话。",
+  "engines": { "enso": ">=0.3.2" },
+  "main": "main.mjs",
+  "resident": true,
+  "permissions": ["ui.view", "agent.observe", "process.background", "session.readAll", "session.focus"],
+  "contributes": {
+    "views": [{ "id": "inbox", "title": "收件箱", "entry": "inbox.html" }],
+    "commands": [{ "id": "open", "title": "打开收件箱" }],
+    "statusItems": [
+      {
+        "id": "waiting",
+        "text": "收件箱",
+        "tooltip": "跨项目查看在等你的审批、提问和失败",
+        "command": "open"
+      }
+    ],
+    "events": [{ "event": "session_status" }, { "event": "tool_result" }, { "event": "session_end" }],
+    "schedules": [{ "id": "reconcile", "intervalSeconds": 60, "timeoutMs": 30000 }],
+    "methods": [
+      { "name": "snapshot", "timeoutMs": 5000 },
+      { "name": "refresh", "timeoutMs": 30000 },
+      { "name": "focus", "timeoutMs": 10000 },
+      { "name": "markRead", "timeoutMs": 5000 }
+    ]
+  }
+}

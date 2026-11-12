@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "enso.beads",
+  "name": "Beads",
+  "version": "0.1.0",
+  "icon": "icon.svg",
+  "description": "在侧栏查看当前项目的 Beads 任务：就绪、进行中、阻塞和已关闭，支持表格、依赖、评论、认领、关闭，以及把任务交给新会话。数据来自本地 bd 或 .beads，不需要云服务。",
+  "main": "main.mjs",
+  "permissions": ["ui.view", "fs.read", "fs.write", "session.focus", "session.create"],
+  "fs": {
+    "read": [".beads", ".beads/**"],
+    "write": [".beads", ".beads/**"]
+  },
+  "contributes": {
+    "views": [{ "id": "beads", "title": "Beads", "entry": "board.html" }],
+    "methods": [
+      { "name": "snapshot", "timeoutMs": 90000 },
+      { "name": "issue", "timeoutMs": 45000 },
+      { "name": "create", "timeoutMs": 45000 },
+      { "name": "claim", "timeoutMs": 45000 },
+      { "name": "close", "timeoutMs": 45000 },
+      { "name": "reopen", "timeoutMs": 45000 },
+      { "name": "comment", "timeoutMs": 45000 },
+      { "name": "handoff", "timeoutMs": 90000 },
+      { "name": "focus", "timeoutMs": 15000 }
+    ]
+  }
+}
