@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-12T05:39:27.183Z",
-  "sequence": 80,
+  "generatedAt": "2026-11-12T05:54:40.245Z",
+  "sequence": 81,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -1009,6 +1009,45 @@
           "sha256": "b9eafd2a11f85415fbbfc51344638ed0c999d95960245b935953994b391eb9ba",
           "size": 712484,
           "publishedAt": "2026-11-06T10:59:12.902Z"
+        }
+      ]
+    },
+    {
+      "id": "enso.openspec",
+      "name": "OpenSpec",
+      "description": "侧栏按阶段查看当前项目的 OpenSpec 变更：任务进度、下一步、工单，以及文档里能识别的 PR。实现和收尾会把提示发到对应的 Enso 会话。",
+      "tier": "official",
+      "tags": [
+        "ui",
+        "openspec",
+        "workflow"
+      ],
+      "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.openspec.svg",
+      "category": "productivity",
+      "readme": {
+        "path": "packages/enso.openspec/0.1.0.readme.md",
+        "sha256": "67670000714d2b2f303744a3a6bccfcc2cc412fc84083c618a74c29d89cb63c4",
+        "size": 4572
+      },
+      "latest": "0.1.0",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "engines": {
+            "enso": ">=0.2.14"
+          },
+          "permissions": [
+            "ui.view",
+            "fs.read",
+            "agent.inject",
+            "session.read",
+            "session.focus",
+            "session.create"
+          ],
+          "path": "packages/enso.openspec/0.1.0.zip",
+          "sha256": "6078d0e6ba8360f1f6fa428e579e7660f37a72a956bb28875d48d1ceb5b402c3",
+          "size": 85053,
+          "publishedAt": "2026-11-12T05:54:40.245Z"
         }
       ]
     },
