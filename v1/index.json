@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-12T05:57:00.287Z",
-  "sequence": 90,
+  "generatedAt": "2026-11-12T05:57:32.854Z",
+  "sequence": 91,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -569,6 +569,40 @@
           "sha256": "37dc283869035c645ab758a44522ef98f832e7982bff8d2fc8ae5ea8cb1a8912",
           "size": 8856,
           "publishedAt": "2026-11-07T12:01:21.782Z"
+        }
+      ]
+    },
+    {
+      "id": "enso.excalidraw",
+      "name": "Excalidraw",
+      "description": "在编辑器里打开并修改 .excalidraw、.excalidraw.json 和 .excalidraw.svg 白板。改动写回文件草稿，仍由 Enso 保存。",
+      "tier": "official",
+      "tags": [
+        "drawing",
+        "excalidraw"
+      ],
+      "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.excalidraw.svg",
+      "category": "productivity",
+      "readme": {
+        "path": "packages/enso.excalidraw/0.1.0.readme.md",
+        "sha256": "8e77e83cdcd162788ca0671d1fabde6a654a4bc1dfb537cb230185950366ea2b",
+        "size": 1724
+      },
+      "latest": "0.1.0",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "engines": {
+            "enso": ">=0.3.4"
+          },
+          "permissions": [
+            "ui.view",
+            "ui.openExternal"
+          ],
+          "path": "packages/enso.excalidraw/0.1.0.zip",
+          "sha256": "b9de355378d55d339472970ebaa617d1584f7c156ea3a6675143fb8c54f5d445",
+          "size": 7293455,
+          "publishedAt": "2026-11-12T05:57:32.854Z"
         }
       ]
     },
