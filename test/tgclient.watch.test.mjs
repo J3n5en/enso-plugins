@@ -49,6 +49,11 @@ async function withWatch(t, fn, { blankId = false } = {}) {
     }
     async getDialogs() { return []; }
     async getInputEntity() { return null; }
+    async getEntity() { return new Api.Chat({ id: 100, title: '群' }); }
+    async sendMessage(entity, { message }) {
+      // 真实的发送结果里 chatId 由 peerId 推出来，这里直接给普通对象，测试只关心 id 与 chatId
+      return { id: 900, chatId: 100, message, out: true, date: 1_700_000_001, peerId: { chatId: 100 } };
+    }
     async invoke(req) {
       if (req instanceof Api.account.GetNotifySettings) return { muteUntil: 0 };
       if (req instanceof Api.messages.GetDialogFilters) return { filters: [] };
@@ -95,6 +100,7 @@ async function withWatch(t, fn, { blankId = false } = {}) {
     injected,
     emit,
     tick,
+    tools,
     failSelf() { failSelf = true; },
   });
 }
@@ -247,4 +253,28 @@ test('拿不到自己的 id 时 @我 也退回攒批，不报错', async (t) => 
     assert.equal(injected.length, 1);
     assert.match(injected[0].text, /提到我/);
   }, { blankId: true });
+});
+
+test('手机上自己发的消息照常进监听，不再被 out 一律丢掉', async (t) => {
+  await withWatch(t, async ({ injected, emit, tick }) => {
+    await emit({ out: true, message: '手机手打的一句' });
+    assert.equal(injected.length, 0);
+    await tick(30_000);
+    assert.equal(injected.length, 1);
+    assert.match(injected[0].text, /手机手打的一句/);
+  });
+});
+
+test('本插件自己发出去的消息回声不再投递，避免自我唤醒', async (t) => {
+  await withWatch(t, async ({ injected, emit, tick, tools }) => {
+    await tools.get('tg_send_message')({ chat: '100', text: '我回一句' });
+    await emit({ id: 900, out: true, message: '我回一句' });
+    await tick(30_000);
+    assert.equal(injected.length, 0);
+
+    await emit({ id: 901, out: true, message: '之后手机又发了一条' });
+    await tick(30_000);
+    assert.equal(injected.length, 1);
+    assert.match(injected[0].text, /之后手机又发了一条/);
+  });
 });

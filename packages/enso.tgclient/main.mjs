@@ -1199,7 +1199,7 @@ function createApp(enso, opts = {}) {
     const text = String(args.text ?? '');
     if (!text.trim()) throw new Error('消息不能为空');
     try {
-      const m = await c.sendMessage(peer(args.chat), { message: text, ...replyArgs(args.topic, args.reply) });
+      const m = await sending(args.chat, () => c.sendMessage(peer(args.chat), { message: text, ...replyArgs(args.topic, args.reply) }));
       return { message: await pack(m) };
     } catch (e) {
       throw new Error(errText(e));
@@ -1355,7 +1355,7 @@ function createApp(enso, opts = {}) {
     const d = stickerDocs.get(String(args.id));
     if (!d) throw new Error('贴纸已失效，请重新打开贴纸面板');
     try {
-      const m = await c.sendFile(peer(args.chat), { file: d, ...replyArgs(args.topic, args.reply) });
+      const m = await sending(args.chat, () => c.sendFile(peer(args.chat), { file: d, ...replyArgs(args.topic, args.reply) }));
       return { message: await pack(m) };
     } catch (e) {
       throw new Error(errText(e));
@@ -1576,13 +1576,13 @@ function createApp(enso, opts = {}) {
     try {
       const u = await staged(c, String(args.token));
       const vid = videoOf(u.name, args.video);
-      const m = await c.sendFile(peer(args.chat), {
+      const m = await sending(args.chat, () => c.sendFile(peer(args.chat), {
         file: u.file,
         caption: String(args.caption ?? ''),
         forceDocument: args.asFile === true || (!vid && !MIME[extname(u.name).toLowerCase()]),
         ...(vid ? { attributes: [vid] } : {}),
         ...replyArgs(args.topic, args.reply),
-      });
+      }));
       uploads.delete(String(args.token));
       return { message: await pack(m) };
     } catch (e) {
@@ -1600,13 +1600,13 @@ function createApp(enso, opts = {}) {
       for (const it of items) ups.push({ u: await staged(c, String(it.token)), video: it.video });
       const vids = ups.map(({ u, video }) => videoOf(u.name, video));
       const docs = args.asFile === true || ups.some(({ u }, i) => !vids[i] && !PHOTO_EXT.test(u.name));
-      const res = await c.sendFile(peer(args.chat), {
+      const res = await sending(args.chat, () => c.sendFile(peer(args.chat), {
         file: ups.map(({ u }) => u.file),
         caption: [String(args.caption ?? '')],
         forceDocument: docs,
         attributes: vids.map((v) => (v && !docs ? [v] : [])),
         ...replyArgs(args.topic, args.reply),
-      });
+      }));
       for (const it of items) uploads.delete(String(it.token));
       const list = (Array.isArray(res) ? res : [res]).filter(Boolean);
       return { messages: await Promise.all(list.map(pack)) };
@@ -1909,7 +1909,7 @@ function createApp(enso, opts = {}) {
     const text = String(args.text ?? '');
     if (!text.trim()) throw new Error('消息不能为空');
     const chat = await chatOf(c, args.chat);
-    const m = await c.sendMessage(chat.entity, { message: text, ...replyArgs(topicArg(args), args.replyTo) });
+    const m = await sending(chat.id, () => c.sendMessage(chat.entity, { message: text, ...replyArgs(topicArg(args), args.replyTo) }));
     stopTyping(chat.id);
     dirty();
     push({ type: 'message', chat: chat.id, message: await pack(m) });
@@ -1985,6 +1985,29 @@ function createApp(enso, opts = {}) {
     }
     return Promise.all(pending);
   }
+  // 本插件自己发出去的消息不进监听队列，否则回一条就把自己再唤醒一次；手机等其它客户端发的照常收录
+  const sentKeys = new Set();
+  const sendingChats = new Set();
+  const SENT_CAP = 500;
+  const noteSent = (m) => {
+    if (!m) return;
+    sentKeys.add(`${idOf(m.chatId)}:${idOf(m.id)}`);
+    if (sentKeys.size > SENT_CAP) sentKeys.delete(sentKeys.values().next().value);
+  };
+  /** 发送期间同会话的 out 更新也算自己的：更新可能比 sendMessage 的返回更早到 */
+  async function sending(chatRef, fn) {
+    const key = idOf(chatRef);
+    sendingChats.add(key);
+    try {
+      const res = await fn();
+      for (const m of Array.isArray(res) ? res : [res]) noteSent(m);
+      return res;
+    } finally {
+      sendingChats.delete(key);
+    }
+  }
+  const sentByPlugin = (m) => sentKeys.has(`${idOf(m.chatId)}:${idOf(m.id)}`) || sendingChats.has(idOf(m.chatId));
+
   async function loadSelf() {
     if (selfCache !== undefined) return selfCache;
     try {
@@ -2025,7 +2048,8 @@ function createApp(enso, opts = {}) {
   });
 
   async function feed(m) {
-    if (m.out) return;
+    // 自己发的照常收录，只有本插件发出去的回声才丢（否则回复会把自己再唤醒一次）
+    if (m.out && sentByPlugin(m)) return;
     const it = { seq: ++iseq, chat: idOf(m.chatId), m };
     inbox.push(it);
     if (inbox.length > 300) inbox.shift();
