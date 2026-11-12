@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "enso.tgclient",
   "name": "Telegram 客户端",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "icon": "icon.svg",
   "description": "在侧栏里用手机号登录自己的 Telegram 账号，像官方客户端一样聊天：会话列表与聊天分组、论坛话题、实时收发、相册、边下边播视频、表情与贴纸面板、编辑、回复、表情回应、已读详情、切换发言身份、机器人按钮与键盘、新消息系统通知；附带 Agent 工具，可查聊天、读写消息、订阅新消息。支持 socks5 与 MTProxy 代理。",
   "engines": {
@@ -185,6 +185,7 @@
     "agentTools": [
       {
         "name": "tg_current_chat",
+        "readOnly": true,
         "description": "Get the chat the user currently has open in the Telegram sidebar (id, title, type, forum topic, whether the sidebar is visible) plus its latest messages. Use when the user says \"this chat\", \"the current group\", etc. Returns open:false with lastOpened when the sidebar is closed or no chat is open.",
         "parameters": {
           "type": "object",
@@ -199,6 +200,7 @@
       },
       {
         "name": "tg_list_chats",
+        "readOnly": true,
         "description": "List the user's Telegram chats (most recent first) with id, title, type, unread/mention counts, muted flag and last message preview. Requires the user to be logged in via the Telegram sidebar.",
         "parameters": {
           "type": "object",
@@ -220,6 +222,7 @@
       },
       {
         "name": "tg_search_chats",
+        "readOnly": true,
         "description": "Search Telegram chats, contacts, groups and public channels by name or @username. Returns id, title, type, username and whether the user has joined.",
         "parameters": {
           "type": "object",
@@ -239,6 +242,7 @@
       },
       {
         "name": "tg_list_topics",
+        "readOnly": true,
         "description": "List topics of a forum group (chats with topics), most recent first: id, title, unread/mention counts, pinned, closed, last message. Use the topic id with tg_get_messages / tg_send_message.",
         "parameters": {
           "type": "object",
@@ -261,6 +265,7 @@
       },
       {
         "name": "tg_get_messages",
+        "readOnly": true,
         "description": "Read recent messages of a Telegram chat, oldest first. Each message has id, time, sender, text, media summary, replyTo, reactions, and topic/topicTitle in forum groups. Does not mark the chat as read. Pass olderBefore from the result as `before` to page back.",
         "parameters": {
           "type": "object",
@@ -286,6 +291,7 @@
       },
       {
         "name": "tg_search_messages",
+        "readOnly": true,
         "description": "Full-text search Telegram messages, within one chat or across all chats (newest first). Global results include chat id and title.",
         "parameters": {
           "type": "object",
@@ -355,6 +361,7 @@
       },
       {
         "name": "tg_wait_messages",
+        "readOnly": true,
         "description": "Block until new incoming Telegram messages arrive (long poll), then return them. Watches one chat, or all unmuted chats if chat is omitted. Pass the returned cursor to the next call so no message is missed between calls. Returns timeout:true if nothing arrived.",
         "parameters": {
           "type": "object",
