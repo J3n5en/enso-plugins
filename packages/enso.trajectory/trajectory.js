@@ -274,7 +274,8 @@
     }
     const state = view.state || 'idle';
     badge.textContent = STATE[state] || '';
-    badge.classList.add(state === 'error' ? 'ui-badge--destructive' : state === 'waiting' ? 'ui-badge--warning' : state === 'running' ? 'ui-badge--success' : '');
+    const tone = state === 'error' ? 'ui-badge--destructive' : state === 'waiting' ? 'ui-badge--warning' : state === 'running' ? 'ui-badge--success' : '';
+    if (tone) badge.classList.add(tone);
     const bits = [];
     if (view.model) bits.push(view.model);
     const folder = base(view.cwd);
