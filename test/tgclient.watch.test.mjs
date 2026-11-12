@@ -358,3 +358,48 @@ test('多个聊天不能再加单个话题', async (t) => {
     );
   }, { forum: true });
 });
+
+test('多群订阅时可以把话题约束绑到其中一个群，另一个群照收全部话题', async (t) => {
+  await withWatch(t, async ({ injected, emit, tick, tools, dataDir }) => {
+    const watching = await tools.get('tg_watch')(
+      { chats: ['100', { chat: '200', topic: 55 }], debounceSec: 30, minIntervalSec: 60 },
+      { sessionId: 's1' },
+    );
+    assert.match(watching.watching.chat, /群 \(100\)/);
+    assert.match(watching.watching.chat, /群200 \(200\) › 话题 55/);
+    const saved = JSON.parse(await readFile(join(dataDir, 'account.json'), 'utf8'));
+    assert.equal(saved.watches[0].chatTopics['200'].topic, 55);
+    assert.equal(saved.watches[0].chatTopics['100'], undefined);
+
+    await emit({ message: '100 的任意话题' });
+    await emit({ chatId: 200, ...inTopic(55, '200 的话题里') });
+    await emit({ chatId: 200, ...inTopic(77, '200 别的话题') });
+    await tick(30_000);
+    assert.equal(injected.length, 1);
+    assert.match(injected[0].text, /100 的任意话题/);
+    assert.match(injected[0].text, /200 的话题里/);
+    assert.doesNotMatch(injected[0].text, /200 别的话题/);
+  }, { forum: true });
+});
+
+test('对象形式里的话题 id 非法、群没开话题、与顶层 topic 混用时都拒绝', async (t) => {
+  await withWatch(t, async ({ tools }) => {
+    await assert.rejects(
+      () => tools.get('tg_watch')({ chats: [{ chat: '100', topic: 0 }] }, { sessionId: 's1' }),
+      /话题 id 必须是正整数/,
+    );
+    await assert.rejects(
+      () => tools.get('tg_watch')({ chats: [{ chat: '100', topic: 55 }], topic: 55 }, { sessionId: 's1' }),
+      /不要再传顶层 topic/,
+    );
+  }, { forum: true });
+});
+
+test('对象形式指定话题时该群没开话题就拒绝', async (t) => {
+  await withWatch(t, async ({ tools }) => {
+    await assert.rejects(
+      () => tools.get('tg_watch')({ chats: [{ chat: '100', topic: 55 }] }, { sessionId: 's1' }),
+      /不是开了话题的群/,
+    );
+  });
+});

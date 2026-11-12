@@ -2103,22 +2103,34 @@ function createApp(enso, opts = {}) {
     return selfCache;
   }
   const chatsOf = (w) => (w.chats?.length ? w.chats : w.chat ? [{ id: w.chat, title: w.title }] : []);
+  // 每群话题约束：chatTopics[chatId] = { topic, title }；未登记的群收该群所有话题
+  const topicOfWatch = (w, chatId) => w.chatTopics?.[String(chatId)]?.topic;
   const chatLabel = (w) => {
     const cs = chatsOf(w);
-    const base = cs.length ? cs.map((x) => `${x.title ?? x.id} (${x.id})`).join('、') : '所有未静音的聊天';
-    return w.topic ? `${base} › ${w.topicTitle || `话题 ${w.topic}`}` : base;
+    if (!cs.length) return '所有未静音的聊天';
+    return cs
+      .map((x) => {
+        const head = `${x.title ?? x.id} (${x.id})`;
+        const entry =
+          w.chatTopics?.[String(x.id)] ??
+          (w.topic != null && cs.length === 1 ? { topic: w.topic, title: w.topicTitle } : null);
+        return entry ? `${head} › ${entry.title || `话题 ${entry.topic}`}` : head;
+      })
+      .join('、');
   };
   const matches = (f, it) => {
     const ids = f.chats?.map((x) => x.id);
     const hit = ids ? ids.includes(it.chat) : f.chat ? it.chat === f.chat : f.includeMuted || !mutedNow(it.chat);
-    const topicOk = f.topic == null || Number(topicOf(it.m)) === f.topic;
-    return hit && topicOk && (!f.directOnly || it.m.mentioned || entities.get(it.chat) instanceof Api.User) && keywordHit(it.m, f.keywords);
+    if (!hit) return false;
+    const need = topicOfWatch(f, it.chat) ?? (f.topic != null && (f.chats?.length ?? 0) <= 1 ? f.topic : undefined);
+    if (need != null && Number(topicOf(it.m)) !== need) return false;
+    return (!f.directOnly || it.m.mentioned || entities.get(it.chat) instanceof Api.User) && keywordHit(it.m, f.keywords);
   };
   const watchOf = (w) => {
     const cs = chatsOf(w);
     return { chat: chatLabel(w), ...(cs.length > 1 ? { chats: cs.map((x) => x.id) } : {}), ...(w.topic ? { topic: w.topic, topicTitle: w.topicTitle } : {}), directOnly: !!w.directOnly, includeMuted: !!w.includeMuted, ...(w.keywords ? { keywords: w.keywords } : {}), debounceSec: w.debounceSec ?? DEBOUNCE_SEC, minIntervalSec: w.minIntervalSec ?? 0, ...(w.note ? { note: w.note } : {}) };
   };
-  const FIELDS = ['chat', 'title', 'chats', 'topic', 'topicTitle', 'directOnly', 'includeMuted', 'keywords', 'debounceSec', 'minIntervalSec', 'note', 'project', 'since', 'delivered', 'lastAt', 'error', 'failures', 'failNotified'];
+  const FIELDS = ['chat', 'title', 'chats', 'topic', 'topicTitle', 'chatTopics', 'directOnly', 'includeMuted', 'keywords', 'debounceSec', 'minIntervalSec', 'note', 'project', 'since', 'delivered', 'lastAt', 'error', 'failures', 'failNotified'];
   const fieldsOf = (w) => Object.fromEntries(FIELDS.filter((k) => w[k] !== undefined).map((k) => [k, w[k]]));
   const saveWatches = () => {
     account.watches = [...watches].map(([sessionId, w]) => ({ sessionId, ...fieldsOf(w) }));
@@ -2280,17 +2292,32 @@ function createApp(enso, opts = {}) {
     const hasTopic = args.topic != null && args.topic !== '';
     const topic = Number(args.topic);
     if (hasTopic && (!Number.isInteger(topic) || topic < 1)) throw new Error('topic 必须是话题 id（General 为 1）');
-    const wanted = (Array.isArray(args.chats) ? args.chats : args.chat ? [args.chat] : []).map((x) => String(x ?? '').trim()).filter(Boolean).slice(0, 20);
+    // chats 既可写字符串，也可写 { chat, topic } 把话题约束绑到单个群上
+    const specs = [];
+    for (const x of Array.isArray(args.chats) ? args.chats : args.chat != null ? [args.chat] : []) {
+      const obj = x && typeof x === 'object' ? x : null;
+      const ref = String((obj ? (obj.chat ?? obj.id) : x) ?? '').trim();
+      if (!ref) continue;
+      const raw = obj ? obj.topic : undefined;
+      specs.push({ ref, topic: raw == null || raw === '' ? undefined : Number(raw) });
+      if (specs.length >= 20) break;
+    }
+    if (hasTopic && specs.some((s) => s.topic !== undefined))
+      throw new Error('chats 里已经逐个写了 topic，就不要再传顶层 topic');
     const chats = [];
-    let forum = false;
-    for (const x of wanted) {
-      const chat = await chatOf(c, x);
-      forum = !!chat.entity?.forum;
+    const chatTopics = {};
+    for (const spec of specs) {
+      const chat = await chatOf(c, spec.ref);
+      const want = spec.topic ?? (specs.length === 1 && hasTopic ? topic : undefined);
+      if (want !== undefined) {
+        if (!Number.isInteger(want) || want < 1) throw new Error('话题 id 必须是正整数（General 为 1）');
+        if (!chat.entity?.forum) throw new Error(`「${chat.title}」不是开了话题的群`);
+        const title = await topicName(c, chat.id, want);
+        chatTopics[String(chat.id)] = { topic: want, ...(title ? { title } : {}) };
+      }
       if (!chats.some((v) => v.id === chat.id)) chats.push({ id: chat.id, title: chat.title });
     }
     if (hasTopic && chats.length !== 1) throw new Error('按话题监听时只能指定一个聊天');
-    if (hasTopic && !forum) throw new Error(`「${chats[0].title}」不是开了话题的群`);
-    const topicTitle = hasTopic ? await topicName(c, chats[0].id, topic) : undefined;
     const old = watches.get(ctx.sessionId);
     if (old) {
       clearTimer(old.timer);
@@ -2300,7 +2327,8 @@ function createApp(enso, opts = {}) {
       chat: chats[0]?.id,
       title: chats.length ? chats.map((x) => x.title).join('、') : undefined,
       ...(chats.length > 1 ? { chats } : {}),
-      ...(hasTopic ? { topic, topicTitle } : {}),
+      ...(hasTopic ? { topic, topicTitle: chatTopics[String(chats[0].id)]?.title } : {}),
+      ...(Object.keys(chatTopics).length ? { chatTopics } : {}),
       directOnly: !!args.directOnly,
       includeMuted: !chats.length && !!args.includeMuted,
       keywords: normalizeKeywords(args.keywords),
