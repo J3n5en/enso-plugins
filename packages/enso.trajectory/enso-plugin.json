@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "enso.trajectory",
   "name": "会话轨迹",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "icon": "icon.svg",
   "description": "查看当前会话的轨迹：每一轮的用户提示、模型请求、工具与子代理调用、token、缓存命中和耗时。",
   "engines": { "enso": ">=0.3.0" },
