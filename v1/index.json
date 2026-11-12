@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-12T05:55:12.133Z",
-  "sequence": 83,
+  "generatedAt": "2026-11-12T05:55:24.620Z",
+  "sequence": 84,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -117,6 +117,41 @@
           "sha256": "f3ab3f21e3ae9d4182904468ab1ddf8d9bcaf2578821db383241fb7a0b06e9ec",
           "size": 43146,
           "publishedAt": "2026-11-05T05:58:04.027Z"
+        }
+      ]
+    },
+    {
+      "id": "enso.beads",
+      "name": "Beads",
+      "description": "在侧栏查看当前项目的 Beads 任务：就绪、进行中、阻塞和已关闭，支持表格、依赖、评论、认领、关闭，以及把任务交给新会话。数据来自本地 bd 或 .beads，不需要云服务。",
+      "tier": "official",
+      "tags": [
+        "beads",
+        "productivity",
+        "ui"
+      ],
+      "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.beads.svg",
+      "category": "productivity",
+      "readme": {
+        "path": "packages/enso.beads/0.1.0.readme.md",
+        "sha256": "0225ae6463ff440fb8a3f4bc78a669ce7b1a2dc78a30d51388301f8ffe074211",
+        "size": 1394
+      },
+      "latest": "0.1.0",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "permissions": [
+            "ui.view",
+            "fs.read",
+            "fs.write",
+            "session.focus",
+            "session.create"
+          ],
+          "path": "packages/enso.beads/0.1.0.zip",
+          "sha256": "70421c701b81b4f93352dfeece7c31237d2bd46663eb578ebc2dd274e909572c",
+          "size": 98030,
+          "publishedAt": "2026-11-12T05:55:24.620Z"
         }
       ]
     },
