@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="enso-ui.css" />
+    <style>
+      body { padding: 10px; font-size: 12px; }
+      #app { display: flex; flex-direction: column; gap: 8px; }
+      .card { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+      .row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+      .grow { flex: 1; min-width: 0; }
+      .wrap { flex-wrap: wrap; }
+      .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .m { color: var(--muted-foreground); font-size: 11px; }
+      .err { color: var(--destructive); font-size: 11px; word-break: break-word; }
+      .late { color: var(--destructive); }
+      .hot { color: var(--warning); font-weight: 600; }
+      h2 { margin: 0; font-size: 13.5px; font-weight: 600; word-break: break-word; }
+      h3 { margin: 0; font-size: 12px; font-weight: 600; }
+      .ui-btn--block { width: 100%; height: 32px; }
+      .list { display: flex; flex-direction: column; gap: 2px; margin: 0 -6px; }
+      .item { display: flex; gap: 8px; padding: 6px; border-radius: var(--radius-md); cursor: pointer; text-align: left; background: none; border: 0; color: inherit; font: inherit; width: 100%; }
+      .item.is-branch { box-shadow: inset 2px 0 0 var(--brand); }
+      .item .id { color: var(--muted-foreground); font-family: var(--font-mono); flex: none; }
+      .item .title { font-weight: 500; }
+      .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; margin-top: 5px; background: var(--muted-foreground); }
+      .pri { width: 8px; height: 8px; border-radius: 2px; flex: none; margin-top: 5px; background: transparent; }
+      .pri.p1 { background: var(--destructive); }
+      .pri.p2 { background: var(--warning); }
+      .pri.p3 { background: var(--brand); }
+      .pri.p4 { background: var(--muted-foreground); }
+      .group { display: flex; flex-direction: column; gap: 2px; }
+      .group > summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
+      .bar { height: 6px; border-radius: 99px; background: var(--muted); overflow: hidden; }
+      .bar > span { display: block; height: 100%; background: var(--brand); }
+      .md { line-height: 1.6; word-break: break-word; overflow-wrap: anywhere; }
+      .md > :first-child { margin-top: 0; }
+      .md > :last-child { margin-bottom: 0; }
+      .md p, .md ul { margin: 0 0 8px; }
+      .md ul { padding-left: 18px; }
+      .md a { color: var(--brand); text-decoration: none; }
+      .md a:hover { text-decoration: underline; }
+      .md code { font: 11px/1.5 var(--font-mono); padding: 1px 4px; border-radius: 4px; background: var(--muted); }
+      .md pre { padding: 8px 10px; border-radius: var(--radius-md); background: var(--muted); overflow-x: auto; }
+      .md pre code { padding: 0; background: none; }
+      textarea.ui-input, select.ui-input { width: 100%; }
+      textarea.ui-input { height: auto; min-height: 72px; padding: 6px 8px; resize: vertical; font: inherit; }
+      .actions { display: flex; flex-wrap: wrap; gap: 6px; }
+      .meta { display: flex; flex-wrap: wrap; gap: 4px 8px; }
+    </style>
+  </head>
+  <body>
+    <div id="app"><div class="ui-card card"><div class="ui-skeleton" style="height: 14px; width: 60%"></div></div></div>
+    <script src="enso-ui.js"></script>
+    <script>
+      const app = document.getElementById('app');
+      const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+      const ago = (t) => {
+        const s = (Date.now() - Date.parse(t)) / 1000;
+        if (!Number.isFinite(s)) return '';
+        if (s < 3600) return `${Math.max(1, Math.round(s / 60))} 分钟前`;
+        if (s < 86400) return `${Math.round(s / 3600)} 小时前`;
+        return `${Math.round(s / 86400)} 天前`;
+      };
+      const colorOf = (c) => (/^#[0-9a-fA-F]{6}$/.test(c || '') ? c : '');
+      const countLabel = (summary) => {
+        if (!summary) return '';
+        const parts = [];
+        if (summary.started) parts.push(`${summary.started} 进行中`);
+        if (summary.urgent) parts.push(`${summary.urgent} 紧急`);
+        return parts.join(' · ');
+      };
+      const daysLabel = (days) => {
+        if (days == null) return '';
+        if (days > 1) return `还剩 ${days} 天`;
+        if (days === 1) return '还剩 1 天';
+        if (days === 0) return '今天结束';
+        return '已结束';
+      };
+      const VIEWS = [
+        ['mine', '我的'],
+        ['cycle', '周期'],
+        ['backlog', '待办'],
+        ['triage', '分拣'],
+      ];
+      const SOURCES = { oauth: 'OAuth', config: 'API Key', env: '环境变量' };
+
+      function inline(raw) {
+        const tokens = [];
+        const put = (html) => {
+          tokens.push(html);
+          return `\u0000${tokens.length - 1}\u0000`;
+        };
+        let text = String(raw)
+          .replace(/`([^`]+)`/g, (_, code) => put(`<code>${esc(code)}</code>`))
+          .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_, label, href) => put(`<a href="${esc(href)}">${esc(label)}</a>`))
+          .replace(/https?:\/\/[^\s<]+/g, (href) => put(`<a href="${esc(href)}">${esc(href)}</a>`))
+          .replace(/\*\*([^*]+)\*\*/g, (_, label) => put(`<strong>${esc(label)}</strong>`));
+        text = esc(text);
+        return text.replace(/\u0000(\d+)\u0000/g, (_, index) => tokens[Number(index)]);
+      }
+      function renderMd(src) {
+        const lines = String(src ?? '').replace(/\r\n/g, '\n').split('\n');
+        if (!lines.some((line) => line.trim())) return '<span class="m">没有描述</span>';
+        const blocks = [];
+        let i = 0;
+        while (i < lines.length) {
+          if (lines[i].startsWith('```')) {
+            const buf = [];
+            i += 1;
+            while (i < lines.length && !lines[i].startsWith('```')) buf.push(lines[i++]);
+            if (i < lines.length) i += 1;
+            blocks.push(`<pre><code>${esc(buf.join('\n'))}</code></pre>`);
+            continue;
+          }
+          if (!lines[i].trim()) { i += 1; continue; }
+          if (/^[-*] /.test(lines[i])) {
+            const items = [];
+            while (i < lines.length && /^[-*] /.test(lines[i])) items.push(`<li>${inline(lines[i].slice(2))}</li>`);
+            blocks.push(`<ul>${items.join('')}</ul>`);
+            continue;
+          }
+          const para = [];
+          while (i < lines.length && lines[i].trim() && !lines[i].startsWith('```') && !/^[-*] /.test(lines[i])) para.push(lines[i++]);
+          blocks.push(`<p>${inline(para.join(' '))}</p>`);
+        }
+        return `<div class="md">${blocks.join('')}</div>`;
+      }
+
+      const ui = { auth: null, view: 'mine', teamId: '', q: '', items: null, detail: null, search: null, error: '', busy: false, cursor: 0 };
+      ensoUI.tooltip();
+      const call = (method, args) => window.enso.call(method, args ?? {});
+
+      async function act(fn) {
+        if (ui.busy) return;
+        ui.busy = true;
+        ui.error = '';
+        render();
+        try {
+          await fn();
+        } catch (e) {
+          ui.error = e?.message ?? String(e);
+        } finally {
+          ui.busy = false;
+          render();
+        }
+      }
+
+      const teamArg = () => (ui.teamId ? { team: ui.teamId } : { team: '' });
+      async function loadList() {
+        const result = await call('list', { view: ui.view, ...teamArg() });
+        ui.items = result;
+        ui.search = null;
+        ui.detail = null;
+        if (result.team?.id && ui.view !== 'mine') ui.teamId = result.team.id;
+        if (result.summary) ui.summary = result.summary;
+      }
+      async function loadDetail(id) {
+        ui.detail = await call('view', { id });
+      }
+
+      function visibleIssue(issue) {
+        const q = ui.q.trim().toLowerCase();
+        if (!q) return true;
+        const labels = (issue.labels ?? []).map((label) => label.name).join(' ');
+        return [issue.identifier, issue.title, issue.assignee?.name, issue.project?.name, issue.state?.name, labels].join('\n').toLowerCase().includes(q);
+      }
+
+      function authView(auth) {
+        if (auth.pending) {
+          return `<div class="ui-card card ui-enter"><b>正在等待 Linear 授权</b>
+            <div class="m">如果浏览器没有跳回来，把地址栏里的完整回调地址粘贴到下面。回调必须是 <span class="ui-mono">${esc(auth.redirectUri)}</span></div>
+            ${auth.pending.listenError ? `<div class="m">${esc(auth.pending.listenError)}</div>` : ''}
+            <textarea class="ui-input" id="callback" placeholder="http://127.0.0.1:47321/callback?code=…&state=…"></textarea>
+            <div class="actions"><button class="ui-btn ui-btn--primary" data-code>完成登录</button><button class="ui-btn" data-cancel>取消</button></div></div>`;
+        }
+        return `<div class="ui-card card ui-enter"><b>连接 Linear</b>
+          <div class="m">在 Linear 创建 Personal API Key（设置 → 账户 → 安全与访问），再粘贴到 Enso 的 设置 → 插件 → Linear。改状态和评论需要读写权限。</div>
+          <div class="m">也可以自建 OAuth 应用：只把 Client ID 填进插件设置，回调地址设为 <span class="ui-mono">${esc(auth.redirectUri)}</span>。不要填写 Client Secret，插件使用 PKCE。</div>
+          ${auth.oauthReady ? '<button class="ui-btn ui-btn--primary ui-btn--block" data-login>使用 OAuth 登录</button>' : '<div class="m">填写 Client ID 后，这里会出现 OAuth 登录。</div>'}
+          ${auth.error ? `<div class="err">${esc(auth.error)}</div>` : ''}</div>`;
+      }
+
+      function issueButton(issue, index) {
+        const dot = colorOf(issue.state?.color);
+        const meta = [issue.state?.name, issue.assignee?.name, issue.project?.name, issue.cycle?.name || (issue.cycle?.number != null ? `周期 ${issue.cycle.number}` : ''), issue.estimate != null ? `${issue.estimate} 点` : '', ...(issue.labels ?? []).map((label) => label.name)].filter(Boolean);
+        const due = issue.dueDate ? `<span class="${issue.overdue ? 'late' : ''}">${esc(issue.dueDate)}</span>` : '';
+        return `<button class="item${issue.branch ? ' is-branch' : ''}" data-fill data-idx="${index}" data-id="${esc(issue.id)}">
+          <span class="pri p${issue.priority || 0}" data-tip="${esc(issue.priorityLabel)}"></span>
+          <span class="dot" ${dot ? `style="background:${dot}"` : ''}></span>
+          <span class="grow"><span class="title">${esc(issue.title)}</span>
+            <div class="m ellipsis"><span class="id">${esc(issue.identifier)}</span>${issue.branch ? ' · 当前分支' : ''} ${esc(meta.join(' · '))}${due ? ` · ${due}` : ''}${issue.updatedAt ? ` · ${ago(issue.updatedAt)}` : ''}</div>
+          </span></button>`;
+      }
+
+      function listView() {
+        const summary = countLabel(ui.summary || ui.items?.summary || ui.auth?.summary);
+        const head = summary ? `<div class="${ui.summary?.urgent || ui.items?.summary?.urgent ? 'hot' : 'm'}">${esc(summary)}</div>` : '';
+        if (ui.search) {
+          const items = ui.search.items.length
+            ? `<div class="list" data-feed>${ui.search.items.map((issue, index) => issueButton(issue, index)).join('')}</div>`
+            : '<div class="ui-empty">没有匹配的议题</div>';
+          return `${head}<div class="row"><b class="grow ellipsis">搜索「${esc(ui.q)}」</b><button class="ui-btn ui-btn--sm" data-clear>清除</button></div><div class="ui-card card">${items}</div>`;
+        }
+        const list = ui.items;
+        if (!list) return `${head}<div class="ui-card card"><div class="ui-skeleton" style="height:14px"></div></div>`;
+        const cycle = list.cycle;
+        const cycleCard = ui.view === 'cycle'
+          ? cycle
+            ? `<div class="ui-card card"><div class="row"><b class="grow">${esc(cycle.name)}</b><span class="m">${esc(daysLabel(cycle.daysLeft))}</span></div><div class="bar" role="progressbar" aria-valuenow="${Math.round(cycle.progress * 100)}" aria-valuemin="0" aria-valuemax="100"><span style="width:${Math.round(cycle.progress * 100)}%"></span></div><div class="m">${Math.round(cycle.progress * 100)}%</div></div>`
+            : '<div class="ui-empty">这个团队没有进行中的周期</div>'
+          : '';
+        const pinned = list.pinned && visibleIssue(list.pinned)
+          ? `<button class="item is-branch" data-fill data-id="${esc(list.pinned.id)}"><span class="grow"><span class="title">${esc(list.pinned.title)}</span><div class="m ellipsis">当前分支 · <span class="id">${esc(list.pinned.identifier)}</span> · ${esc(list.pinned.state?.name || '')}</div></span></button>`
+          : '';
+        let index = 0;
+        const groups = (list.groups ?? []).map((group) => {
+          const items = group.items.filter(visibleIssue);
+          if (!items.length) return '';
+          const buttons = items.map((issue) => issueButton(issue, index++)).join('');
+          return `<details class="group" ${group.collapsed ? '' : 'open'}><summary>${esc(group.label)} <span class="m">${items.length}</span></summary><div class="list" data-feed>${buttons}</div></details>`;
+        }).join('');
+        const empty = !pinned && !groups
+          ? `<div class="ui-empty">${ui.view === 'backlog' ? '待办是空的' : ui.view === 'triage' ? '没有待分拣的议题' : ui.view === 'cycle' ? '这个周期里没有议题' : '没有指派给你的议题'}</div>`
+          : `${pinned}${groups}`;
+        const more = list.truncated ? '<div class="m">还有更多，这里只显示最近的一部分</div>' : '';
+        return `${head}${cycleCard}<div class="ui-card card">${empty}${more}</div>`;
+      }
+
+      function detailView(issue) {
+        const dot = colorOf(issue.state?.color);
+        const states = (issue.states ?? []).map((state) => `<option value="${esc(state.id)}" ${state.id === issue.state?.id ? 'selected' : ''}>${esc(state.name)}</option>`).join('');
+        const priorities = [1, 2, 3, 4, 0].map((priority) => `<option value="${priority}" ${issue.priority === priority ? 'selected' : ''}>${['无', '紧急', '高', '中', '低'][priority]}</option>`).join('');
+        const members = [`<option value="">未指派</option>`].concat((issue.members ?? []).map((member) => `<option value="${esc(member.id)}" ${member.id === issue.assignee?.id ? 'selected' : ''}>${esc(member.name)}</option>`)).join('');
+        const children = issue.children?.length
+          ? issue.children.map((child) => `<button class="item" data-fill data-id="${esc(child.id)}"><span class="id">${esc(child.identifier)}</span><span class="grow ellipsis">${esc(child.title)}</span><span class="m">${esc(child.state?.name || '')}</span></button>`).join('')
+          : '<div class="m">没有子议题</div>';
+        const links = issue.links?.length
+          ? issue.links.map((link) => link.kind === 'issue'
+            ? `<button class="item" data-fill data-id="${esc(link.id)}"><span class="grow"><span class="title">${esc(link.title)}</span><div class="m ellipsis">${esc(link.issueTitle)}</div></span></button>`
+            : `<button class="item" data-fill data-open="${esc(link.url)}"><span class="grow"><span class="title">${esc(link.title)}</span>${link.subtitle ? `<div class="m ellipsis">${esc(link.subtitle)}</div>` : ''}</span></button>`).join('')
+          : '<div class="m">没有链接</div>';
+        const comments = issue.comments?.length
+          ? issue.comments.map((comment) => `<div class="group"><div class="m"><b>${esc(comment.author)}</b> · ${ago(comment.createdAt)}</div>${renderMd(comment.body)}</div>`).join('')
+          : '<div class="m">没有评论</div>';
+        return `<div class="row"><button class="ui-btn ui-btn--sm" data-back>← 返回</button><span class="grow"></span>
+            ${issue.url ? `<button class="ui-btn ui-btn--sm" data-open="${esc(issue.url)}">在 Linear 打开</button>` : ''}</div>
+          <div class="ui-card card ui-enter">
+            <h2>${esc(issue.title)} <span class="m ui-mono">${esc(issue.identifier)}</span></h2>
+            <div class="meta"><span class="dot" ${dot ? `style="background:${dot}"` : ''}></span><span class="m">${esc(issue.state?.name || '无状态')} · ${esc(issue.assignee?.name || '未指派')}${issue.branchName ? ` · ${esc(issue.branchName)}` : ''}</span></div>
+            <label class="ui-label">状态</label><select class="ui-input" id="state">${states}</select>
+            <div class="row"><label class="grow"><span class="ui-label">优先级</span><select class="ui-input" id="priority">${priorities}</select></label>
+              <label class="grow"><span class="ui-label">负责人</span><select class="ui-input" id="assignee">${members}</select></label></div>
+            ${renderMd(issue.description)}
+            <h3>子议题</h3><div class="list">${children}</div>${issue.childrenTruncated ? '<div class="m">还有更多子议题</div>' : ''}
+            <h3>链接</h3><div class="list">${links}</div>
+            <h3>评论</h3>${comments}${issue.commentsTruncated ? '<div class="m">还有更多评论</div>' : ''}
+          </div>
+          <div class="ui-card card"><textarea class="ui-input" id="comment" placeholder="评论（Markdown）"></textarea>
+            <div class="actions"><button class="ui-btn ui-btn--sm ui-btn--primary" data-comment>发送评论</button>
+              <button class="ui-btn ui-btn--sm" data-start="new">在会话中开始</button>
+              <button class="ui-btn ui-btn--sm" data-start="draft">插入输入框</button></div></div>`;
+      }
+
+      function render() {
+        const auth = ui.auth;
+        const focus = document.activeElement;
+        const focusId = focus?.id || '';
+        const caret = focus && (focusId === 'q' || focusId === 'comment' || focusId === 'callback') ? focus.selectionStart : null;
+        const draft = document.getElementById('comment')?.value ?? '';
+        const callback = document.getElementById('callback')?.value ?? '';
+        if (!auth) {
+          app.innerHTML = ui.error ? `<div class="ui-empty err">${esc(ui.error)}</div>` : '<div class="ui-empty">加载中…</div>';
+          return;
+        }
+        const branch = auth.branch ? `${auth.branch}${auth.branchIssue ? ` · ${auth.branchIssue}` : ''}` : '未打开 Git 项目';
+        const account = auth.source
+          ? `<span class="ui-badge" data-tip="${esc(SOURCES[auth.source] || auth.source)}">${esc(auth.viewer?.name || auth.organization?.name || SOURCES[auth.source] || '已连接')}</span>${auth.source === 'oauth' ? '<button class="ui-btn ui-btn--sm" data-logout>退出</button>' : ''}`
+          : '';
+        const teams = [`<option value="">全部团队</option>`].concat((auth.teams ?? []).map((team) => `<option value="${esc(team.id)}" ${team.id === ui.teamId ? 'selected' : ''}>${esc(team.key)} · ${esc(team.name)}</option>`)).join('');
+        const segs = VIEWS.map(([id, label]) => `<button aria-pressed="${ui.view === id}" data-view="${id}">${label}</button>`).join('');
+        const head = `<div class="row wrap"><select class="ui-input grow" id="team" ${ui.busy ? 'disabled' : ''}>${teams}</select>
+            <button class="ui-btn ui-btn--sm" data-reload ${ui.busy ? 'disabled' : ''}>${ui.busy ? '…' : '刷新'}</button>${account}</div>
+          <div class="m ellipsis">${esc(branch)}</div>
+          <div class="row wrap"><div class="ui-seg">${segs}</div></div>
+          <input class="ui-input" id="q" placeholder="筛选，回车在 Linear 里搜索" value="${esc(ui.q)}" />`;
+        const body = !auth.source && !auth.pending ? authView(auth) : auth.pending && !ui.detail ? authView(auth) : ui.detail ? detailView(ui.detail) : listView();
+        app.innerHTML = head + body + (ui.error ? `<div class="err">${esc(ui.error)}</div>` : '') + (auth.error && auth.source ? `<div class="err">${esc(auth.error)}</div>` : '');
+        const comment = document.getElementById('comment');
+        if (comment) comment.value = draft;
+        const pasted = document.getElementById('callback');
+        if (pasted) pasted.value = callback;
+        const next = focusId && document.getElementById(focusId);
+        if (next && caret != null) {
+          next.focus();
+          next.selectionStart = next.selectionEnd = caret;
+        }
+        app.querySelectorAll('.ui-seg').forEach((el) => ensoUI.seg(el));
+        app.querySelectorAll('[data-feed]').forEach((el) => ensoUI.fill(el));
+      }
+
+      app.addEventListener('click', (event) => {
+        const link = event.target.closest('.md a[href]');
+        if (link) {
+          event.preventDefault();
+          call('open', { url: link.href });
+          return;
+        }
+        const button = event.target.closest('button');
+        if (!button || button.disabled) return;
+        const data = button.dataset;
+        if ('login' in data) act(async () => { await call('login'); ui.auth = await call('state'); });
+        else if ('cancel' in data) act(async () => { await call('cancelLogin'); ui.auth = await call('state'); });
+        else if ('code' in data) act(async () => {
+          await call('submitCode', { text: document.getElementById('callback').value });
+          ui.auth = await call('state');
+          if (ui.auth?.source) await loadList();
+        });
+        else if ('logout' in data) act(async () => { await call('logout'); ui.items = null; ui.detail = null; ui.search = null; ui.auth = await call('state'); });
+        else if (data.open) call('open', { url: data.open });
+        else if ('reload' in data) act(async () => { ui.auth = await call('state'); if (ui.detail) await loadDetail(ui.detail.id); else await loadList(); });
+        else if ('back' in data) { ui.detail = null; render(); }
+        else if ('clear' in data) { ui.search = null; ui.q = ''; render(); }
+        else if (data.view && data.view !== ui.view) act(async () => { ui.view = data.view; ui.detail = null; ui.search = null; await loadList(); });
+        else if (data.id) act(async () => loadDetail(data.id));
+        else if ('comment' in data) {
+          const body = document.getElementById('comment').value;
+          act(async () => { ui.detail = await call('comment', { id: ui.detail.id, body }); });
+        } else if (data.start) {
+          const id = ui.detail.id;
+          act(async () => { await call('start', { id, target: data.start }); });
+        }
+      });
+      app.addEventListener('change', (event) => {
+        if (event.target.id === 'team') {
+          ui.teamId = event.target.value;
+          act(async () => { await call('setTeam', { teamId: ui.teamId }); await loadList(); });
+          return;
+        }
+        if (!ui.detail) return;
+        if (event.target.id === 'state') act(async () => { ui.detail = await call('update', { id: ui.detail.id, stateId: event.target.value }); });
+        if (event.target.id === 'priority') act(async () => { ui.detail = await call('update', { id: ui.detail.id, priority: Number(event.target.value) }); });
+        if (event.target.id === 'assignee') act(async () => { ui.detail = await call('update', { id: ui.detail.id, assigneeId: event.target.value }); });
+      });
+      app.addEventListener('input', (event) => {
+        if (event.target.id !== 'q') return;
+        ui.q = event.target.value;
+        ui.search = null;
+        render();
+      });
+      app.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' && event.target.id === 'q') {
+          event.preventDefault();
+          const query = ui.q.trim();
+          if (!query) return;
+          act(async () => { ui.search = await call('search', { query, ...teamArg() }); ui.detail = null; });
+          return;
+        }
+        const typing = event.target.closest('input, textarea, select');
+        if (event.key === 'Escape' && ui.detail) { ui.detail = null; render(); return; }
+        if (typing) return;
+        if (event.key >= '1' && event.key <= '4') {
+          const next = VIEWS[Number(event.key) - 1][0];
+          if (next !== ui.view) act(async () => { ui.view = next; ui.detail = null; await loadList(); });
+        } else if (event.key === 'r') act(async () => { if (ui.detail) await loadDetail(ui.detail.id); else await loadList(); });
+        else if (event.key === '/' && !ui.detail) { event.preventDefault(); document.getElementById('q')?.focus(); }
+        else if ((event.key === 'o' || event.key === 'Enter') && ui.detail?.url && event.key === 'o') call('open', { url: ui.detail.url });
+      });
+
+      let teamSynced = false;
+      async function refreshAuth() {
+        const previous = ui.auth?.branch;
+        const had = ui.auth?.source;
+        try {
+          ui.auth = await call('state');
+        } catch (e) {
+          ui.error = e?.message ?? String(e);
+        }
+        if (!teamSynced && ui.auth?.teamId) {
+          ui.teamId = ui.auth.teamId;
+          teamSynced = true;
+        }
+        const changed = previous !== ui.auth?.branch || (!had && ui.auth?.source);
+        if (changed || !ui.auth) render();
+        if (ui.auth?.source && !ui.items && !ui.detail && !ui.busy && !ui.error) act(loadList);
+        else if (ui.auth?.source && !ui.busy && !ui.detail && !ui.error && previous && previous !== ui.auth.branch) act(loadList);
+      }
+      refreshAuth();
+      (function loop() {
+        setTimeout(async () => { await refreshAuth(); loop(); }, ui.auth?.pending ? 1500 : 8000);
+      })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>讲解</title>
+    <link rel="stylesheet" href="enso-ui.css" />
+    <style>
+      body { min-height: 100vh; padding: 12px 12px 18px; display: flex; flex-direction: column; gap: 10px; }
+      header { display: flex; align-items: flex-start; gap: 8px; }
+      .brand { flex: 1; min-width: 0; }
+      .eyebrow { margin: 0; color: var(--muted-foreground); font-size: 11px; letter-spacing: 0.04em; }
+      h1 { margin: 0; font-size: 18px; letter-spacing: -0.03em; font-weight: 650; }
+      h2 { margin: 0; font-size: 15px; letter-spacing: -0.02em; line-height: 1.35; }
+      .tools { display: flex; gap: 4px; flex: none; }
+      .setup, .story, .banner { display: flex; flex-direction: column; gap: 8px; }
+      .setup { padding: 10px; }
+      .row { display: flex; flex-direction: column; gap: 4px; }
+      .inline { display: flex; gap: 6px; }
+      .inline .ui-input { flex: 1; }
+      #count { flex: 0 0 72px; }
+      .meta { margin: 0; color: var(--muted-foreground); font-size: 11.5px; }
+      .banner { padding: 8px 10px; color: var(--muted-foreground); font-size: 12px; }
+      .banner.error { color: var(--destructive); }
+      .summary { margin: 0; font-size: 12.5px; line-height: 1.5; }
+      .rail { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 2px; }
+      .rail button {
+        flex: none; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px;
+        border: 1px solid var(--border); background: transparent; color: var(--muted-foreground);
+        font: 500 11px/1 var(--font-mono); cursor: pointer;
+      }
+      .rail button[aria-current='step'] { color: var(--foreground); border-color: var(--foreground); }
+      .rail button.read { background: color-mix(in oklch, var(--success) 18%, transparent); color: var(--success); border-color: transparent; }
+      .step-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+      .body { margin: 0; white-space: pre-wrap; font-size: 12.5px; line-height: 1.55; }
+      .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+      .chip { font: 11px/1.4 var(--font-mono); }
+      .add { color: var(--success); }
+      .del { color: var(--destructive); }
+      .hunk { overflow: hidden; }
+      .hunk-meta { display: flex; justify-content: space-between; gap: 8px; padding: 6px 8px; color: var(--muted-foreground); font: 11px/1.4 var(--font-mono); border-bottom: 1px solid var(--border); }
+      .diff { margin: 0; overflow: auto; max-height: 360px; background: color-mix(in oklch, var(--muted) 45%, transparent); }
+      .line { display: grid; grid-template-columns: 3.4em 1.1em minmax(0, 1fr); font: 11.5px/1.45 var(--font-mono); white-space: pre; }
+      .line.add { background: color-mix(in oklch, var(--success) 16%, transparent); }
+      .line.del { background: color-mix(in oklch, var(--destructive) 14%, transparent); }
+      .ln, .sign { color: var(--muted-foreground); user-select: none; }
+      .ln { text-align: right; padding-right: 6px; }
+      .code { padding-right: 8px; }
+      .nav { display: flex; align-items: center; gap: 6px; }
+      .nav .grow { flex: 1; text-align: center; color: var(--muted-foreground); font-size: 11.5px; }
+      textarea.ui-input { min-height: 96px; }
+      .edit-actions { display: flex; justify-content: flex-end; gap: 6px; }
+      .empty-mark { padding: 28px 8px 8px; }
+      .empty-mark h1 { font-size: 28px; }
+      .empty-mark p { margin: 8px 0 0; color: var(--muted-foreground); font-size: 12.5px; line-height: 1.55; }
+      .omitted { margin: 0; padding-left: 16px; color: var(--muted-foreground); font-size: 12px; }
+      @media (min-width: 760px) {
+        .split { display: grid; grid-template-columns: minmax(220px, 0.85fr) minmax(0, 1.15fr); gap: 12px; align-items: start; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="brand">
+        <p class="eyebrow">Enso 插件</p>
+        <h1>Walkthrough</h1>
+      </div>
+      <div class="tools">
+        <button id="copy-all" class="ui-btn ui-btn--outline ui-btn--sm" type="button" data-tip="复制整篇 Markdown" hidden>复制</button>
+      </div>
+    </header>
+
+    <section class="ui-card setup">
+      <div class="row">
+        <label class="ui-label" for="kind">范围</label>
+        <select id="kind" class="ui-input">
+          <option value="session">当前会话的改动</option>
+          <option value="worktree">未提交的改动</option>
+          <option value="staged">暂存区</option>
+          <option value="branch">相对基准分支</option>
+          <option value="commits">提交范围</option>
+        </select>
+      </div>
+      <div id="branch-field" class="row" hidden>
+        <label class="ui-label" for="base">基准分支</label>
+        <input id="base" class="ui-input" placeholder="留空则自动选择" />
+      </div>
+      <div id="commit-field" class="row" hidden>
+        <label class="ui-label" for="count">最近几次，或写明范围</label>
+        <div class="inline">
+          <input id="count" class="ui-input" type="number" min="1" max="30" value="5" />
+          <input id="range" class="ui-input" placeholder="HEAD~5..HEAD" />
+        </div>
+      </div>
+      <p id="meta" class="meta">正在读取仓库…</p>
+      <button id="build" class="ui-btn ui-btn--primary" type="button">生成讲解</button>
+    </section>
+
+    <div id="banner" class="ui-card banner" hidden></div>
+
+    <section id="empty" class="empty-mark">
+      <p class="eyebrow">按讲得通的顺序</p>
+      <h1>读一遍 diff</h1>
+      <p>每一步都有标题、说明，和它对应的代码。优先从当前会话的提交和未提交改动讲起，文字可以改。</p>
+    </section>
+
+    <section id="story" hidden>
+      <p id="notice" class="meta" hidden></p>
+      <div class="step-top">
+        <p id="summary" class="summary"></p>
+        <button id="edit-walk" class="ui-btn ui-btn--outline ui-btn--sm" type="button">编辑标题</button>
+      </div>
+      <div class="ui-card" style="padding: 10px">
+        <div class="step-top">
+          <div>
+            <p id="kicker" class="eyebrow"></p>
+            <h2 id="step-title"></h2>
+          </div>
+          <div class="tools">
+            <button id="edit" class="ui-btn ui-btn--outline ui-btn--sm" type="button">编辑文字</button>
+            <button id="read" class="ui-btn ui-btn--outline ui-btn--sm" type="button">标为已读</button>
+            <button id="copy-step" class="ui-btn ui-btn--outline ui-btn--sm" type="button">复制本步</button>
+          </div>
+        </div>
+        <div id="view">
+          <div class="split">
+            <div>
+              <p id="step-body" class="body"></p>
+              <div id="chips" class="chips"></div>
+            </div>
+            <div id="hunks" style="display:flex;flex-direction:column;gap:8px"></div>
+          </div>
+        </div>
+        <form id="editor" hidden>
+          <div class="row">
+            <label class="ui-label" for="edit-title">标题</label>
+            <input id="edit-title" class="ui-input" />
+          </div>
+          <div class="row">
+            <label class="ui-label" for="edit-body">说明</label>
+            <textarea id="edit-body" class="ui-input"></textarea>
+          </div>
+          <div class="edit-actions">
+            <button id="edit-cancel" class="ui-btn ui-btn--outline ui-btn--sm" type="button">取消</button>
+            <button id="edit-save" class="ui-btn ui-btn--primary ui-btn--sm" type="submit">保存</button>
+          </div>
+        </form>
+      </div>
+      <div id="rail" class="rail"></div>
+      <div class="nav">
+        <button id="prev" class="ui-btn ui-btn--outline ui-btn--sm" type="button">上一步</button>
+        <div id="pos" class="grow"></div>
+        <button id="next" class="ui-btn ui-btn--outline ui-btn--sm" type="button">下一步</button>
+      </div>
+      <div id="omitted-wrap" hidden>
+        <p class="eyebrow">未展开</p>
+        <ul id="omitted" class="omitted"></ul>
+      </div>
+    </section>
+
+    <script src="enso-ui.js"></script>
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const enso = window.enso;
+      let model = { spec: { kind: 'session' }, walk: null, cursor: 0, read: [] };
+      let editing = false;
+      let editScope = 'step';
+
+      function specFromForm() {
+        const kind = $('kind').value;
+        const spec = { kind };
+        if (kind === 'branch') {
+          const base = $('base').value.trim();
+          if (base) spec.base = base;
+        }
+        if (kind === 'commits') {
+          const range = $('range').value.trim();
+          if (range) spec.range = range;
+          else spec.count = Number($('count').value) || 5;
+        }
+        return spec;
+      }
+
+      function applySpec(spec) {
+        const kind = spec?.kind || 'session';
+        $('kind').value = kind;
+        $('branch-field').hidden = kind !== 'branch';
+        $('commit-field').hidden = kind !== 'commits';
+        if (spec?.base) $('base').value = spec.base;
+        if (spec?.count) $('count').value = String(spec.count);
+        if (spec?.range) {
+          const range = spec.range;
+          $('range').value = typeof range === 'string' ? range : `${range.from}${range.triple ? '...' : '..'}${range.to}`;
+        }
+      }
+
+      function showBanner(text, error) {
+        const el = $('banner');
+        if (!text) {
+          el.hidden = true;
+          el.textContent = '';
+          return;
+        }
+        el.hidden = false;
+        el.classList.toggle('error', Boolean(error));
+        el.textContent = text;
+      }
+
+      function currentStep() {
+        return model.walk?.steps?.[model.cursor] || null;
+      }
+
+      function renderMeta(meta) {
+        if (!meta?.git) {
+          $('meta').textContent = meta?.reason || '当前项目不是 Git 仓库';
+          return;
+        }
+        const bits = [];
+        if (meta.branch) bits.push(meta.branch);
+        if (meta.base) bits.push(`基准 ${meta.base}`);
+        if (meta.ahead) bits.push(`领先 ${meta.ahead} 个提交`);
+        if (meta.dirtyCount) bits.push(`未提交 ${meta.dirtyCount} 个路径`);
+        else bits.push('工作区干净');
+        $('meta').textContent = bits.join(' · ');
+        if (!$('base').value && meta.base) $('base').placeholder = meta.base;
+      }
+
+      function render() {
+        const walk = model.walk;
+        const has = Boolean(walk);
+        $('empty').hidden = has;
+        $('story').hidden = !has;
+        $('copy-all').hidden = !has;
+        if (!has) return;
+        $('summary').textContent = walk.summary || '';
+        const notice = [walk.notice, walk.truncated ? 'Diff 过大，讲解只覆盖前面的一部分。' : ''].filter(Boolean).join('');
+        $('notice').hidden = !notice;
+        $('notice').textContent = notice;
+        const step = currentStep();
+        const total = walk.steps.length;
+        $('kicker').textContent = total ? `第 ${model.cursor + 1} / ${total} 步` : '没有步骤';
+        $('pos').textContent = total ? `${model.cursor + 1} / ${total}` : '0 / 0';
+        $('prev').disabled = model.cursor <= 0;
+        $('next').disabled = !total || model.cursor >= total - 1;
+        $('edit').disabled = !step;
+        $('read').disabled = !step;
+        $('copy-step').disabled = !step;
+        if (!step) {
+          $('step-title').textContent = walk.title || '';
+          $('step-body').textContent = '';
+          $('chips').replaceChildren();
+          $('hunks').replaceChildren();
+        } else if (!editing) {
+          $('step-title').textContent = step.title || '';
+          $('step-body').textContent = step.body || '';
+          renderChips(step);
+          renderHunks(step);
+          $('read').textContent = model.read.includes(step.id) ? '取消已读' : '标为已读';
+        }
+        renderRail();
+        renderOmitted(walk.omitted || []);
+        $('editor').hidden = !editing;
+        $('view').hidden = editing;
+      }
+
+      function renderChips(step) {
+        const box = $('chips');
+        box.replaceChildren();
+        for (const file of step.files || []) {
+          const chip = document.createElement('span');
+          chip.className = 'ui-badge chip';
+          chip.textContent = `${file.path} `;
+          const add = document.createElement('span');
+          add.className = 'add';
+          add.textContent = `+${file.additions} `;
+          const del = document.createElement('span');
+          del.className = 'del';
+          del.textContent = `−${file.deletions}`;
+          chip.append(add, del);
+          box.append(chip);
+        }
+      }
+
+      function renderHunks(step) {
+        const box = $('hunks');
+        box.replaceChildren();
+        if (!step.hunks?.length) {
+          const empty = document.createElement('p');
+          empty.className = 'meta';
+          empty.textContent = step.hiddenHunks ? '代码未展开。' : '这一步没有代码片段。';
+          box.append(empty);
+          return;
+        }
+        for (const hunk of step.hunks) {
+          const card = document.createElement('div');
+          card.className = 'ui-card hunk';
+          const meta = document.createElement('div');
+          meta.className = 'hunk-meta';
+          const range = hunk.newLines ? (hunk.newLines === 1 ? `L${hunk.newStart}` : `L${hunk.newStart}–${hunk.newStart + hunk.newLines - 1}`) : '';
+          meta.textContent = `${hunk.path}${hunk.header ? ' · ' + hunk.header : ''} ${range} +${hunk.additions} −${hunk.deletions}${hunk.truncated ? ' · 已截断' : ''}`;
+          const pre = document.createElement('div');
+          pre.className = 'diff';
+          for (const line of hunk.lines || []) {
+            const row = document.createElement('div');
+            row.className = `line ${line.kind === 'add' ? 'add' : line.kind === 'del' ? 'del' : 'ctx'}`;
+            const ln = document.createElement('span');
+            ln.className = 'ln';
+            ln.textContent = line.kind === 'del' ? String(line.oldNo || '') : String(line.newNo || '');
+            const sign = document.createElement('span');
+            sign.className = 'sign';
+            sign.textContent = line.kind === 'add' ? '+' : line.kind === 'del' ? '−' : '';
+            const code = document.createElement('span');
+            code.className = 'code';
+            code.textContent = line.text;
+            row.append(ln, sign, code);
+            pre.append(row);
+          }
+          card.append(meta, pre);
+          box.append(card);
+        }
+        if (step.hiddenHunks) {
+          const note = document.createElement('p');
+          note.className = 'meta';
+          note.textContent = `还有 ${step.hiddenHunks} 个片段没有展开。`;
+          box.append(note);
+        }
+      }
+
+      function renderRail() {
+        const rail = $('rail');
+        rail.replaceChildren();
+        const steps = model.walk?.steps || [];
+        for (const step of steps) {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.textContent = String(step.index + 1);
+          btn.title = step.title || '';
+          if (step.index === model.cursor) btn.setAttribute('aria-current', 'step');
+          if (model.read.includes(step.id)) btn.classList.add('read');
+          btn.onclick = () => go(step.index, false);
+          rail.append(btn);
+        }
+      }
+
+      function renderOmitted(items) {
+        $('omitted-wrap').hidden = !items.length;
+        const list = $('omitted');
+        list.replaceChildren();
+        for (const item of items) {
+          const li = document.createElement('li');
+          li.textContent = `${item.path}（${item.reason}）`;
+          list.append(li);
+        }
+      }
+
+      async function persist(patch) {
+        if (!model.walk || !enso) return;
+        const res = await enso.call('save', { walkId: model.walk.id, ...patch });
+        if (res?.error) showBanner(res.error, true);
+        else if (res?.walk) applyView(res);
+      }
+
+      function applyView(res) {
+        model.walk = res.walk;
+        model.cursor = res.cursor || 0;
+        model.read = Array.isArray(res.read) ? res.read : [];
+        if (res.spec) model.spec = res.spec;
+        render();
+      }
+
+      async function go(index, markCurrent) {
+        if (!model.walk) return;
+        const step = currentStep();
+        if (markCurrent && step && !model.read.includes(step.id)) model.read = [...model.read, step.id];
+        const max = Math.max(0, model.walk.steps.length - 1);
+        model.cursor = Math.min(Math.max(0, index), max);
+        editing = false;
+        render();
+        await persist({ cursor: model.cursor, read: model.read });
+      }
+
+      function openEditor(scope) {
+        const step = currentStep();
+        if (!model.walk || (scope === 'step' && !step)) return;
+        editing = true;
+        editScope = scope;
+        const bodyLabel = document.querySelector('label[for="edit-body"]');
+        if (scope === 'step') {
+          $('edit-title').value = step.title || '';
+          $('edit-body').value = step.body || '';
+          if (bodyLabel) bodyLabel.textContent = '说明';
+        } else {
+          $('edit-title').value = model.walk.title || '';
+          $('edit-body').value = model.walk.summary || '';
+          if (bodyLabel) bodyLabel.textContent = '摘要';
+        }
+        render();
+        $('edit-title').focus();
+      }
+
+      $('kind').addEventListener('change', () => applySpec({ kind: $('kind').value, base: $('base').value, count: Number($('count').value), range: $('range').value }));
+      $('build').onclick = async () => {
+        if (!enso) return;
+        $('build').disabled = true;
+        $('build').textContent = '正在生成…';
+        showBanner('');
+        try {
+          const res = await enso.call('build', { spec: specFromForm() });
+          if (res?.error) showBanner(res.error, true);
+          else {
+            editing = false;
+            applyView(res);
+            showBanner('');
+          }
+        } catch (error) {
+          showBanner(error.message || '无法生成讲解', true);
+        } finally {
+          $('build').disabled = false;
+          $('build').textContent = '生成讲解';
+        }
+      };
+      $('prev').onclick = () => go(model.cursor - 1, false);
+      $('next').onclick = () => go(model.cursor + 1, true);
+      $('edit').onclick = () => openEditor('step');
+      $('edit-walk').onclick = () => openEditor('walk');
+      $('edit-cancel').onclick = () => {
+        editing = false;
+        render();
+      };
+      $('editor').onsubmit = async (event) => {
+        event.preventDefault();
+        const step = currentStep();
+        const patch = editScope === 'step'
+          ? { stepId: step?.id, title: $('edit-title').value, body: $('edit-body').value }
+          : { title: $('edit-title').value, summary: $('edit-body').value };
+        $('edit-save').disabled = true;
+        try {
+          const res = await enso.call('save', { walkId: model.walk.id, ...patch });
+          if (res?.error) showBanner(res.error, true);
+          else {
+            editing = false;
+            applyView(res);
+          }
+        } finally {
+          $('edit-save').disabled = false;
+        }
+      };
+      $('read').onclick = async () => {
+        const step = currentStep();
+        if (!step) return;
+        model.read = model.read.includes(step.id) ? model.read.filter((id) => id !== step.id) : [...model.read, step.id];
+        render();
+        await persist({ read: model.read });
+      };
+      $('copy-all').onclick = () => copy(null);
+      $('copy-step').onclick = () => copy(currentStep()?.id);
+      async function copy(stepId) {
+        if (!enso || !model.walk) return;
+        try {
+          await enso.call('copy', { walkId: model.walk.id, stepId });
+          showBanner(stepId ? '已复制这一步。' : '已复制整篇讲解。', false);
+        } catch (error) {
+          showBanner(error.message || '复制失败', true);
+        }
+      }
+      window.addEventListener('keydown', (event) => {
+        const tag = event.target?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+          if (event.key === 'Escape' && editing) {
+            editing = false;
+            render();
+          }
+          return;
+        }
+        if (event.key === 'ArrowRight' || event.key === 'j' || event.key === 'ArrowLeft' || event.key === 'k' || event.key === 'e') {
+          event.preventDefault();
+        }
+        if (event.key === 'ArrowRight' || event.key === 'j') go(model.cursor + 1, true);
+        else if (event.key === 'ArrowLeft' || event.key === 'k') go(model.cursor - 1, false);
+        else if (event.key === 'e') openEditor('step');
+        else if (event.key === 'Escape' && editing) {
+          editing = false;
+          render();
+        }
+      });
+
+      async function boot() {
+        window.ensoUI?.tooltip();
+        if (!enso) {
+          $('meta').textContent = '请在 Enso 侧栏中打开。';
+          $('build').disabled = true;
+          return;
+        }
+        try {
+          const res = await enso.call('state');
+          if (res?.error) showBanner(res.error, true);
+          if (res?.spec) {
+            model.spec = res.spec;
+            applySpec(res.spec);
+          }
+          renderMeta(res?.meta);
+          if (res?.walk) applyView(res);
+          else render();
+          enso.on?.('changed', async () => {
+            if (editing) return;
+            const next = await enso.call('state');
+            if (next?.walk) applyView(next);
+          });
+        } catch (error) {
+          showBanner(error.message || '无法读取讲解', true);
+        }
+      }
+      boot();
+    </script>
+  </body>
+</html>

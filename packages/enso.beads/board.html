@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="enso-ui.css" />
+    <style>
+      [hidden] { display: none !important; }
+      :where(button, input, select, textarea) { font: inherit; color: inherit; }
+      :where(button) { background: none; border: 0; cursor: pointer; padding: 0; }
+      svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+      body { padding: 10px 12px 16px; font-size: 12px; container-type: inline-size; }
+      header { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+      .title-row, .tool-row, .filter-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+      h1 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: -0.01em; }
+      .grow { flex: 1; min-width: 0; }
+      .stat { color: var(--muted-foreground); font: 500 11px/1.4 var(--font-mono); font-variant-numeric: tabular-nums; }
+      .source { font-family: var(--font-mono); }
+      .search { max-width: 220px; }
+      .filter-row select { width: auto; max-width: 120px; height: 26px; padding: 0 8px; }
+      .chips { display: flex; gap: 4px; flex-wrap: wrap; }
+      .chip {
+        height: 24px; padding: 0 8px; border-radius: 999px; color: var(--muted-foreground);
+        background: color-mix(in oklch, var(--foreground) 5%, transparent);
+      }
+      .chip[aria-pressed="true"] { color: var(--foreground); background: color-mix(in oklch, var(--foreground) 10%, transparent); }
+      .note {
+        margin: 0 0 8px; padding: 8px 10px; border-radius: var(--radius-md);
+        background: color-mix(in oklch, var(--warning) 12%, transparent); color: var(--foreground); line-height: 1.45;
+      }
+      .board { display: flex; gap: 8px; overflow-x: auto; align-items: flex-start; padding-bottom: 4px; }
+      .col {
+        --dot: var(--muted-foreground);
+        flex: 1 0 200px; max-width: 280px; padding: 4px 6px 8px; border-radius: var(--radius-lg);
+        background: color-mix(in oklch, var(--muted) 55%, transparent);
+        box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--border) 70%, transparent);
+      }
+      .col[data-col="ready"] { --dot: var(--success); }
+      .col[data-col="in_progress"] { --dot: var(--brand); }
+      .col[data-col="blocked"] { --dot: var(--warning); }
+      .col[data-col="deferred"] { --dot: #a855f7; }
+      .col-head { display: flex; align-items: center; gap: 6px; min-height: 28px; padding: 2px 2px 6px; }
+      .dot { display: inline-block; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--dot); box-shadow: 0 0 0 3px color-mix(in oklch, var(--dot) 18%, transparent); }
+      .col .ui-empty { padding: 10px 6px; }
+      .col-head b { font-size: 12.5px; }
+      .count { margin-left: auto; color: var(--muted-foreground); font: 500 11px/1 var(--font-mono); }
+      .cards { display: flex; flex-direction: column; gap: 6px; }
+      .card, .rowbtn {
+        text-align: left; border: 1px solid var(--border); border-radius: var(--radius-md);
+        background: var(--card); box-shadow: var(--shadow-xs);
+      }
+      .card { padding: 8px 10px; }
+      .card:hover, .rowbtn:hover, .card[aria-current="true"] { border-color: color-mix(in oklch, var(--foreground) 18%, transparent); }
+      .card .id, .mono { font-family: var(--font-mono); color: var(--muted-foreground); font-size: 11px; }
+      .card .name { margin-top: 2px; font-weight: 600; line-height: 1.4; word-break: break-word; }
+      .meta { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; align-items: center; }
+      .badge { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 999px; font-size: 10.5px; font-weight: 600; background: color-mix(in oklch, var(--foreground) 6%, transparent); }
+      .badge.p0 { color: var(--destructive); background: color-mix(in oklch, var(--destructive) 12%, transparent); }
+      .badge.p1 { color: var(--warning); background: color-mix(in oklch, var(--warning) 16%, transparent); }
+      .badge.p2 { color: var(--brand); background: color-mix(in oklch, var(--brand) 12%, transparent); }
+      .rel { color: var(--muted-foreground); font-size: 11px; }
+      .table-wrap { overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); }
+      table { width: 100%; border-collapse: collapse; font-size: 12px; }
+      th, td { padding: 7px 8px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+      th button { font-weight: 600; color: var(--muted-foreground); }
+      th button[aria-sort] { color: var(--foreground); }
+      tr:last-child td { border-bottom: 0; }
+      tbody tr { cursor: pointer; }
+      tr[aria-current="true"] td { background: color-mix(in oklch, var(--brand) 8%, transparent); }
+      .layout.has-detail .board, .layout.has-detail .table-wrap, .layout.has-detail .empty-filter { display: none; }
+      .detail { display: none; padding: 10px; }
+      .layout.has-detail .detail { display: flex; flex-direction: column; gap: 10px; }
+      .detail h2 { margin: 0; font-size: 14px; line-height: 1.4; word-break: break-word; }
+      .prose { white-space: pre-wrap; word-break: break-word; line-height: 1.55; }
+      .section { display: flex; flex-direction: column; gap: 4px; }
+      .section h3 { margin: 0; font-size: 11px; font-weight: 600; color: var(--muted-foreground); }
+      .linkish { color: var(--brand); text-align: left; }
+      .comments { display: flex; flex-direction: column; gap: 8px; }
+      .comment { padding-top: 8px; border-top: 1px solid var(--border); }
+      textarea.ui-input { height: auto; min-height: 64px; padding: 6px 8px; resize: vertical; }
+      .actions { display: flex; flex-wrap: wrap; gap: 6px; }
+      .mask { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; background: color-mix(in oklch, var(--background) 30%, transparent); z-index: 20; }
+      .modal { width: min(360px, 100%); padding: 14px; }
+      .modal h2 { margin: 0 0 6px; font-size: 13.5px; }
+      .modal p { margin: 0; color: var(--muted-foreground); line-height: 1.5; overflow-wrap: anywhere; }
+      .modal .actions { justify-content: flex-end; margin-top: 12px; }
+      .toasts { position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 30; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
+      .toast { max-width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--popover); box-shadow: var(--shadow-lg); pointer-events: auto; }
+      .toast.error { color: var(--destructive); }
+      code.cmd { font-family: var(--font-mono); font-size: 12px; padding: 2px 6px; border-radius: 6px; background: var(--muted); }
+      @media (max-width: 640px) {
+        .board { flex-direction: column; }
+        .col { max-width: none; flex-basis: auto; }
+        .search { max-width: none; }
+        .filter-row { flex-wrap: wrap; }
+      }
+      @container (max-width: 720px) {
+        .board { flex-direction: column; }
+        .col { max-width: none; flex-basis: auto; }
+        .search { max-width: none; }
+        .filter-row { flex-wrap: wrap; }
+      }
+      @media (min-width: 880px) {
+        .layout.has-detail { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 10px; align-items: start; }
+        .layout.has-detail .board, .layout.has-detail .table-wrap { display: flex; }
+        .layout.has-detail .table-wrap { display: block; }
+        .layout.has-detail .detail { display: flex; position: sticky; top: 8px; max-height: calc(100vh - 16px); overflow: auto; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="title-row">
+        <h1>Beads</h1>
+        <span id="source" class="ui-badge source" hidden></span>
+        <span id="stat" class="stat grow"></span>
+        <button id="refresh" type="button" class="ui-btn ui-btn--outline ui-btn--sm">刷新</button>
+      </div>
+      <div class="tool-row">
+        <input id="search" class="ui-input search grow" placeholder="搜索标题、编号、负责人" aria-label="搜索任务" />
+        <div id="view" class="ui-seg" role="group" aria-label="视图">
+          <button type="button" data-view="board" aria-pressed="true">看板</button>
+          <button type="button" data-view="table" aria-pressed="false">表格</button>
+        </div>
+        <button id="create" type="button" class="ui-btn ui-btn--primary ui-btn--sm" hidden>新建</button>
+      </div>
+      <div class="filter-row">
+        <div id="chips" class="chips"></div>
+        <span class="grow"></span>
+        <select id="type" class="ui-input" aria-label="类型"></select>
+        <select id="priority" class="ui-input" aria-label="优先级"></select>
+        <select id="assignee" class="ui-input" aria-label="负责人"></select>
+      </div>
+    </header>
+    <div id="warning" class="note" hidden></div>
+    <div id="layout" class="layout"></div>
+    <div id="toasts" class="toasts"></div>
+    <script src="enso-ui.js"></script>
+    <script>
+      const GROUP = { ready: '就绪', in_progress: '进行中', blocked: '阻塞', deferred: '暂缓', closed: '已关闭', other: '其他' };
+      const STATUS = { open: '未开始', in_progress: '进行中', blocked: '阻塞', deferred: '暂缓', closed: '已关闭', pinned: '置顶', hooked: '挂起' };
+      const TYPE = { bug: '缺陷', feature: '功能', task: '任务', epic: '史诗', chore: '杂务', decision: '决策', spike: '探索', story: '故事', milestone: '里程碑', molecule: '流程', gate: '门禁' };
+      const PRIORITY = ['P0 紧急', 'P1 高', 'P2 中', 'P3 低', 'P4 待定'];
+      const COLUMNS = ['ready', 'in_progress', 'blocked', 'closed', 'deferred', 'other'];
+
+      const $ = (id) => document.getElementById(id);
+      const h = (tag, props = {}, ...kids) => {
+        const node = document.createElement(tag);
+        for (const [key, value] of Object.entries(props)) {
+          if (key === 'class') node.className = value;
+          else if (key.startsWith('on')) node[key] = value;
+          else if (value != null && value !== false) node.setAttribute(key, value);
+        }
+        for (const kid of kids.flat()) {
+          if (kid == null || kid === false) continue;
+          node.append(kid instanceof Node ? kid : document.createTextNode(String(kid)));
+        }
+        return node;
+      };
+      let snap = null;
+      let detail = null;
+      let selected = null;
+      let query = '';
+      let typeFilter = '';
+      let priorityFilter = '';
+      let assigneeFilter = '';
+      let column = '';
+      let mode = localStorage.getItem('enso.beads.view') === 'table' ? 'table' : 'board';
+      let sortKey = 'priority';
+      let sortDir = 1;
+      let composer = null;
+
+      let syncing = false;
+      function toast(message, kind = 'error') {
+        const node = h('div', { class: `toast ui-enter ${kind === 'error' ? 'error' : ''}` }, message || '操作失败');
+        $('toasts').append(node);
+        setTimeout(() => node.remove(), 3600);
+      }
+
+      async function call(method, args) {
+        try {
+          return await window.enso.call(method, args ?? {});
+        } catch (error) {
+          toast(error?.message || '操作失败');
+          return null;
+        }
+      }
+
+      function typeName(value) { return TYPE[value] || value || '任务'; }
+      function statusName(value) { return STATUS[value] || value || ''; }
+      function relText(issue) {
+        const parts = [];
+        if (issue.blockedBy?.length) parts.push(`阻塞于 ${issue.blockedBy.join('、')}`);
+        if (issue.blocks?.length) parts.push(`阻塞 ${issue.blocks.join('、')}`);
+        if (issue.parent) parts.push(`父任务 ${issue.parent}`);
+        return parts.join(' · ');
+      }
+      function filtered() {
+        const q = query.trim().toLocaleLowerCase();
+        return (snap?.issues || []).filter((issue) => {
+          if (column && issue.group !== column) return false;
+          if (typeFilter && issue.type !== typeFilter) return false;
+          if (priorityFilter !== '' && String(issue.priority) !== priorityFilter) return false;
+          if (assigneeFilter && issue.assignee !== assigneeFilter) return false;
+          if (!q) return true;
+          const hay = [issue.id, issue.title, issue.description, issue.assignee, issue.type, ...(issue.labels || [])].join(' ').toLocaleLowerCase();
+          return hay.includes(q);
+        });
+      }
+      function sorted(issues) {
+        const dir = sortDir;
+        const value = (issue) => {
+          if (sortKey === 'priority') return issue.priority;
+          if (sortKey === 'group') return COLUMNS.indexOf(issue.group);
+          if (sortKey === 'rel') return (issue.blockedBy?.length || 0) + (issue.blocks?.length || 0);
+          return String(issue[sortKey] || '');
+        };
+        return [...issues].sort((a, b) => {
+          const left = value(a);
+          const right = value(b);
+          const cmp = typeof left === 'number' && typeof right === 'number' ? left - right : String(left).localeCompare(String(right), 'zh');
+          return cmp * dir || a.id.localeCompare(b.id);
+        });
+      }
+
+      function fillSelect(select, current, options) {
+        const signature = options.map(([value]) => value).join('\0');
+        if (select.dataset.sig === signature && select.value === current) return;
+        select.dataset.sig = signature;
+        select.replaceChildren(...options.map(([value, label]) => h('option', { value, selected: value === current }, label)));
+      }
+
+      function syncHeader() {
+        syncing = true;
+        try {
+        const source = $('source');
+        if (snap?.source) {
+          source.hidden = false;
+          source.textContent = snap.source === 'bd' ? 'bd' : 'JSONL';
+        } else source.hidden = true;
+        const live = snap?.state === 'ready';
+        const counts = snap?.counts;
+        $('stat').textContent = live ? `${counts.all} 条 · 就绪 ${counts.ready} · 阻塞 ${counts.blocked}` : '';
+        $('create').hidden = !(live && snap.capabilities?.write);
+        document.querySelector('.tool-row').hidden = !live;
+        document.querySelector('.filter-row').hidden = !live;
+        const warning = $('warning');
+        const extra = snap?.truncated ? '任务很多，只显示优先级最高的 2000 条。' : '';
+        const message = [snap?.warning, extra].filter(Boolean).join(' ');
+        warning.hidden = !message;
+        warning.textContent = message;
+        fillSelect($('type'), typeFilter, [['', '全部类型'], ...(snap?.types || []).map((item) => [item, typeName(item)])]);
+        fillSelect($('priority'), priorityFilter, [['', '全部优先级'], ...PRIORITY.map((label, index) => [String(index), label])]);
+        fillSelect($('assignee'), assigneeFilter, [['', '全部负责人'], ...(snap?.assignees || []).map((item) => [item, item])]);
+        const chipIds = ['ready', 'in_progress', 'blocked', 'closed'];
+        if ((snap?.counts?.deferred || 0) > 0 || column === 'deferred') chipIds.push('deferred');
+        if ((snap?.counts?.other || 0) > 0 || column === 'other') chipIds.push('other');
+        $('chips').replaceChildren(...[['', '全部'], ...chipIds.map((id) => [id, GROUP[id]])].map(([id, label]) =>
+          h('button', { type: 'button', class: 'chip', 'aria-pressed': String(column === id), onclick: () => { column = id; renderBody(); } }, label)
+        ));
+        for (const button of $('view').querySelectorAll('button')) button.setAttribute('aria-pressed', String(button.dataset.view === mode));
+        window.ensoUI?.seg?.($('view'));
+        } finally {
+          syncing = false;
+        }
+      }
+
+      function card(issue) {
+        const relation = relText(issue);
+        return h('button', { type: 'button', class: 'card', 'aria-current': selected === issue.id, onclick: () => openIssue(issue.id) },
+          h('div', { class: 'id' }, issue.id),
+          h('div', { class: 'name' }, issue.title),
+          h('div', { class: 'meta' },
+            h('span', { class: `badge p${issue.priority}` }, `P${issue.priority}`),
+            h('span', { class: 'badge' }, typeName(issue.type)),
+            issue.assignee ? h('span', { class: 'badge' }, issue.assignee) : null,
+            issue.commentCount ? h('span', { class: 'rel' }, `${issue.commentCount} 条评论`) : null,
+          ),
+          relation ? h('div', { class: 'rel' }, relation) : null,
+        );
+      }
+
+      function board(issues) {
+        const columns = (snap.columns || ['ready', 'in_progress', 'blocked', 'closed']).filter((id) => !column || id === column);
+        return h('div', { class: 'board' }, ...columns.map((id) => {
+          const items = issues.filter((issue) => issue.group === id);
+          return h('section', { class: 'col', 'data-col': id },
+            h('div', { class: 'col-head' }, h('i', { class: 'dot' }), h('b', {}, GROUP[id] || id), h('span', { class: 'count' }, String(items.length))),
+            items.length ? h('div', { class: 'cards' }, ...items.map(card)) : h('div', { class: 'ui-empty' }, '没有任务'),
+          );
+        }));
+      }
+
+      function table(issues) {
+        const head = (key, label) => h('th', {}, h('button', {
+          type: 'button',
+          'aria-sort': sortKey === key ? (sortDir > 0 ? 'ascending' : 'descending') : false,
+          onclick: () => {
+            sortDir = sortKey === key ? -sortDir : 1;
+            sortKey = key;
+            renderBody();
+          },
+        }, label));
+        return h('div', { class: 'table-wrap' }, h('table', {},
+          h('thead', {}, h('tr', {}, head('id', '编号'), head('title', '标题'), head('group', '状态'), head('priority', '优先级'), head('type', '类型'), head('assignee', '负责人'), head('rel', '关系'))),
+          h('tbody', {}, ...sorted(issues).map((issue) => h('tr', { 'aria-current': selected === issue.id, onclick: () => openIssue(issue.id) },
+            h('td', { class: 'mono' }, issue.id),
+            h('td', {}, issue.title),
+            h('td', {}, GROUP[issue.group] || issue.group),
+            h('td', {}, `P${issue.priority}`),
+            h('td', {}, typeName(issue.type)),
+            h('td', {}, issue.assignee || '—'),
+            h('td', { class: 'rel' }, relText(issue) || '—'),
+          ))),
+        ));
+      }
+
+      function relationList(title, items) {
+        if (!items?.length) return null;
+        return h('div', { class: 'section' }, h('h3', {}, title), ...items.map((item) =>
+          h('button', { type: 'button', class: 'linkish', onclick: () => openIssue(item.id) }, `${item.id}${item.title ? `  ${item.title}` : ''}${item.status ? ` · ${statusName(item.status)}` : ''}`)
+        ));
+      }
+
+      function detailView() {
+        const issue = detail?.issue;
+        if (!issue) return h('div', { class: 'ui-card detail' }, h('div', { class: 'ui-empty' }, '正在读取…'));
+        const write = detail.capabilities?.write;
+        const blocks = [
+          h('div', { class: 'actions' },
+            h('button', { type: 'button', class: 'ui-btn ui-btn--outline ui-btn--sm', onclick: () => { selected = null; detail = null; composer = null; renderBody(); } }, '返回'),
+            write && issue.status !== 'closed' ? h('button', { type: 'button', class: 'ui-btn ui-btn--primary ui-btn--sm', onclick: () => act('claim', { id: issue.id }) }, '认领') : null,
+            write && issue.status !== 'closed' ? h('button', { type: 'button', class: 'ui-btn ui-btn--outline ui-btn--sm', onclick: () => { composer = composer?.kind === 'close' ? null : { kind: 'close' }; renderBody(); } }, '关闭') : null,
+            write && issue.status === 'closed' ? h('button', { type: 'button', class: 'ui-btn ui-btn--outline ui-btn--sm', onclick: () => act('reopen', { id: issue.id }) }, '重新打开') : null,
+            detail.capabilities?.handoff ? h('button', { type: 'button', class: 'ui-btn ui-btn--outline ui-btn--sm', onclick: () => askHandoff(issue) }, '交给新会话') : null,
+            detail.handoffSessionId && detail.capabilities?.focus ? h('button', { type: 'button', class: 'ui-btn ui-btn--outline ui-btn--sm', onclick: () => call('focus', { sessionId: detail.handoffSessionId }) }, '打开会话') : null,
+          ),
+          h('div', {}, h('div', { class: 'mono' }, issue.id), h('h2', {}, issue.title)),
+          h('div', { class: 'meta' },
+            h('span', { class: `badge p${issue.priority}` }, PRIORITY[issue.priority] || `P${issue.priority}`),
+            h('span', { class: 'badge' }, statusName(issue.status)),
+            h('span', { class: 'badge' }, typeName(issue.type)),
+            issue.assignee ? h('span', { class: 'badge' }, issue.assignee) : null,
+            ...(issue.labels || []).map((label) => h('span', { class: 'badge' }, label)),
+          ),
+        ];
+        if (composer?.kind === 'close') {
+          const reason = h('textarea', { class: 'ui-input', placeholder: '关闭原因，可留空' });
+          blocks.push(h('div', { class: 'section' }, reason, h('div', { class: 'actions' },
+            h('button', { type: 'button', class: 'ui-btn ui-btn--primary ui-btn--sm', onclick: () => act('close', { id: issue.id, reason: reason.value }) }, '确认关闭'),
+          )));
+        }
+        for (const [label, value] of [['描述', issue.description], ['验收', issue.acceptance], ['设计', issue.design], ['备注', issue.notes], ['关闭原因', issue.closeReason]]) {
+          if (value) blocks.push(h('div', { class: 'section' }, h('h3', {}, label), h('div', { class: 'prose' }, value)));
+        }
+        const relations = detail.relations || {};
+        blocks.push(
+          relationList(relations.parent ? '父任务' : '', relations.parent ? [relations.parent] : []),
+          relationList('阻塞于', relations.blockedBy),
+          relationList('阻塞了', relations.blocks),
+          relationList('子任务', relations.children),
+          relationList('相关', relations.related),
+        );
+        const comments = issue.comments || [];
+        blocks.push(h('div', { class: 'section' }, h('h3', {}, `评论 ${comments.length}`),
+          comments.length ? h('div', { class: 'comments' }, ...comments.map((comment) => h('div', { class: 'comment' },
+            h('div', { class: 'rel' }, `${comment.author || '未知'} · ${comment.createdAt || ''}`),
+            h('div', { class: 'prose' }, comment.text),
+          ))) : h('div', { class: 'rel' }, '还没有评论'),
+        ));
+        if (write) {
+          const input = h('textarea', { class: 'ui-input', placeholder: '写一条评论' });
+          input.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) act('comment', { id: issue.id, text: input.value });
+          });
+          blocks.push(input);
+          blocks.push(h('div', { class: 'actions' }, h('button', { type: 'button', class: 'ui-btn ui-btn--primary ui-btn--sm', onclick: () => act('comment', { id: issue.id, text: input.value }) }, '发送评论')));
+        }
+        return h('article', { class: 'ui-card detail' }, ...blocks);
+      }
+
+      function stateView() {
+        if (!snap) return h('div', { class: 'ui-empty' }, h('div', { class: 'ui-skeleton', style: 'width: 180px; height: 14px' }), '正在读取 Beads…');
+        if (snap.state === 'no-project') return h('div', { class: 'ui-empty' }, snap.message);
+        if (snap.state === 'uninitialized') return h('div', { class: 'ui-empty' }, h('strong', {}, '还没有 Beads'), snap.message, h('div', {}, '命令 ', h('code', { class: 'cmd' }, 'bd init')));
+        if (snap.state === 'needs-cli') return h('div', { class: 'ui-empty' }, h('strong', {}, '需要 bd 命令'), snap.message);
+        if (snap.state === 'error') return h('div', { class: 'ui-empty' }, h('strong', {}, '没有读到任务'), snap.message, h('button', { type: 'button', class: 'ui-btn ui-btn--outline ui-btn--sm', onclick: () => refresh() }, '重试'));
+        const issues = filtered();
+        if (!snap.issues.length) return h('div', { class: 'ui-empty' }, h('strong', {}, '还没有任务'), '用 bd create 新建，或点右上角的新建。');
+        if (!issues.length) return h('div', { class: 'empty-filter ui-empty' }, '没有符合筛选的任务', h('button', { type: 'button', class: 'ui-btn ui-btn--outline ui-btn--sm', onclick: () => { query = ''; typeFilter = ''; priorityFilter = ''; assigneeFilter = ''; column = ''; $('search').value = ''; syncHeader(); renderBody(); } }, '清除筛选'));
+        return mode === 'table' ? table(issues) : board(issues);
+      }
+
+      function renderBody() {
+        const layout = $('layout');
+        layout.classList.toggle('has-detail', Boolean(selected));
+        const main = stateView();
+        layout.replaceChildren(main);
+        if (selected) layout.append(detailView());
+        syncHeader();
+      }
+
+      function apply(next, nextDetail) {
+        if (!next) return;
+        snap = next;
+        if (nextDetail) detail = nextDetail;
+        if (selected && detail?.issue?.id && detail.issue.id !== selected) detail = null;
+        renderBody();
+      }
+
+      async function refresh() {
+        const next = await call('snapshot');
+        if (!next) return;
+        if (next.state && next.state !== 'ready' && next.state !== 'no-project') {
+          snap = next;
+          renderBody();
+          return;
+        }
+        snap = next;
+        if (selected) {
+          const opened = await call('issue', { id: selected });
+          if (opened?.state === 'ready') detail = opened;
+        }
+        renderBody();
+      }
+
+      async function openIssue(id) {
+        selected = id;
+        composer = null;
+        detail = null;
+        renderBody();
+        const opened = await call('issue', { id });
+        if (!opened) return;
+        if (opened.state && opened.state !== 'ready') {
+          toast(opened.message || '读不到这条任务');
+          return;
+        }
+        if (selected !== id) return;
+        detail = opened;
+        renderBody();
+      }
+
+      async function act(method, args) {
+        const result = await call(method, args);
+        if (!result?.snapshot) return;
+        composer = null;
+        snap = result.snapshot;
+        if (result.warning) toast(result.warning, 'info');
+        if (result.detail) {
+          selected = result.detail.issue.id;
+          detail = { ...result.detail, capabilities: result.snapshot.capabilities, source: result.snapshot.source };
+        }
+        renderBody();
+      }
+
+      function askHandoff(issue) {
+        const done = (yes) => { mask.remove(); if (yes) act('handoff', { id: issue.id }); };
+        const modal = h('div', { class: 'modal ui-card ui-pop' },
+          h('h2', {}, '交给新会话'),
+          h('p', {}, '会新建一个 Enso 会话，把这条任务的说明和 bd 命令放进去。不会自动认领或关闭。'),
+          h('div', { class: 'actions' },
+            h('button', { type: 'button', class: 'ui-btn ui-btn--outline ui-btn--sm', onclick: () => done(false) }, '取消'),
+            h('button', { type: 'button', class: 'ui-btn ui-btn--primary ui-btn--sm', onclick: () => done(true) }, '新建会话'),
+          ),
+        );
+        const mask = h('div', { class: 'mask', onclick: (event) => { if (event.target === mask) done(false); } }, modal);
+        document.body.append(mask);
+        window.ensoUI?.pop?.(modal);
+      }
+
+      function askCreate() {
+        const title = h('input', { class: 'ui-input', placeholder: '标题' });
+        const description = h('textarea', { class: 'ui-input', placeholder: '描述，可留空' });
+        const type = h('select', { class: 'ui-input', 'aria-label': '类型' }, ...['task', 'bug', 'feature', 'epic', 'chore'].map((item) => h('option', { value: item }, typeName(item))));
+        const priority = h('select', { class: 'ui-input', 'aria-label': '优先级' }, ...PRIORITY.map((label, index) => h('option', { value: String(index), selected: index === 2 }, label)));
+        const done = (yes) => {
+          const value = title.value;
+          mask.remove();
+          if (yes) act('create', { title: value, description: description.value, type: type.value, priority: Number(priority.value) });
+        };
+        const modal = h('div', { class: 'modal ui-card ui-pop' },
+          h('h2', {}, '新建任务'),
+          title, h('div', { class: 'actions' }, type, priority), description,
+          h('div', { class: 'actions' },
+            h('button', { type: 'button', class: 'ui-btn ui-btn--outline ui-btn--sm', onclick: () => done(false) }, '取消'),
+            h('button', { type: 'button', class: 'ui-btn ui-btn--primary ui-btn--sm', onclick: () => done(true) }, '创建'),
+          ),
+        );
+        const mask = h('div', { class: 'mask', onclick: (event) => { if (event.target === mask) done(false); } }, modal);
+        document.body.append(mask);
+        window.ensoUI?.pop?.(modal);
+        title.focus();
+      }
+
+      $('search').addEventListener('input', () => { query = $('search').value; renderBody(); });
+      $('type').addEventListener('change', () => { if (syncing) return; typeFilter = $('type').value; renderBody(); });
+      $('priority').addEventListener('change', () => { if (syncing) return; priorityFilter = $('priority').value; renderBody(); });
+      $('assignee').addEventListener('change', () => { if (syncing) return; assigneeFilter = $('assignee').value; renderBody(); });
+      $('refresh').addEventListener('click', () => refresh());
+      $('create').addEventListener('click', () => askCreate());
+      for (const button of $('view').querySelectorAll('button')) {
+        button.addEventListener('click', () => {
+          mode = button.dataset.view;
+          localStorage.setItem('enso.beads.view', mode);
+          renderBody();
+        });
+      }
+      if (!window.enso?.call) {
+        $('layout').append(h('div', { class: 'ui-empty' }, '请在 Enso 侧栏中打开 Beads'));
+      } else {
+        for (const button of $('view').querySelectorAll('button')) button.setAttribute('aria-pressed', String(button.dataset.view === mode));
+        refresh();
+        setInterval(() => {
+          if (document.hidden || selected || composer || document.querySelector('.mask')) return;
+          if (document.activeElement?.matches('input, textarea, select')) return;
+          refresh();
+        }, 12000);
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,6 @@
+{
+  "tier": "official",
+  "category": "productivity",
+  "tags": ["git", "diff", "review", "walkthrough"],
+  "icon": "registry/icons/enso.walkthrough.svg"
+}
