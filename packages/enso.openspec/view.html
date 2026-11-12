@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="enso-ui.css" />
+    <style>
+      body { padding: 0 0 28px; }
+      header.top {
+        position: sticky; top: 0; z-index: 3; display: flex; align-items: flex-start; gap: 8px;
+        padding: 10px 12px 8px; background: color-mix(in oklch, var(--background) 86%, transparent); backdrop-filter: blur(12px);
+      }
+      header.top h1 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: -0.01em; }
+      header.top .sub { margin: 2px 0 0; color: var(--muted-foreground); font-size: 11px; line-height: 1.45; }
+      header.top .grow { flex: 1; min-width: 0; }
+      .banners, .filters, .groups { padding: 0 12px; }
+      .banners { display: flex; flex-direction: column; gap: 6px; }
+      .banner {
+        padding: 8px 10px; border-radius: var(--radius-md); font-size: 11.5px; line-height: 1.45;
+        background: color-mix(in oklch, var(--warning) 12%, transparent); color: var(--foreground);
+      }
+      .banner.note { background: color-mix(in oklch, var(--brand) 10%, transparent); }
+      .filters { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
+      .filters button {
+        height: 24px; padding: 0 8px; border-radius: 999px; font-size: 11px;
+        color: var(--muted-foreground); background: transparent;
+      }
+      .filters button[aria-pressed='true'] {
+        color: var(--foreground); background: color-mix(in oklch, var(--foreground) 8%, transparent);
+        box-shadow: inset 0 0 0 1px var(--border);
+      }
+      .filters button b { font-weight: 600; font-variant-numeric: tabular-nums; margin-left: 4px; }
+      .group { margin: 0 0 12px; }
+      .group h2 {
+        margin: 0 0 6px; font-size: 11px; font-weight: 600; letter-spacing: 0.02em;
+        color: var(--muted-foreground); text-transform: none;
+      }
+      .cards { display: flex; flex-direction: column; gap: 8px; }
+      .card { padding: 10px 10px 8px; display: flex; flex-direction: column; gap: 6px; }
+      .card.pinned { box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--brand) 45%, transparent), var(--shadow-xs); }
+      .card-head { display: flex; align-items: flex-start; gap: 8px; }
+      .card-head .grow { flex: 1; min-width: 0; }
+      .card h3 { margin: 0; font-size: 13px; font-weight: 600; line-height: 1.35; word-break: break-word; }
+      .path { margin-top: 2px; color: var(--muted-foreground); font-size: 11px; word-break: break-all; }
+      .row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+      .next, .miss, .where { margin: 0; font-size: 12px; line-height: 1.45; word-break: break-word; }
+      .next { color: var(--foreground); }
+      .next span, .miss, .where { color: var(--muted-foreground); }
+      .miss { color: var(--warning); }
+      .track { height: 4px; border-radius: 999px; background: var(--muted); overflow: hidden; }
+      .track > i {
+        display: block; height: 100%; width: 0; border-radius: inherit; background: var(--brand);
+        transition: width var(--dur-3) var(--ease-spring);
+      }
+      .track.done > i { background: var(--success); }
+      .stat { color: var(--muted-foreground); font-size: 11px; font-variant-numeric: tabular-nums; }
+      .prs { display: flex; flex-wrap: wrap; gap: 4px; }
+      .prs a { text-decoration: none; }
+      .actions { display: flex; flex-wrap: wrap; gap: 6px; }
+      .tasks { display: flex; flex-direction: column; gap: 8px; margin-top: 2px; }
+      .tasks h4 { margin: 0 0 4px; font-size: 11px; font-weight: 600; color: var(--muted-foreground); }
+      .task {
+        display: flex; align-items: flex-start; gap: 6px; font-size: 12px; line-height: 1.4;
+      }
+      .task input { margin: 2px 0 0; accent-color: var(--brand); }
+      .task.done span { color: var(--muted-foreground); text-decoration: line-through; }
+      .task span { flex: 1; min-width: 0; word-break: break-word; }
+      .docs { display: flex; flex-direction: column; gap: 6px; }
+      .doc {
+        margin: 0; max-height: 240px; overflow: auto; padding: 8px; border-radius: var(--radius-md);
+        background: var(--muted); white-space: pre-wrap; word-break: break-word; font: 11px/1.5 var(--font-mono);
+      }
+      .toasts {
+        position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 5;
+        display: flex; flex-direction: column; gap: 6px; pointer-events: none;
+      }
+      .toast {
+        padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-md);
+        background: var(--popover); box-shadow: var(--shadow-lg); font-size: 12px; pointer-events: auto;
+      }
+      .toast.error { color: var(--destructive); }
+      .ui-empty { padding: 36px 16px; }
+      .ui-empty strong { color: var(--foreground); font-size: 13px; }
+      .ui-empty p { margin: 0; max-width: 36em; }
+      .hint {
+        margin-top: 4px; padding: 8px 10px; border-radius: var(--radius-md); background: var(--muted);
+        font: 11.5px/1.5 var(--font-mono); color: var(--foreground); word-break: break-word;
+      }
+      button.spin svg { animation: ui-spin 0.8s linear infinite; }
+    </style>
+  </head>
+  <body>
+    <header class="top">
+      <div class="grow">
+        <h1>OpenSpec</h1>
+        <p class="sub">按阶段看 openspec/changes。实现和收尾发到标题对得上的会话；没有就新建，提示词先放进输入框。</p>
+      </div>
+      <button type="button" class="ui-btn ui-btn--icon" id="refresh" data-tip="刷新" aria-label="刷新">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.3"/><path d="M21 3v6h-6"/></svg>
+      </button>
+    </header>
+    <div id="app"></div>
+    <div class="toasts" id="toasts"></div>
+    <script src="enso-ui.js"></script>
+    <script>
+      const STAGES = [
+        ['planning', '规划'],
+        ['ready', '就绪'],
+        ['in-progress', '进行中'],
+        ['in-review', '评审中'],
+        ['merged', '已合并未完成'],
+        ['complete', '完成'],
+      ];
+      const STAGE_BADGE = {
+        planning: '',
+        ready: 'ui-badge--brand',
+        'in-progress': 'ui-badge--warning',
+        'in-review': 'ui-badge--brand',
+        merged: 'ui-badge--warning',
+        complete: 'ui-badge--success',
+      };
+      const STATE = { running: '运行中', waiting: '等待你', error: '出错', idle: '空闲' };
+      const app = document.getElementById('app');
+      const refreshBtn = document.getElementById('refresh');
+      const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
+      const stageLabel = (stage) => STAGES.find(([id]) => id === stage)?.[1] ?? stage;
+      const call = (method, args) => window.enso.call(method, args ?? {});
+
+      let data = null;
+      let filter = window.enso?.storage?.get('filter') || 'all';
+      if (!STAGES.some(([id]) => id === filter) && filter !== 'all') filter = 'all';
+      const open = new Set();
+      let doc = null;
+      let busy = false;
+
+      const syncTheme = (theme) => {
+        document.documentElement.dataset.theme = theme === 'dark' ? 'dark' : 'light';
+      };
+      if (window.enso?.theme) syncTheme(window.enso.theme);
+      window.enso?.onTheme?.(syncTheme);
+
+      function toast(message, error) {
+        const node = document.createElement('div');
+        node.className = `toast${error ? ' error' : ''}`;
+        node.textContent = message;
+        document.getElementById('toasts').append(node);
+        setTimeout(() => node.remove(), 4200);
+      }
+
+      function safeHttp(url) {
+        try {
+          const parsed = new URL(url);
+          if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return '';
+          return parsed.href;
+        } catch {
+          return '';
+        }
+      }
+
+      function prLabel(pr) {
+        if (pr.draft && pr.state === 'open') return `#${pr.number} 草稿`;
+        if (pr.state === 'open') return `#${pr.number} 打开`;
+        if (pr.state === 'merged') return `#${pr.number} 已合并`;
+        if (pr.state === 'closed') return `#${pr.number} 已关闭`;
+        return `#${pr.number} 未标明`;
+      }
+
+      function prClass(pr) {
+        if (pr.state === 'merged') return 'ui-badge ui-badge--success';
+        if (pr.state === 'open') return 'ui-badge ui-badge--brand';
+        if (pr.state === 'closed') return 'ui-badge';
+        return 'ui-badge ui-badge--warning';
+      }
+
+      function actionLabel(command, place) {
+        if (place.kind === 'new') return command === 'apply' ? '新建会话' : '新建并收尾';
+        if (place.kind === 'elsewhere') return command === 'apply' ? '发送实现' : '发送收尾';
+        return command === 'apply' ? '实现' : '收尾';
+      }
+
+      function whereText(change) {
+        const place = change.place;
+        if (!place || place.kind === 'none') {
+          if (place?.reason) return esc(place.reason);
+          if (change.stage === 'planning') return '产物还没齐，补齐后再实现';
+          return '';
+        }
+        if (place.kind === 'current') return '发到当前会话';
+        if (place.kind === 'elsewhere') {
+          const state = STATE[place.state] ? ` · ${STATE[place.state]}` : '';
+          return `会话「${esc(place.title)}」${state}`;
+        }
+        return '没有标题对得上的会话，将新建一个';
+      }
+
+      function taskHtml(change) {
+        if (!open.has(change.name)) return '';
+        const blocks = change.sections.map((section) => {
+          const items = section.tasks.map((task) => {
+            const run = task.runText
+              ? `<button type="button" class="ui-btn ui-btn--outline ui-btn--sm" data-act="task" data-name="${esc(change.name)}" data-task="${task.index}" title="${esc(task.runText)}">只做这项</button>`
+              : '';
+            return `<label class="task${task.done ? ' done' : ''}"><input type="checkbox" disabled ${task.done ? 'checked' : ''}><span>${esc(task.text)}</span>${run}</label>`;
+          }).join('');
+          return `<section>${section.title ? `<h4>${esc(section.title)}</h4>` : ''}${items}</section>`;
+        }).join('');
+        const more = change.tasksTruncated ? '<p class="where">任务太多，只列出前 80 项。</p>' : '';
+        const docs = (change.docs ?? []).map((path) => `<button type="button" class="ui-btn ui-btn--sm" data-doc="${esc(path)}" data-name="${esc(change.name)}">${esc(path)}</button>`).join('');
+        const preview = doc && doc.name === change.name
+          ? `<pre class="doc">${esc(doc.text || '文件是空的或不存在')}</pre>${doc.truncated ? '<p class="where">只显示前 12000 个字符。</p>' : ''}`
+          : '';
+        return `<div class="tasks">${blocks || '<p class="where">tasks.md 里还没有复选框。</p>'}${more}<div class="docs"><div class="row">${docs}</div>${preview}</div></div>`;
+      }
+
+      function cardHtml(change) {
+        const percent = change.tasks.total ? Math.round((change.tasks.done / change.tasks.total) * 100) : 0;
+        const ticket = change.ticket
+          ? (safeHttp(change.ticket.url)
+            ? `<a class="ui-badge ui-badge--brand" href="${esc(safeHttp(change.ticket.url))}" target="_blank" rel="noreferrer">${esc(change.ticket.key)}</a>`
+            : `<span class="ui-badge ui-badge--brand">${esc(change.ticket.key)}</span>`)
+          : '';
+        const prs = (change.pullRequests ?? []).map((pr) => {
+          const href = safeHttp(pr.url);
+          const label = prLabel(pr);
+          return href
+            ? `<a class="${prClass(pr)}" href="${esc(href)}" target="_blank" rel="noreferrer" title="${esc(pr.repository)}">${esc(label)}</a>`
+            : `<span class="${prClass(pr)}">${esc(label)}</span>`;
+        }).join('');
+        const commands = (change.commands ?? []).map((command, index) => {
+          const primary = index === 0 ? ' ui-btn--primary' : ' ui-btn--outline';
+          return `<button type="button" class="ui-btn ui-btn--sm${primary}" data-act="${esc(command.name)}" data-name="${esc(change.name)}" title="${esc(command.text)}">${esc(actionLabel(command.name, change.place))}</button>`;
+        }).join('');
+        const go = change.place?.kind === 'elsewhere'
+          ? `<button type="button" class="ui-btn ui-btn--outline ui-btn--sm" data-act="focus" data-name="${esc(change.name)}">前往</button>`
+          : '';
+        const where = whereText(change);
+        const missing = change.missing?.length ? `<p class="miss">还缺 ${esc(change.missing.join('、'))}</p>` : '';
+        const resume = change.resume ? `<p class="next"><span>下一步 </span>${esc(change.resume)}</p>` : '';
+        const bar = change.tasks.total
+          ? `<div class="track${percent === 100 ? ' done' : ''}" role="progressbar" aria-valuenow="${change.tasks.done}" aria-valuemin="0" aria-valuemax="${change.tasks.total}"><i style="width:${percent}%"></i></div><div class="stat">${change.tasks.done}/${change.tasks.total}</div>`
+          : '<div class="stat">还没有任务</div>';
+        return `<article class="card ui-card${change.pinned ? ' pinned' : ''}">
+          <div class="card-head">
+            <div class="grow">
+              <h3>${esc(change.title)}</h3>
+              <div class="path ui-mono">${esc(change.name)}</div>
+            </div>
+            <span class="ui-badge ${STAGE_BADGE[change.stage] ?? ''}">${esc(stageLabel(change.stage))}</span>
+          </div>
+          ${ticket ? `<div class="row">${ticket}</div>` : ''}
+          ${resume}
+          ${bar}
+          ${prs ? `<div class="prs">${prs}</div>` : ''}
+          ${missing}
+          ${where ? `<p class="where">${where}</p>` : ''}
+          <div class="actions">
+            ${commands}${go}
+            <button type="button" class="ui-btn ui-btn--sm" data-toggle="${esc(change.name)}" aria-expanded="${open.has(change.name)}">${open.has(change.name) ? '收起' : '任务'}</button>
+          </div>
+          ${taskHtml(change)}
+        </article>`;
+      }
+
+      function groupsHtml(changes) {
+        const list = filter === 'all' ? changes : changes.filter((change) => change.stage === filter);
+        if (!list.length) return '<div class="ui-empty"><strong>这个阶段没有变更</strong><p>换一个阶段，或刷新后再看。</p></div>';
+        const pinned = list.filter((change) => change.pinned);
+        const rest = list.filter((change) => !change.pinned);
+        const blocks = [];
+        if (pinned.length) blocks.push(['当前会话', pinned]);
+        if (filter === 'all') {
+          for (const [id, label] of STAGES) {
+            const items = rest.filter((change) => change.stage === id);
+            if (items.length) blocks.push([label, items]);
+          }
+        } else if (rest.length) blocks.push([stageLabel(filter), rest]);
+        return blocks.map(([label, items]) => `<section class="group"><h2>${esc(label)} ${items.length}</h2><div class="cards ui-stagger">${items.map(cardHtml).join('')}</div></section>`).join('');
+      }
+
+      function emptyHtml() {
+        if (!data) return '<div class="ui-empty"><div class="ui-skeleton" style="width:46%;height:12px"></div><div class="ui-skeleton" style="width:72%;height:12px"></div></div>';
+        if (data.status === 'no-project') {
+          return '<div class="ui-empty"><strong>还没有打开项目</strong><p>看板读取当前项目的 openspec/changes/。先打开一个项目，再点刷新。</p></div>';
+        }
+        if (data.status === 'error') {
+          return `<div class="ui-empty"><strong>读不到 OpenSpec</strong><p>${esc(data.message || '请稍后刷新')}</p></div>`;
+        }
+        if (data.status === 'no-openspec') {
+          return `<div class="ui-empty"><strong>这个项目还没有 OpenSpec</strong><p>在项目根目录初始化，或让会话创建 openspec/ 目录。每个变更是 openspec/changes/&lt;名称&gt;/，里面通常有 proposal.md、design.md、tasks.md 和 specs/。完成后点刷新。</p><div class="hint">openspec init</div></div>`;
+        }
+        if (data.status === 'no-changes') {
+          if (!data.hasChangesDir) {
+            return '<div class="ui-empty"><strong>还没有 changes 目录</strong><p>openspec/ 已经在，但没有 openspec/changes/。让会话提议一个变更，或自己建这个目录后再刷新。</p></div>';
+          }
+          return '<div class="ui-empty"><strong>没有进行中的变更</strong><p>openspec/changes/ 里还没有变更。archive/ 里的已归档变更不会出现在看板上。</p></div>';
+        }
+        return '';
+      }
+
+      function render() {
+        if (!data) {
+          app.innerHTML = '<div class="ui-empty"><div class="ui-skeleton" style="width:46%;height:12px"></div><div class="ui-skeleton" style="width:72%;height:12px"></div></div>';
+          return;
+        }
+        const changes = data.changes ?? [];
+        const counts = Object.fromEntries(STAGES.map(([id]) => [id, changes.filter((change) => change.stage === id).length]));
+        const filters = [['all', '全部', changes.length], ...STAGES.map(([id, label]) => [id, label, counts[id]])];
+        const banners = [
+          ...(data.problems ?? []).map((text) => `<div class="banner">${esc(text)}</div>`),
+          ...(data.notes ?? []).map((text) => `<div class="banner note">${esc(text)}</div>`),
+        ].join('');
+        const main = data.status === 'ready'
+          ? `<div class="filters ui-fill-host">${filters.map(([id, label, count]) => `<button type="button" data-fill data-filter="${id}" aria-pressed="${filter === id}">${esc(label)}<b>${count}</b></button>`).join('')}</div><div class="groups">${groupsHtml(changes)}</div>`
+          : emptyHtml();
+        app.innerHTML = `${banners ? `<div class="banners">${banners}</div>` : ''}${main}`;
+        window.ensoUI?.fill(app.querySelector('.filters'));
+        window.ensoUI?.stagger(app.querySelector('.cards'));
+        window.ensoUI?.tooltip?.();
+      }
+
+      async function refresh() {
+        refreshBtn.classList.add('spin');
+        refreshBtn.disabled = true;
+        try {
+          data = await call('board');
+          if (doc) {
+            try { doc = { name: doc.name, ...(await call('detail', { name: doc.name, path: doc.path })), path: doc.path }; }
+            catch { doc = null; }
+          }
+          render();
+        } catch (error) {
+          toast(error?.message || '刷新失败', true);
+          if (!data) {
+            data = { status: 'error', message: error?.message || '刷新失败', problems: [], notes: [], changes: [] };
+            render();
+          }
+        } finally {
+          refreshBtn.classList.remove('spin');
+          refreshBtn.disabled = false;
+        }
+      }
+
+      app.addEventListener('click', async (event) => {
+        const filterBtn = event.target.closest('[data-filter]');
+        if (filterBtn) {
+          filter = filterBtn.dataset.filter;
+          window.enso?.storage?.set('filter', filter);
+          render();
+          return;
+        }
+        const toggle = event.target.closest('[data-toggle]');
+        if (toggle) {
+          const name = toggle.dataset.toggle;
+          if (open.has(name)) open.delete(name);
+          else open.add(name);
+          render();
+          return;
+        }
+        const docBtn = event.target.closest('[data-doc]');
+        if (docBtn) {
+          try {
+            const loaded = await call('detail', { name: docBtn.dataset.name, path: docBtn.dataset.doc });
+            doc = { name: docBtn.dataset.name, path: docBtn.dataset.doc, text: loaded.text, truncated: loaded.truncated };
+            open.add(docBtn.dataset.name);
+            render();
+          } catch (error) {
+            toast(error?.message || '打不开文件', true);
+          }
+          return;
+        }
+        const act = event.target.closest('[data-act]');
+        if (!act || busy) return;
+        busy = true;
+        act.disabled = true;
+        try {
+          const result = await call('act', {
+            op: act.dataset.act,
+            name: act.dataset.name,
+            taskIndex: act.dataset.task == null ? undefined : Number(act.dataset.task),
+          });
+          toast(result?.message || '已发送');
+          await refresh();
+        } catch (error) {
+          toast(error?.message || '没有发送', true);
+        } finally {
+          busy = false;
+          if (act.isConnected) act.disabled = false;
+        }
+      });
+
+      refreshBtn.addEventListener('click', () => refresh());
+      render();
+      refresh();
+      setInterval(() => { if (!document.hidden) refresh(); }, 30000);
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+    </script>
+  </body>
+</html>
