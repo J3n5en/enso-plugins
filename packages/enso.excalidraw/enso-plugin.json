@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "enso.excalidraw",
+  "name": "Excalidraw",
+  "version": "0.1.0",
+  "icon": "icon.svg",
+  "description": "在编辑器里打开并修改 .excalidraw、.excalidraw.json 和 .excalidraw.svg 白板。改动写回文件草稿，仍由 Enso 保存。",
+  "engines": { "enso": ">=0.3.4" },
+  "main": "main.mjs",
+  "permissions": ["ui.view", "ui.openExternal"],
+  "contributes": {
+    "fileViewers": [
+      {
+        "id": "excalidraw",
+        "title": "Excalidraw",
+        "entry": "editor.html",
+        "extensions": [".excalidraw", ".excalidraw.json", ".excalidraw.svg"],
+        "default": true
+      }
+    ]
+  }
+}

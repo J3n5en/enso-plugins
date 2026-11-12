@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="enso-ui.css" />
+    <style>
+      :where(button) { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+      svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+      header {
+        position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 8px;
+        padding: 10px 12px 8px; background: color-mix(in oklch, var(--background) 86%, transparent);
+        backdrop-filter: blur(12px);
+      }
+      header h1 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: -0.01em; }
+      header .stat { margin-left: auto; color: var(--muted-foreground); font: 500 11.5px/1.4 var(--font-mono); font-variant-numeric: tabular-nums; }
+      .tools { display: flex; gap: 2px; }
+      .bar { display: flex; align-items: center; gap: 8px; padding: 0 12px 8px; }
+      .bar .ui-seg { flex: 1; min-width: 0; }
+      .bar .ui-seg > button { flex: 1; padding: 0 4px; }
+      .unread-toggle[aria-pressed='true'] { color: var(--brand); background: color-mix(in oklch, var(--brand) 12%, transparent); }
+      .notice, .banner {
+        margin: 0 12px 8px; padding: 7px 10px; border-radius: var(--radius-md);
+        font-size: 11.5px; line-height: 1.45; color: var(--muted-foreground);
+        background: color-mix(in oklch, var(--muted) 70%, transparent);
+      }
+      .banner { color: var(--destructive); background: color-mix(in oklch, var(--destructive) 10%, transparent); }
+      .list { display: flex; flex-direction: column; gap: 10px; padding: 0 12px 12px; }
+      .group {
+        border: 1px solid var(--border); border-radius: var(--radius-lg);
+        background: color-mix(in oklch, var(--muted) 42%, transparent); overflow: hidden;
+      }
+      .group-head {
+        display: flex; align-items: center; gap: 6px; min-height: 32px; padding: 6px 10px 4px;
+      }
+      .group-head .name { font-weight: 600; font-size: 12.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .group-head .spacer { flex: 1; }
+      .rows { display: flex; flex-direction: column; gap: 2px; padding: 0 4px 4px; }
+      .rows [data-fill]:hover { background: transparent; }
+      .item {
+        display: grid; grid-template-columns: 8px minmax(0, 1fr); gap: 8px; width: 100%;
+        padding: 8px 8px 8px 10px; border-radius: var(--radius-md); text-align: left;
+        transition: background-color var(--dur-1) var(--ease-out);
+      }
+      .item:disabled { opacity: 0.6; }
+      .dot { width: 7px; height: 7px; margin-top: 6px; border-radius: 50%; background: transparent; }
+      .item.unread .dot { background: var(--brand); box-shadow: 0 0 0 3px color-mix(in oklch, var(--brand) 18%, transparent); }
+      .item .top { display: flex; align-items: center; gap: 6px; min-width: 0; }
+      .item .title { font-weight: 550; font-size: 12.5px; line-height: 1.4; min-width: 0; }
+      .item .when { margin-left: auto; color: var(--muted-foreground); font: 500 11px/1 var(--font-mono); font-variant-numeric: tabular-nums; flex: none; }
+      .item .session { margin-top: 2px; font-size: 12px; color: var(--foreground); }
+      .item .detail { margin-top: 2px; color: var(--muted-foreground); font-size: 12px; line-height: 1.45; }
+      .item .hint { margin-top: 4px; color: var(--warning); font-size: 11.5px; }
+      .sk { height: 64px; margin: 0 12px 8px; }
+      .foot { padding: 2px 14px 16px; color: var(--muted-foreground); font-size: 11px; line-height: 1.5; }
+      .toasts { position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 30; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
+      .toast {
+        max-width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-md);
+        background: var(--popover); box-shadow: var(--shadow-lg); font-size: 12px;
+      }
+      .toast.error { color: var(--destructive); }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>收件箱</h1>
+      <span class="stat" id="stat"></span>
+      <div class="tools">
+        <button type="button" class="ui-btn ui-btn--icon ui-btn--sm" id="read" data-tip="全部标为已读" aria-label="全部标为已读">
+          <svg viewBox="0 0 24 24"><path d="M2 12l5 5L20 4"/><path d="M7 12l5 5L22 7"/></svg>
+        </button>
+        <button type="button" class="ui-btn ui-btn--icon ui-btn--sm" id="reload" data-tip="刷新" aria-label="刷新">
+          <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.3"/><path d="M21 3v6h-6"/></svg>
+        </button>
+      </div>
+    </header>
+    <div class="bar">
+      <div class="ui-seg" id="kinds" role="tablist" aria-label="类型">
+        <button type="button" data-kind="all" aria-pressed="true">全部</button>
+        <button type="button" data-kind="approval" aria-pressed="false">审批</button>
+        <button type="button" data-kind="ask" aria-pressed="false">提问</button>
+        <button type="button" data-kind="failure" aria-pressed="false">失败</button>
+      </div>
+      <button type="button" class="ui-btn ui-btn--sm unread-toggle" id="unread" aria-pressed="false">未读</button>
+    </div>
+    <p class="notice">点击本项目的条目会切到那个会话。审批仍在会话自己的审批条里处理。</p>
+    <div id="banner" class="banner" hidden></div>
+    <div id="loading"></div>
+    <div id="list" class="list"></div>
+    <p class="foot">只收主会话里等你处理的事，不含 Bot。过期凭据、审批和提问的正文，以及还在继续的工具错误，宿主都没有交给插件。列表最多覆盖最近 200 个主会话。</p>
+    <div id="toasts" class="toasts"></div>
+    <script src="enso-ui.js"></script>
+    <script>
+      const KIND = {
+        approval: { label: '审批', badge: 'ui-badge ui-badge--warning' },
+        ask: { label: '提问', badge: 'ui-badge ui-badge--brand' },
+        failure: { label: '失败', badge: 'ui-badge ui-badge--destructive' },
+      };
+      const $ = (id) => document.getElementById(id);
+      const enso = window.enso;
+      if (!enso || typeof enso.call !== 'function') {
+        $('loading').replaceChildren(Object.assign(document.createElement('div'), {
+          className: 'ui-empty',
+          textContent: '请在 EnsoCode 的侧栏里打开收件箱。',
+        }));
+      } else {
+        ensoUI.tooltip();
+        let filter = 'all';
+        let unreadOnly = false;
+        let state = null;
+        let notes = {};
+        let booted = false;
+        try {
+          const saved = JSON.parse(enso.storage.get('view') || 'null');
+          if (saved && ['all', 'approval', 'ask', 'failure'].includes(saved.kind)) filter = saved.kind;
+          if (saved?.unreadOnly === true) unreadOnly = true;
+        } catch { /* 筛选记不住就用默认 */ }
+
+        const saveView = () => {
+          try { enso.storage.set('view', JSON.stringify({ kind: filter, unreadOnly })); } catch { /* 配额满时忽略 */ }
+        };
+        const rel = (ts) => {
+          if (!ts) return '';
+          const sec = Math.max(0, Date.now() - ts);
+          if (sec < 60_000) return '刚刚';
+          if (sec < 3_600_000) return `${Math.floor(sec / 60_000)} 分钟前`;
+          if (sec < 86_400_000) return `${Math.floor(sec / 3_600_000)} 小时前`;
+          return `${Math.floor(sec / 86_400_000)} 天前`;
+        };
+        const toast = (text, error) => {
+          const node = document.createElement('div');
+          node.className = `toast ui-enter${error ? ' error' : ''}`;
+          node.textContent = text;
+          $('toasts').append(node);
+          setTimeout(() => node.remove(), 3200);
+        };
+        const h = (tag, props = {}, ...kids) => {
+          const node = document.createElement(tag);
+          for (const [key, value] of Object.entries(props)) {
+            if (key === 'class') node.className = value;
+            else if (key.startsWith('on')) node.addEventListener(key.slice(2).toLowerCase(), value);
+            else if (value != null && value !== false) node.setAttribute(key, value);
+          }
+          node.append(...kids.filter((kid) => kid != null && kid !== false));
+          return node;
+        };
+        const text = (tag, className, value) => {
+          const node = document.createElement(tag);
+          if (className) node.className = className;
+          node.textContent = value;
+          return node;
+        };
+        const syncFilters = () => {
+          for (const button of $('kinds').querySelectorAll('button')) {
+            button.setAttribute('aria-pressed', button.dataset.kind === filter ? 'true' : 'false');
+          }
+          $('unread').setAttribute('aria-pressed', unreadOnly ? 'true' : 'false');
+          ensoUI.seg($('kinds'));
+        };
+        const render = () => {
+          const summary = state?.summary || { total: 0, unread: 0, approvals: 0, asks: 0, failures: 0 };
+          const stat = summary.total > 0
+            ? `${summary.total} 项在等你${summary.unread ? ` · ${summary.unread} 未读` : ''}`
+            : '没有在等你的事';
+          ensoUI.swap($('stat'), stat);
+          $('read').disabled = !summary.unread;
+          const banner = $('banner');
+          if (state?.error) {
+            banner.hidden = false;
+            banner.textContent = state.error;
+          } else banner.hidden = true;
+          const loading = $('loading');
+          const list = $('list');
+          if (!state?.loaded) {
+            loading.replaceChildren(h('div', { class: 'ui-skeleton sk' }), h('div', { class: 'ui-skeleton sk' }));
+            list.replaceChildren();
+            return;
+          }
+          loading.replaceChildren();
+          const groups = state.groups || [];
+          if (!groups.length) {
+            const filtered = summary.total > 0;
+            list.replaceChildren(h('div', { class: 'ui-empty' }, text('div', '', filtered ? '这个筛选下没有条目' : '各项目都没有在等你的事')));
+            return;
+          }
+          const root = document.createDocumentFragment();
+          for (const group of groups) {
+            const head = h('div', { class: 'group-head' },
+              text('div', 'name', group.projectName || '未命名项目'),
+              group.focusable ? h('span', { class: 'ui-badge ui-badge--brand' }, '当前项目') : h('span', { class: 'ui-badge' }, '其他项目'),
+              h('span', { class: 'spacer' }),
+              group.unread ? h('span', { class: 'ui-badge ui-badge--brand' }, `${group.unread} 未读`) : null,
+              text('span', 'ui-muted', `${group.waits} 项`),
+            );
+            const rows = h('div', { class: 'rows' });
+            for (const item of group.items) {
+              const meta = KIND[item.kind] || { label: item.kind, badge: 'ui-badge' };
+              const button = h('button', {
+                type: 'button',
+                class: `item${item.unread ? ' unread' : ''}`,
+                'data-fill': '',
+                onclick: () => openItem(item, button),
+              },
+                h('span', { class: 'dot', 'aria-hidden': 'true' }),
+                h('span', {},
+                  h('span', { class: 'top' },
+                    h('span', { class: meta.badge }, meta.label),
+                    item.archived ? h('span', { class: 'ui-badge' }, '已归档') : null,
+                    text('span', 'when', rel(item.at)),
+                  ),
+                  text('div', 'session', item.sessionTitle || '未命名会话'),
+                  text('div', 'title', item.title || ''),
+                  text('div', 'detail', item.detail || ''),
+                  notes[item.id] ? text('div', 'hint', notes[item.id]) : (!group.focusable ? text('div', 'hint', '点开会标成已读，但不能从这里切到别的项目。') : null),
+                ),
+              );
+              rows.append(button);
+            }
+            root.append(h('section', { class: booted ? 'group' : 'group ui-stagger' }, head, rows));
+          }
+          list.replaceChildren(root);
+          if (!booted) {
+            ensoUI.stagger(list);
+            booted = true;
+          }
+          for (const rows of list.querySelectorAll('.rows')) ensoUI.fill(rows);
+        };
+        const pull = async (method = 'snapshot') => {
+          const data = await enso.call(method, { kind: filter, unreadOnly });
+          state = data || state;
+          const live = new Set((state?.items || []).map((item) => item.id));
+          notes = Object.fromEntries(Object.entries(notes).filter(([id]) => live.has(id)));
+          render();
+        };
+        const openItem = async (item, button) => {
+          button.disabled = true;
+          try {
+            const res = await enso.call('focus', { sessionId: item.sessionId, id: item.id });
+            if (res?.ok) delete notes[item.id];
+            else if (res?.reason === 'other-project') notes[item.id] = `请先打开项目「${res.projectName || item.projectName}」。宿主只能切到当前项目的会话。`;
+            else if (res?.reason === 'missing') notes[item.id] = '这个会话已经不在列表里。';
+            else notes[item.id] = res?.message || '没能切换到这个会话。';
+            await pull();
+          } catch (error) {
+            toast(error?.message || '操作失败', true);
+          } finally {
+            button.disabled = false;
+          }
+        };
+        $('kinds').addEventListener('click', (event) => {
+          const button = event.target.closest('button[data-kind]');
+          if (!button || filter === button.dataset.kind) return;
+          filter = button.dataset.kind;
+          saveView();
+          syncFilters();
+          pull().catch((error) => toast(error?.message || '刷新失败', true));
+        });
+        $('unread').addEventListener('click', () => {
+          unreadOnly = !unreadOnly;
+          saveView();
+          syncFilters();
+          pull().catch((error) => toast(error?.message || '刷新失败', true));
+        });
+        $('read').addEventListener('click', () => {
+          enso.call('markRead', { all: true, kind: filter, unreadOnly })
+            .then((data) => { state = data; notes = {}; render(); })
+            .catch((error) => toast(error?.message || '标已读失败', true));
+        });
+        $('reload').addEventListener('click', () => {
+          $('reload').classList.add('ui-spin');
+          pull('refresh')
+            .catch((error) => toast(error?.message || '刷新失败', true))
+            .finally(() => $('reload').classList.remove('ui-spin'));
+        });
+        window.addEventListener('resize', () => ensoUI.seg($('kinds')));
+        enso.on('inbox', () => {
+          pull().catch((error) => toast(error?.message || '刷新失败', true));
+        });
+        setInterval(() => { if (state?.loaded) render(); }, 30_000);
+        syncFilters();
+        requestAnimationFrame(() => ensoUI.seg($('kinds')));
+        pull().catch((error) => {
+          state = { loaded: true, error: error?.message || '读不到收件箱', groups: [], items: [], summary: { total: 0, unread: 0 } };
+          render();
+        });
+      }
+    </script>
+  </body>
+</html>

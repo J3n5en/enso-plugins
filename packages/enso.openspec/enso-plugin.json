@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "enso.openspec",
+  "name": "OpenSpec",
+  "version": "0.1.0",
+  "icon": "icon.svg",
+  "description": "侧栏按阶段查看当前项目的 OpenSpec 变更：任务进度、下一步、工单，以及文档里能识别的 PR。实现和收尾会把提示发到对应的 Enso 会话。",
+  "engines": { "enso": ">=0.2.14" },
+  "main": "main.mjs",
+  "permissions": ["ui.view", "fs.read", "agent.inject", "session.read", "session.focus", "session.create"],
+  "fs": { "read": ["openspec"] },
+  "contributes": {
+    "views": [{ "id": "board", "title": "OpenSpec", "entry": "view.html" }],
+    "methods": [
+      { "name": "board", "timeoutMs": 30000 },
+      { "name": "detail", "timeoutMs": 20000 },
+      { "name": "act", "timeoutMs": 20000 }
+    ]
+  }
+}

@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "id": "enso.walkthrough",
+  "name": "Walkthrough",
+  "version": "0.1.0",
+  "icon": "icon.svg",
+  "description": "把 Git diff、提交范围或当前会话的改动收成一步步的讲解：每步有标题、说明和对应代码，可以改文字，一次看一步。",
+  "engines": { "enso": ">=0.2.0" },
+  "main": "main.mjs",
+  "permissions": ["ui.view", "ui.clipboard", "fs.read", "session.read", "agent.tool"],
+  "fs": { "read": ["."] },
+  "contributes": {
+    "views": [{ "id": "walk", "title": "讲解", "entry": "walkthrough.html" }],
+    "commands": [{ "id": "open", "title": "打开变更讲解" }],
+    "methods": [
+      { "name": "state", "timeoutMs": 20000 },
+      { "name": "build", "timeoutMs": 60000 },
+      { "name": "save", "timeoutMs": 10000 },
+      { "name": "copy", "timeoutMs": 10000 }
+    ],
+    "agentTools": [
+      {
+        "name": "walkthrough_build",
+        "description": "Build a stepped walkthrough from a git diff in the current project and show it in the Walkthrough sidebar. Sources: session (commits since the current Enso session checkpoint, otherwise uncommitted changes), worktree, staged, branch, or commits (last N or a base..head range). Explanations are derived from the diff and commit messages; the user can edit them. Does not send the diff to a model.",
+        "timeoutMs": 60000,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": ["session", "worktree", "staged", "branch", "commits"],
+              "description": "What to explain. Default session."
+            },
+            "count": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 30,
+              "description": "When kind is commits and range is omitted, how many recent commits (default 5)."
+            },
+            "range": {
+              "type": "string",
+              "description": "Commit range such as HEAD~5..HEAD when kind is commits."
+            },
+            "base": {
+              "type": "string",
+              "description": "Base branch when kind is branch. Defaults to origin/HEAD, origin/main, or main."
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "walkthrough_edit",
+        "description": "Edit the title or explanation of an existing walkthrough. Pass stepId to change that step; omit stepId to change the overall title or summary. Edited text is kept when the same change is rebuilt.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "walkId": { "type": "string", "description": "Walkthrough id. Defaults to the latest one." },
+            "stepId": { "type": "string", "description": "Step id from walkthrough_build. Required when setting body." },
+            "title": { "type": "string" },
+            "body": { "type": "string", "description": "Step explanation. Requires stepId." },
+            "summary": { "type": "string", "description": "Overall summary. Omit stepId." }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "walkthrough_current",
+        "readOnly": true,
+        "description": "Read the current project's saved walkthrough: title, summary, and each step's id, title, and explanation.",
+        "parameters": { "type": "object", "properties": {}, "additionalProperties": false }
+      }
+    ]
+  }
+}
