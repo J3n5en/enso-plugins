@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-12T11:20:20.472Z",
-  "sequence": 100,
+  "generatedAt": "2026-11-12T11:22:58.235Z",
+  "sequence": 101,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -2018,11 +2018,11 @@
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.trajectory.svg",
       "category": "insights",
       "readme": {
-        "path": "packages/enso.trajectory/0.1.0.readme.md",
+        "path": "packages/enso.trajectory/0.1.1.readme.md",
         "sha256": "10dccf8a16ef574154f18b3b08e14679ade30671d43bdda6203618a410f96c28",
         "size": 1946
       },
-      "latest": "0.1.0",
+      "latest": "0.1.1",
       "versions": [
         {
           "version": "0.1.0",
@@ -2038,6 +2038,21 @@
           "sha256": "a67966f65986ebadf881cb3882977666c8738a191cf34fead288498edef862e8",
           "size": 105429,
           "publishedAt": "2026-11-12T05:55:56.585Z"
+        },
+        {
+          "version": "0.1.1",
+          "engines": {
+            "enso": ">=0.3.0"
+          },
+          "permissions": [
+            "ui.view",
+            "agent.observe",
+            "session.read"
+          ],
+          "path": "packages/enso.trajectory/0.1.1.zip",
+          "sha256": "39b23ef3530a86c18a612292ed790d65633b4f0007a5438a7473ce3ddb0d07bc",
+          "size": 113000,
+          "publishedAt": "2026-11-12T11:22:58.235Z"
         }
       ]
     },
