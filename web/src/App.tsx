@@ -4,6 +4,7 @@ import * as React from 'react';
 import { Toaster } from 'sonner';
 
 import { HoverFill } from '@/components/hover-fill';
+import { CategoryTabs } from '@/components/category-tabs';
 import { PluginCard } from '@/components/plugin-card';
 import { PluginDialog, type Origin } from '@/components/plugin-dialog';
 import { TextSwap } from '@/components/text-swap';
@@ -14,7 +15,7 @@ import { Input } from '@/components/ui/input';
 import { Kbd } from '@/components/ui/kbd';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { matches, useMarketIndex, type Plugin } from '@/lib/market';
+import { CATEGORIES, categoryOf, matches, useMarketIndex, type Category, type Plugin } from '@/lib/market';
 import { easeOut } from '@/lib/motion';
 
 const REPO = 'https://github.com/J3n5en/enso-plugins';
@@ -56,6 +57,7 @@ export default function App() {
   const state = useMarketIndex();
   const [query, setQuery] = React.useState('');
   const [tier, setTier] = React.useState<Tier>('');
+  const [category, setCategory] = React.useState<Category | ''>('');
   const [open, setOpen] = React.useState<{ plugin: Plugin; origin: Origin } | null>(null);
   const searchRef = React.useRef<HTMLInputElement>(null);
 
@@ -74,13 +76,20 @@ export default function App() {
   const plugins = state.status === 'ready' ? state.index.plugins : [];
   const q = query.trim().toLowerCase();
   const byQuery = plugins.filter((p) => matches(p, q));
+  const byCategory = byQuery.filter((p) => !category || categoryOf(p) === category);
   const counts: Record<Tier, number> = {
-    '': byQuery.length,
-    official: byQuery.filter((p) => p.tier === 'official').length,
-    community: byQuery.filter((p) => p.tier === 'community').length,
+    '': byCategory.length,
+    official: byCategory.filter((p) => p.tier === 'official').length,
+    community: byCategory.filter((p) => p.tier === 'community').length,
   };
-  const hits = byQuery.filter((p) => !tier || p.tier === tier);
-  const listKey = `${q}|${tier}`;
+  const byTier = byQuery.filter((p) => !tier || p.tier === tier);
+  const categories = CATEGORIES.filter((c) => plugins.some((p) => categoryOf(p) === c));
+  const categoryCounts = Object.fromEntries([
+    ['', byTier.length],
+    ...categories.map((c) => [c, byTier.filter((p) => categoryOf(p) === c).length]),
+  ]) as Record<Category | '', number>;
+  const hits = byTier.filter((p) => !category || categoryOf(p) === category);
+  const listKey = `${q}|${tier}|${category}`;
 
   const openPlugin = (plugin: Plugin, el: HTMLElement) => {
     const r = el.getBoundingClientRect();
@@ -113,36 +122,39 @@ export default function App() {
             </p>
           </header>
 
-          <div className="sticky top-0 z-20 -mx-5 mt-8 flex flex-col gap-3 bg-background/80 px-5 py-3 backdrop-blur-md sm:-mx-8 sm:flex-row sm:items-center sm:px-8">
-            <div className="relative flex-1">
-              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                ref={searchRef}
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Escape' && setQuery('')}
-                placeholder="搜索插件名、描述、标签…"
-                aria-label="搜索插件"
-                className="h-9 bg-background pr-10 pl-9 [&::-webkit-search-cancel-button]:hidden"
-              />
-              <span className="absolute top-1/2 right-2 -translate-y-1/2">
-                <AnimatePresence mode="popLayout" initial={false}>
-                  {query ? (
-                    <motion.span key="clear" initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.6 }} transition={{ duration: 0.15 }}>
-                      <Button variant="ghost" size="icon-sm" className="size-6" aria-label="清空搜索" onClick={() => (setQuery(''), searchRef.current?.focus())}>
-                        <X className="size-3.5" />
-                      </Button>
-                    </motion.span>
-                  ) : (
-                    <motion.span key="kbd" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
-                      <Kbd>/</Kbd>
-                    </motion.span>
-                  )}
-                </AnimatePresence>
-              </span>
+          <div className="sticky top-0 z-20 -mx-5 mt-8 flex flex-col gap-2.5 bg-background/80 px-5 py-3 backdrop-blur-md sm:-mx-8 sm:px-8">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="relative flex-1">
+                <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  ref={searchRef}
+                  type="search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Escape' && setQuery('')}
+                  placeholder="搜索插件名、描述、标签…"
+                  aria-label="搜索插件"
+                  className="h-9 bg-background pr-10 pl-9 [&::-webkit-search-cancel-button]:hidden"
+                />
+                <span className="absolute top-1/2 right-2 -translate-y-1/2">
+                  <AnimatePresence mode="popLayout" initial={false}>
+                    {query ? (
+                      <motion.span key="clear" initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.6 }} transition={{ duration: 0.15 }}>
+                        <Button variant="ghost" size="icon-sm" className="size-6" aria-label="清空搜索" onClick={() => (setQuery(''), searchRef.current?.focus())}>
+                          <X className="size-3.5" />
+                        </Button>
+                      </motion.span>
+                    ) : (
+                      <motion.span key="kbd" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
+                        <Kbd>/</Kbd>
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </span>
+              </div>
+              <TierTabs value={tier} counts={counts} onChange={setTier} />
             </div>
-            <TierTabs value={tier} counts={counts} onChange={setTier} />
+            {categories.length > 0 && <CategoryTabs items={categories} value={category} counts={categoryCounts} onChange={setCategory} />}
           </div>
 
           <HoverFill resetKey={listKey} className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3" fillClassName="rounded-xl border bg-card shadow-sm">
@@ -164,7 +176,7 @@ export default function App() {
             )}
             {state.status === 'ready' && hits.length === 0 && (
               <Empty icon={SearchX} title="没有匹配的插件">
-                <Button variant="outline" size="sm" onClick={() => (setQuery(''), setTier(''))}>
+                <Button variant="outline" size="sm" onClick={() => (setQuery(''), setTier(''), setCategory(''))}>
                   清除筛选
                 </Button>
               </Empty>

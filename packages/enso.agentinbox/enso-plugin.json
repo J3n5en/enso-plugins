@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "enso.agentinbox",
   "name": "Agent Inbox",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "icon": "icon.svg",
   "description": "跨项目收件箱：把各会话里等你审批的工具调用、等你回答的提问，以及失败的主会话收成按项目分组的列表，带未读数，点击切回当前项目的会话。",
   "engines": { "enso": ">=0.3.2" },

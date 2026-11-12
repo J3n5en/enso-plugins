@@ -628,8 +628,9 @@
           const scope = [w.directOnly && '只看私聊、@我和回复我', w.keywords?.length && `关键词 ${w.keywords.join('、')}（及 @我、回复我）`, w.includeMuted && !w.chat && !w.chats?.length && '含静音聊天',
             w.debounceSec && `安静 ${w.debounceSec} 秒合并投递`, w.minIntervalSec && `两次投递至少间隔 ${w.minIntervalSec} 秒`].filter(Boolean).join('，');
           const label = w.chats?.length ? w.chats.map((x) => x.title || x.id).join('、') : w.chat ? w.title || w.chat : '所有未静音的聊天';
+          const shown = w.topic ? `${label} › ${w.topicTitle || `话题 ${w.topic}`}` : label;
           const stat = [w.project && `项目 ${w.project}`, w.since && `${ago(w.since)}开始`, `已投递 ${w.delivered ?? 0} 条`, w.lastAt && `最近 ${ago(w.lastAt)}`, w.pending && `待投递 ${w.pending} 条`].filter(Boolean).join(' · ');
-          return `<div class="wt"><div class="h"><span class="ellipsis">${esc(label)}</span>
+          return `<div class="wt"><div class="h"><span class="ellipsis">${esc(shown)}</span>
               <button class="ui-btn ui-btn--sm" data-act="unwatch" data-sid="${esc(w.sid)}">取消</button></div>
             ${scope ? `<div class="m">${esc(scope)}</div>` : ''}<div class="m">${esc(stat)}</div>
             ${w.note ? `<div class="note">${esc(w.note)}</div>` : ''}${w.error ? `<div class="err">${esc(w.error)}</div>` : ''}</div>`;

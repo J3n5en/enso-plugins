@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test, { mock } from 'node:test';
@@ -17,7 +17,7 @@ const session = (() => {
   return `1${Buffer.concat([dc, alen, addr, port, key]).toString('base64')}`;
 })();
 
-async function withWatch(t, fn, { blankId = false } = {}) {
+async function withWatch(t, fn, { blankId = false, forum = false } = {}) {
   let dataDir;
   let timers = false;
   let failSelf = false;
@@ -49,7 +49,11 @@ async function withWatch(t, fn, { blankId = false } = {}) {
     }
     async getDialogs() { return []; }
     async getInputEntity() { return null; }
-    async getEntity() { return new Api.Chat({ id: 100, title: '群' }); }
+    async getEntity(ref) {
+      const n = Number(ref) || 100;
+      if (forum) return new Api.Channel({ id: n, title: n === 100 ? '群' : `群${n}`, megagroup: true, forum: true });
+      return new Api.Chat({ id: n, title: '群' });
+    }
     async sendMessage(entity, { message }) {
       // 真实的发送结果里 chatId 由 peerId 推出来，这里直接给普通对象，测试只关心 id 与 chatId
       return { id: 900, chatId: 100, message, out: true, date: 1_700_000_001, peerId: { chatId: 100 } };
@@ -101,6 +105,7 @@ async function withWatch(t, fn, { blankId = false } = {}) {
     emit,
     tick,
     tools,
+    dataDir,
     failSelf() { failSelf = true; },
   });
 }
@@ -276,5 +281,125 @@ test('本插件自己发出去的消息回声不再投递，避免自我唤醒',
     await tick(30_000);
     assert.equal(injected.length, 1);
     assert.match(injected[0].text, /之后手机又发了一条/);
+  });
+});
+
+const inTopic = (id, message, extra = {}) => ({
+  message,
+  replyTo: { forumTopic: true, replyToMsgId: id, ...extra },
+  ...extra,
+});
+
+test('指定话题后只投递这个话题，其它话题和 General 都不进队列', async (t) => {
+  await withWatch(t, async ({ injected, emit, tick, tools, dataDir }) => {
+    const watching = await tools.get('tg_watch')({ chat: '100', topic: 55, debounceSec: 30, minIntervalSec: 60 }, { sessionId: 's1' });
+    assert.equal(watching.watching.topic, 55);
+    assert.match(watching.watching.chat, /群 \(100\).*话题 55/);
+    const saved = JSON.parse(await readFile(join(dataDir, 'account.json'), 'utf8'));
+    const row = saved.watches.find((w) => w.sessionId === 's1');
+    assert.equal(row.topic, 55);
+    assert.equal(row.chat, '100');
+    assert.equal(row.topicTitle, '话题 55');
+
+    await emit(inTopic(77, '别的话题'));
+    await emit({ message: '总话题' });
+    await emit({ message: '别的话题里@我', mentioned: true, replyTo: { forumTopic: true, replyToMsgId: 77 } });
+    await tick(30_000);
+    assert.equal(injected.length, 0);
+
+    await emit(inTopic(55, '话题根上的一条'));
+    await emit({ message: '话题里的回复', replyTo: { forumTopic: true, replyToTopId: 55, replyToMsgId: 90 } });
+    await tick(30_000);
+    assert.equal(injected.length, 1);
+    assert.match(injected[0].text, /话题根上的一条/);
+    assert.match(injected[0].text, /话题里的回复/);
+    assert.match(injected[0].text, /话题 55/);
+    assert.doesNotMatch(injected[0].text, /别的话题|总话题/);
+  }, { forum: true });
+});
+
+test('话题 1 只收 General，不填 topic 时各个话题仍然都收', async (t) => {
+  await withWatch(t, async ({ injected, emit, tick, tools }) => {
+    await tools.get('tg_watch')({ chat: '100', topic: 1, debounceSec: 30, minIntervalSec: 60 }, { sessionId: 's1' });
+    await emit(inTopic(55, '其它话题'));
+    await emit({ message: 'General 里' });
+    await tick(30_000);
+    assert.equal(injected.length, 1);
+    assert.match(injected[0].text, /General 里/);
+    assert.doesNotMatch(injected[0].text, /其它话题/);
+    assert.match(injected[0].text, /General/);
+
+    await tools.get('tg_watch')({ chat: '100', debounceSec: 30, minIntervalSec: 60 }, { sessionId: 's1' });
+    await emit(inTopic(55, '换回全话题'));
+    await emit({ message: 'General 也在' });
+    await tick(30_000);
+    assert.match(injected.at(-1).text, /换回全话题/);
+    assert.match(injected.at(-1).text, /General 也在/);
+  }, { forum: true });
+});
+
+test('没指定单个聊天、聊天没开话题，或话题 id 不合法时拒绝，且不换掉原订阅', async (t) => {
+  await withWatch(t, async ({ injected, emit, tick, tools }) => {
+    await assert.rejects(() => tools.get('tg_watch')({ topic: 55 }, { sessionId: 's1' }), /只能指定一个聊天/);
+    await assert.rejects(() => tools.get('tg_watch')({ chat: '100', topic: 0 }, { sessionId: 's1' }), /话题 id/);
+    await assert.rejects(() => tools.get('tg_watch')({ chat: '100', topic: 55 }, { sessionId: 's1' }), /不是开了话题的群/);
+    await emit({ message: '原订阅还在' });
+    await tick(30_000);
+    assert.equal(injected.length, 1);
+    assert.match(injected[0].text, /原订阅还在/);
+  });
+});
+
+test('多个聊天不能再加单个话题', async (t) => {
+  await withWatch(t, async ({ tools }) => {
+    await assert.rejects(
+      () => tools.get('tg_watch')({ chats: ['100', '200'], topic: 55 }, { sessionId: 's1' }),
+      /只能指定一个聊天/,
+    );
+  }, { forum: true });
+});
+
+test('多群订阅时可以把话题约束绑到其中一个群，另一个群照收全部话题', async (t) => {
+  await withWatch(t, async ({ injected, emit, tick, tools, dataDir }) => {
+    const watching = await tools.get('tg_watch')(
+      { chats: ['100', { chat: '200', topic: 55 }], debounceSec: 30, minIntervalSec: 60 },
+      { sessionId: 's1' },
+    );
+    assert.match(watching.watching.chat, /群 \(100\)/);
+    assert.match(watching.watching.chat, /群200 \(200\) › 话题 55/);
+    const saved = JSON.parse(await readFile(join(dataDir, 'account.json'), 'utf8'));
+    assert.equal(saved.watches[0].chatTopics['200'].topic, 55);
+    assert.equal(saved.watches[0].chatTopics['100'], undefined);
+
+    await emit({ message: '100 的任意话题' });
+    await emit({ chatId: 200, ...inTopic(55, '200 的话题里') });
+    await emit({ chatId: 200, ...inTopic(77, '200 别的话题') });
+    await tick(30_000);
+    assert.equal(injected.length, 1);
+    assert.match(injected[0].text, /100 的任意话题/);
+    assert.match(injected[0].text, /200 的话题里/);
+    assert.doesNotMatch(injected[0].text, /200 别的话题/);
+  }, { forum: true });
+});
+
+test('对象形式里的话题 id 非法、群没开话题、与顶层 topic 混用时都拒绝', async (t) => {
+  await withWatch(t, async ({ tools }) => {
+    await assert.rejects(
+      () => tools.get('tg_watch')({ chats: [{ chat: '100', topic: 0 }] }, { sessionId: 's1' }),
+      /话题 id 必须是正整数/,
+    );
+    await assert.rejects(
+      () => tools.get('tg_watch')({ chats: [{ chat: '100', topic: 55 }], topic: 55 }, { sessionId: 's1' }),
+      /不要再传顶层 topic/,
+    );
+  }, { forum: true });
+});
+
+test('对象形式指定话题时该群没开话题就拒绝', async (t) => {
+  await withWatch(t, async ({ tools }) => {
+    await assert.rejects(
+      () => tools.get('tg_watch')({ chats: [{ chat: '100', topic: 55 }] }, { sessionId: 's1' }),
+      /不是开了话题的群/,
+    );
   });
 });

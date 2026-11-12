@@ -9,7 +9,7 @@ import { PluginIcon } from '@/components/plugin-icon';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { formatSize, installLink, latestVersion, PERMISSION_LABELS, readmeUrl, timeAgo, type Plugin } from '@/lib/market';
+import { CATEGORY_LABELS, categoryOf, formatSize, installLink, latestVersion, PERMISSION_LABELS, readmeUrl, timeAgo, type Plugin } from '@/lib/market';
 import { easeOut, spring } from '@/lib/motion';
 
 const PluginReadme = React.lazy(() => import('@/components/plugin-readme'));
@@ -136,6 +136,9 @@ function DialogBody({ plugin }: { plugin: Plugin }) {
             ) : (
               <Badge variant="outline">社区</Badge>
             )}
+            <Badge variant="outline" className="font-normal text-muted-foreground">
+              {CATEGORY_LABELS[categoryOf(plugin)]}
+            </Badge>
           </div>
           <div className="mt-1 flex items-center gap-1 font-mono text-xs text-muted-foreground">
             <span className="truncate">{plugin.id}</span>
