@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-12T05:25:58.917Z",
-  "sequence": 79,
+  "generatedAt": "2026-11-12T05:39:27.183Z",
+  "sequence": 80,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -1218,6 +1218,35 @@
           "sha256": "962645101d2a5972da3ac8075625e9d59741c3e2df8389e529e56ccc1bb5c0b3",
           "size": 70052,
           "publishedAt": "2026-11-12T02:14:49.675Z"
+        }
+      ]
+    },
+    {
+      "id": "enso.skyfighter",
+      "name": "雷霆战机",
+      "description": "侧栏里的纵向弹幕战役：三种战机、五关空域、四色武器和关间强化。离线可玩。",
+      "tier": "official",
+      "tags": [
+        "game"
+      ],
+      "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.skyfighter.svg",
+      "category": "fun",
+      "readme": {
+        "path": "packages/enso.skyfighter/0.1.0.readme.md",
+        "sha256": "dc6810e2e7c8958b984429c39dbf4265b82fc6445857589ee8bacd02b911922b",
+        "size": 2846
+      },
+      "latest": "0.1.0",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "permissions": [
+            "ui.view"
+          ],
+          "path": "packages/enso.skyfighter/0.1.0.zip",
+          "sha256": "24226efe1b304059a5fc3d4a09b4ba57e40bb9c245bb27abef428ec33927bd94",
+          "size": 254616,
+          "publishedAt": "2026-11-12T05:39:27.183Z"
         }
       ]
     },
