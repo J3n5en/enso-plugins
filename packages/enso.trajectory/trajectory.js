@@ -84,6 +84,9 @@
   search.placeholder = '过滤提示词、工具、模型';
   search.setAttribute('aria-label', '过滤');
   const seg = el('div', 'ui-seg');
+  // 白块的 translate / 宽度只在 ensoUI.seg 里按当前按钮现算。
+  // 只在挂载时调一次的话，切换标签或侧栏改宽度后它会停在原来的位置。
+  const placeIndicator = () => ensoUI?.seg?.(seg);
   for (const [id, label] of KINDS) {
     const button = el('button', '', label);
     button.type = 'button';
@@ -91,8 +94,11 @@
     button.setAttribute('aria-pressed', id === 'all' ? 'true' : 'false');
     button.onclick = () => {
       kind = id;
-      for (const node of seg.children) node.setAttribute('aria-pressed', node === button ? 'true' : 'false');
+      for (const node of seg.querySelectorAll(':scope > button')) {
+        node.setAttribute('aria-pressed', node === button ? 'true' : 'false');
+      }
       paint();
+      placeIndicator();
     };
     seg.append(button);
   }
@@ -101,7 +107,11 @@
   const note = el('div', 'note');
   shell.append(top, sub, lanes, stats, tokens, filters, list, note);
   root.append(shell);
-  ensoUI?.seg?.(seg);
+  placeIndicator();
+  requestAnimationFrame(placeIndicator);
+  window.addEventListener('resize', placeIndicator);
+  if (typeof ResizeObserver === 'function') new ResizeObserver(placeIndicator).observe(seg);
+  document.fonts?.ready?.then?.(() => placeIndicator());
 
   search.oninput = () => {
     query = search.value.trim().toLowerCase();
