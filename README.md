@@ -52,10 +52,9 @@ EnsoCode 官方插件市场的源仓库 · [浏览插件](https://enso-plugins.j
 | 奶蛙 | `enso.naiwa` | 0.1.2 | 官方 | 奶蛙主题：荷叶绿配奶黄，奶蛙在输入框后面探头、在侧栏爬行、思考时托腮，干完活就捧腹大笑。 |
 | OpenSpec | `enso.openspec` | 0.1.0 | 官方 | 侧栏按阶段查看当前项目的 OpenSpec 变更：任务进度、下一步、工单，以及文档里能识别的 PR。实现和收尾会把提示发到对应的 Enso 会话。 |
 | [pstack](https://github.com/cursor/plugins/tree/main/pstack) | `enso.pstack` | 0.3.3 | 官方 | Lauren Tan 的 pstack 0.15.36（MIT）：poteto-mode 按任务挑选 playbook，配套 arena、interrogate、architect 等 58 个 skill 和工程原则，先深挖再并行。只在输入框选了「pstack」预设的会话里加载。在输入框按钮里为某个会话打开后，该会话的每条消息自动展开 poteto-mode。 |
-| Scheduler | `enso.scheduler` | 1.1.0 | 官方 | 定时任务：按 cron 到点向会话发送提示词或弹出系统通知，侧栏显示下次运行时间与倒计时。 |
-| Spreadsheet | `enso.spreadsheet` | 0.1.0 | 官方 | 在文件面板里打开并编辑表格：网格、公式、插入删除行列，以及选区的计数、求和与平均。 |
 | Scheduler | `enso.scheduler` | 1.1.1 | 官方 | 定时任务：按 cron 到点向会话发送提示词或弹出系统通知，侧栏显示下次运行时间与倒计时。 |
 | 雷霆战机 | `enso.skyfighter` | 0.1.0 | 官方 | 侧栏里的纵向弹幕战役：三种战机、五关空域、四色武器和关间强化。离线可玩。 |
+| Spreadsheet | `enso.spreadsheet` | 0.1.0 | 官方 | 在文件面板里打开并编辑表格：网格、公式、插入删除行列，以及选区的计数、求和与平均。 |
 | SQLite | `enso.sqlite` | 0.1.0 | 官方 | 浏览和查询 SQLite 数据库：可排序、筛选的表格，SQL 查询，以及表、视图、索引和触发器的 CREATE 语句。只读。 |
 | 任务启动 | `enso.tasklauncher` | 0.1.0 | 官方 | 从当前项目的 GitHub issue 用可编辑的提示词启动 Enso 会话：列出 origin 的 issue，套用提示词模板，再新建会话并聚焦。可选在干净的工作区创建并切换分支。不创建 worktree，也不替代 GitHub 插件。 |
 | Telegram | `enso.telegram` | 0.3.1 | 官方 | 用 Telegram Bot 远程使用 EnsoCode 会话：配对后发消息即进入会话，执行进度原位更新，回复以富文本发回；支持图片、群聊绑定、成员白名单与群聊上下文、插话、远程停止和双向同步。 |
