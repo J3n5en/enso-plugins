@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-12T05:55:42.142Z",
-  "sequence": 85,
+  "generatedAt": "2026-11-12T05:55:56.585Z",
+  "sequence": 86,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -1682,6 +1682,42 @@
           "sha256": "6bdf597c5d2b75ab6d12285d4e160c88c7d719fc72ac7c3c9c2a68de5db76d9c",
           "size": 1328660,
           "publishedAt": "2026-11-12T05:25:58.917Z"
+        }
+      ]
+    },
+    {
+      "id": "enso.trajectory",
+      "name": "会话轨迹",
+      "description": "查看当前会话的轨迹：每一轮的用户提示、模型请求、工具与子代理调用、token、缓存命中和耗时。",
+      "tier": "official",
+      "tags": [
+        "ui",
+        "observability",
+        "session"
+      ],
+      "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.trajectory.svg",
+      "category": "insights",
+      "readme": {
+        "path": "packages/enso.trajectory/0.1.0.readme.md",
+        "sha256": "10dccf8a16ef574154f18b3b08e14679ade30671d43bdda6203618a410f96c28",
+        "size": 1946
+      },
+      "latest": "0.1.0",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "engines": {
+            "enso": ">=0.3.0"
+          },
+          "permissions": [
+            "ui.view",
+            "agent.observe",
+            "session.read"
+          ],
+          "path": "packages/enso.trajectory/0.1.0.zip",
+          "sha256": "a67966f65986ebadf881cb3882977666c8738a191cf34fead288498edef862e8",
+          "size": 105429,
+          "publishedAt": "2026-11-12T05:55:56.585Z"
         }
       ]
     },
