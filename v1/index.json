@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-12T06:11:27.358Z",
-  "sequence": 94,
+  "generatedAt": "2026-11-12T08:06:08.187Z",
+  "sequence": 95,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -409,6 +409,43 @@
           "sha256": "0a6bb13e14751c74ebb44cc09ab6ff6012f6bb8e158f08063c1220c68efafc8f",
           "size": 54384,
           "publishedAt": "2026-11-07T12:01:21.782Z"
+        }
+      ]
+    },
+    {
+      "id": "enso.dbstudio",
+      "name": "DB Studio",
+      "description": "在侧栏连接 PostgreSQL、MySQL/MariaDB 和 SQLite，浏览库表并运行 SQL。结果按页流式读取，可取消正在执行的查询。密码保存在插件数据目录的 vault.json。",
+      "tier": "official",
+      "tags": [
+        "database",
+        "postgres",
+        "mysql",
+        "sqlite",
+        "sql"
+      ],
+      "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.dbstudio.svg",
+      "category": "productivity",
+      "readme": {
+        "path": "packages/enso.dbstudio/0.1.1.readme.md",
+        "sha256": "45993243ae298d815e101424688c0eaa851440c087c65335cab0c77daf7e3cc8",
+        "size": 10828
+      },
+      "latest": "0.1.1",
+      "versions": [
+        {
+          "version": "0.1.1",
+          "engines": {
+            "enso": ">=0.3.4"
+          },
+          "permissions": [
+            "ui.view",
+            "fs.read"
+          ],
+          "path": "packages/enso.dbstudio/0.1.1.zip",
+          "sha256": "275c92badd46e8a48cd2c14463000a19221fda7814bf833c9e8691768d62af46",
+          "size": 2294087,
+          "publishedAt": "2026-11-12T08:06:08.187Z"
         }
       ]
     },
