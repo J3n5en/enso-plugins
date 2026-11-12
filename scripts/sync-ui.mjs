@@ -7,6 +7,7 @@ import { repoRoot } from './lib.mjs';
 /** 共享样式只在这些官方插件里使用；源文件在 shared/，插件目录里是副本（插件包必须自包含） */
 export const UI_FILES = ['enso-ui.css', 'enso-ui.js'];
 export const UI_PACKAGES = [
+  'enso.beads',
   'enso.bridge',
   'enso.context',
   'enso.bugbot',
