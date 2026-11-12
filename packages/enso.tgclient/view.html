@@ -80,7 +80,7 @@
       .msg.gap { margin-top: 6px; }
       .msg .avslot { width: 32px; flex: none; }
       .bubble { max-width: min(78%, 480px); min-width: 56px; padding: 5px 9px 4px; border-radius: 14px; background: var(--card); box-shadow: var(--shadow-xs); word-break: break-word; overflow-wrap: anywhere; position: relative; }
-      .col { display: flex; flex-direction: column; gap: 3px; max-width: min(78%, 480px); min-width: 0; }
+      .col { display: flex; flex-direction: column; gap: 3px; max-width: min(78%, 480px); min-width: 0; position: relative; }
       .msg.out .col { align-items: flex-end; }
       .col .bubble { max-width: 100%; }
       .reacts { display: flex; flex-wrap: wrap; gap: 4px; margin: 5px 0 1px; }
@@ -194,7 +194,10 @@
       .wp .site { color: var(--brand); font-weight: 600; }
       .wp img { margin-top: 4px; border-radius: 6px; max-height: 160px; object-fit: cover; }
       audio { width: 230px; height: 36px; margin: 2px 0; }
-      .acts { display: none; align-self: center; gap: 2px; }
+      /* 悬浮在气泡上沿、朝空白侧展开，不占排版宽度，悬停时气泡不被挤窄 */
+      .acts { display: none; position: absolute; top: -20px; gap: 2px; z-index: 3; }
+      .msg.in .acts { left: 6px; }
+      .msg.out .acts { right: 6px; }
       .msg:hover .acts { display: flex; }
       .acts button { width: 24px; height: 24px; border-radius: 50%; border: 0; background: var(--card); color: var(--muted-foreground); box-shadow: var(--shadow-xs); display: grid; place-items: center; cursor: pointer; }
       .acts button:hover { color: var(--foreground); }
@@ -1064,7 +1067,7 @@
             ${m.parts ? albumHtml(m) : mediaHtml(m)}${other}
             ${m.text ? `<span class="text">${rich(m.text, m.ents)}</span>` : ''}${wp}${reacts}
             <span class="meta">${m.edited ? '已编辑 ' : ''}${hm(m.date)}${tick}</span>
-          </div>${kb}</div>${acts}</div>`;
+          </div>${kb}${acts}</div></div>`;
       }
       async function removeMsg(id) {
         const al = S.msgs.find((x) => x.id === id)?.album;
