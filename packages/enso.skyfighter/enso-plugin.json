@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "enso.skyfighter",
+  "name": "雷霆战机",
+  "version": "0.1.0",
+  "icon": "icon.svg",
+  "description": "侧栏里的竖版打飞机：敌机波次、火力升级、道具和首领，离线就能玩。",
+  "main": "main.mjs",
+  "permissions": ["ui.view"],
+  "contributes": {
+    "views": [{ "id": "skyfighter", "title": "雷霆战机", "entry": "index.html" }]
+  }
+}

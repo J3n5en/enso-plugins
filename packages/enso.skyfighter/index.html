@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <link rel="stylesheet" href="enso-ui.css" />
+    <title>雷霆战机</title>
+    <style>
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        height: 100%;
+        padding: 8px;
+        overflow: hidden;
+        touch-action: none;
+      }
+      .top,
+      .sub,
+      .bar,
+      .hint {
+        user-select: none;
+      }
+      .top {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      h1 {
+        margin: 0;
+        font-size: 14px;
+        font-weight: 650;
+        letter-spacing: -0.02em;
+      }
+      .stats {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-left: auto;
+      }
+      .score {
+        min-width: 3ch;
+        font-size: 14px;
+        font-weight: 650;
+        text-align: right;
+      }
+      .sub {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px 8px;
+        min-height: 18px;
+        color: var(--muted-foreground);
+        font-size: 11px;
+      }
+      .lives {
+        color: var(--destructive);
+        letter-spacing: 1px;
+        font-size: 12px;
+      }
+      .pips {
+        display: inline-flex;
+        gap: 3px;
+        align-items: center;
+      }
+      .pips i {
+        width: 8px;
+        height: 4px;
+        border-radius: 999px;
+        background: var(--border);
+      }
+      .pips i.on {
+        background: var(--brand);
+      }
+      .combo {
+        font-weight: 650;
+        color: var(--warning);
+      }
+      .combo:empty,
+      .best {
+        margin-left: auto;
+      }
+      .combo:empty {
+        margin-left: 0;
+      }
+      .stage {
+        position: relative;
+        flex: 1;
+        min-height: 180px;
+        overflow: hidden;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        background: #070b16;
+        box-shadow: var(--shadow-xs);
+      }
+      canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        touch-action: none;
+      }
+      canvas:focus {
+        outline: none;
+      }
+      canvas:focus-visible {
+        outline: 2px solid color-mix(in oklch, var(--ring) 70%, transparent);
+        outline-offset: -3px;
+      }
+      .banner {
+        position: absolute;
+        top: 14%;
+        left: 50%;
+        padding: 4px 10px;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        border-radius: 999px;
+        color: #f8fafc;
+        background: rgba(8, 12, 24, 0.62);
+        font-size: 13px;
+        font-weight: 650;
+        letter-spacing: 0.04em;
+        pointer-events: none;
+        transform: translateX(-50%);
+      }
+      .banner[hidden] {
+        display: none;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      .overlay {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 12px;
+        background: rgba(4, 8, 18, 0.5);
+      }
+      .overlay[hidden] {
+        display: none;
+      }
+      .panel {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        width: min(100%, 280px);
+        padding: 14px;
+        animation:
+          ui-rise var(--dur-3) var(--ease-out) both,
+          ui-fade-in var(--dur-2) var(--ease-out) both;
+      }
+      .panel h2 {
+        margin: 0;
+        font-size: 16px;
+        letter-spacing: -0.02em;
+      }
+      .panel p,
+      .help {
+        margin: 0;
+        color: var(--muted-foreground);
+        font-size: 12px;
+      }
+      .help {
+        padding-left: 1.1em;
+      }
+      .help li + li {
+        margin-top: 2px;
+      }
+      .bar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+      }
+      .auto {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-left: auto;
+        color: var(--muted-foreground);
+        font-size: 11px;
+      }
+      .hint {
+        margin: 0;
+        color: var(--muted-foreground);
+        font-size: 11px;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="top">
+      <h1>雷霆战机</h1>
+      <div class="stats">
+        <span id="wave" class="ui-badge ui-badge--brand">第 1 波</span>
+        <span id="score" class="ui-mono score">0</span>
+      </div>
+    </header>
+    <div class="sub">
+      <span id="lives" class="lives" aria-label="生命 3">♥♥♥</span>
+      <span id="pips" class="pips" title="火力"></span>
+      <span id="rapid" class="ui-badge ui-badge--warning" hidden>射速</span>
+      <span id="shield" class="ui-badge ui-badge--success" hidden>护盾</span>
+      <span id="combo" class="combo"></span>
+      <span id="best" class="best ui-muted">最高 0</span>
+    </div>
+    <div id="stage" class="stage">
+      <canvas id="cv" tabindex="0" aria-label="雷霆战机战场"></canvas>
+      <div id="banner" class="banner" hidden></div>
+      <div id="overlay" class="overlay">
+        <div class="ui-card panel">
+          <h2 id="ov-title">雷霆战机</h2>
+          <p id="ov-text">从下往上打。躲开弹幕，接住掉落的道具，每五波有一架首领。</p>
+          <ul id="ov-help" class="help">
+            <li>W 火力，最高四档</li>
+            <li>R 射速，S 护盾，B 炸弹，+ 生命</li>
+            <li>方向键或拖动移动，空格射击，P 暂停</li>
+          </ul>
+          <button id="ov-go" type="button" class="ui-btn ui-btn--primary">开始</button>
+        </div>
+      </div>
+    </div>
+    <div class="bar">
+      <button id="btn-fire" type="button" class="ui-btn ui-btn--primary ui-btn--sm">射击</button>
+      <button id="btn-bomb" type="button" class="ui-btn ui-btn--sm">炸弹 1</button>
+      <button id="btn-pause" type="button" class="ui-btn ui-btn--sm" disabled>暂停</button>
+      <button id="btn-restart" type="button" class="ui-btn ui-btn--outline ui-btn--sm">重开</button>
+      <label class="auto"><input id="auto" class="ui-switch" type="checkbox" checked />自动</label>
+    </div>
+    <p class="hint">方向键 / WASD 移动 · 空格射击 · B 炸弹 · P 暂停 · 拖动战机</p>
+    <script src="enso-ui.js"></script>
+    <script src="game.js"></script>
+  </body>
+</html>
