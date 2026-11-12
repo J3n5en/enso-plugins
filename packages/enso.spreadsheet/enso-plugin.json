@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "enso.spreadsheet",
+  "name": "Spreadsheet",
+  "version": "0.1.0",
+  "icon": "icon.svg",
+  "description": "在文件面板里打开并编辑表格：网格、公式、插入删除行列，以及选区的计数、求和与平均。",
+  "main": "main.mjs",
+  "engines": { "enso": ">=0.3.4" },
+  "permissions": ["ui.view"],
+  "contributes": {
+    "fileViewers": [
+      {
+        "id": "spreadsheet",
+        "title": "表格",
+        "entry": "spreadsheet.html",
+        "extensions": [".xlsx", ".ods", ".csv", ".tsv"],
+        "default": true
+      }
+    ]
+  }
+}
