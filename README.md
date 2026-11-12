@@ -36,6 +36,7 @@ EnsoCode 官方插件市场的源仓库 · [浏览插件](https://enso-plugins.j
 | Beads | `enso.beads` | 0.1.0 | 官方 | 在侧栏查看当前项目的 Beads 任务：就绪、进行中、阻塞和已关闭，支持表格、依赖、评论、认领、关闭，以及把任务交给新会话。数据来自本地 bd 或 .beads，不需要云服务。 |
 | Session Bridge | `enso.bridge` | 1.0.2 | 官方 | 跨会话桥：同项目的多个会话可在侧栏群聊室中互相提问、委托与回传结论。 |
 | Bugbot Review | `enso.bugbot` | 0.1.0 | 官方 | 移植自 Cursor review-bugbot 与 Agent Review：本地 Git diff 组装（自动识别默认基准分支、剔除 linguist-generated 文件、合并 .cursor/BUGBOT.md 规则与最小改动行数门禁）、只读 bugbot 审查子代理、/review-bugbot 技能以及侧栏 Findings 面板与一键 Fix in Chat。 |
+| Chat Board | `enso.chatboard` | 0.1.0 | 官方 | 跨项目会话看板：每张卡片就是一个会话（状态含 coworker），可分列、标未读、写备注，点卡片切换到该会话。 |
 | Context Window | `enso.context` | 0.1.3 | 官方 | 侧栏里看当前会话的上下文窗口：各部分占多少、还剩多少、提示词缓存命中率。 |
 | Notes | `enso.example.notes` | 1.0.3 | 官方 | 侧栏里的便签：存在插件自己的数据目录，可一键插入输入框。 |
 | Sage Focus · 鼠尾草·专注（仅深色模式） | `enso.example.sagefocus` | 1.0.3 | 社区 | 仅在深色模式下生效，浅色模式沿用 Enso 默认配色。低饱和暖灰绿主题，不修改编辑器语法高亮或终端配色。 |
