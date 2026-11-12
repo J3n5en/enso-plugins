@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-12T05:54:58.136Z",
-  "sequence": 82,
+  "generatedAt": "2026-11-12T05:55:12.133Z",
+  "sequence": 83,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -825,6 +825,45 @@
           "sha256": "f29e318a2988d79023e40af94c3731561e29bbf4f814ee002d233b745185aef5",
           "size": 72236,
           "publishedAt": "2026-11-12T02:14:49.675Z"
+        }
+      ]
+    },
+    {
+      "id": "enso.linear",
+      "name": "Linear",
+      "description": "在侧栏查看 Linear 议题：我的、当前周期、待办和分拣。按当前 git 分支高亮对应议题，可看状态、子议题、链接和评论，并在 Enso 会话里开始处理。用 Personal API Key，或用 PKCE 登录自建 OAuth 应用（不需要 Client Secret）。",
+      "tier": "official",
+      "tags": [
+        "linear",
+        "issues",
+        "productivity"
+      ],
+      "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.linear.svg",
+      "category": "integrations",
+      "readme": {
+        "path": "packages/enso.linear/0.1.0.readme.md",
+        "sha256": "8a1b8bc46372e1a31704cc2de185e0b9d475ebf4795dc86860b510d099d6dbb4",
+        "size": 3767
+      },
+      "latest": "0.1.0",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "engines": {
+            "enso": ">=0.2.14"
+          },
+          "permissions": [
+            "agent.tool",
+            "net.fetch",
+            "ui.view",
+            "ui.openExternal",
+            "session.create",
+            "composer.draft"
+          ],
+          "path": "packages/enso.linear/0.1.0.zip",
+          "sha256": "f328cc69086f2cdb13b5b72791b28e1b95b5db5ece82733206607d59db85d252",
+          "size": 103460,
+          "publishedAt": "2026-11-12T05:55:12.133Z"
         }
       ]
     },
