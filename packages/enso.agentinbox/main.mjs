@@ -159,6 +159,7 @@ export function activate(enso) {
   };
 
   const onStatus = (data) => {
+    if (typeof data?.sessionId === 'string' && data.sessionId.includes('::')) return;
     const next = normalizeStatus(data);
     if (!next.sessionId) return;
     model.statuses.set(next.sessionId, next);
