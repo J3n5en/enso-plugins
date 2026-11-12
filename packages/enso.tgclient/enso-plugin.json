@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "enso.tgclient",
   "name": "Telegram 客户端",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "icon": "icon.svg",
   "description": "在侧栏里用手机号登录自己的 Telegram 账号，像官方客户端一样聊天：会话列表与聊天分组、论坛话题、实时收发、相册、边下边播视频、表情与贴纸面板、编辑、回复、表情回应、已读详情、切换发言身份、机器人按钮与键盘、新消息系统通知；附带 Agent 工具，可查聊天、读写消息、订阅新消息。支持 socks5 与 MTProxy 代理。",
   "engines": {
@@ -413,6 +413,10 @@
                 "type": "string"
               },
               "description": "Optional; watch only these chats (max 20, same formats as chat). Takes precedence over chat; only messages from them are delivered instead of all unmuted chats"
+            },
+            "topic": {
+              "type": "integer",
+              "description": "Optional forum topic id from tg_list_topics (1 = General). Requires exactly one chat; omit to receive every topic. Other topics in that chat are not delivered."
             },
             "directOnly": {
               "type": "boolean",

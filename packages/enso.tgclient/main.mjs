@@ -2103,17 +2103,22 @@ function createApp(enso, opts = {}) {
     return selfCache;
   }
   const chatsOf = (w) => (w.chats?.length ? w.chats : w.chat ? [{ id: w.chat, title: w.title }] : []);
-  const chatLabel = (w) => { const cs = chatsOf(w); return cs.length ? cs.map((x) => `${x.title ?? x.id} (${x.id})`).join('、') : '所有未静音的聊天'; };
+  const chatLabel = (w) => {
+    const cs = chatsOf(w);
+    const base = cs.length ? cs.map((x) => `${x.title ?? x.id} (${x.id})`).join('、') : '所有未静音的聊天';
+    return w.topic ? `${base} › ${w.topicTitle || `话题 ${w.topic}`}` : base;
+  };
   const matches = (f, it) => {
     const ids = f.chats?.map((x) => x.id);
     const hit = ids ? ids.includes(it.chat) : f.chat ? it.chat === f.chat : f.includeMuted || !mutedNow(it.chat);
-    return hit && (!f.directOnly || it.m.mentioned || entities.get(it.chat) instanceof Api.User) && keywordHit(it.m, f.keywords);
+    const topicOk = f.topic == null || Number(topicOf(it.m)) === f.topic;
+    return hit && topicOk && (!f.directOnly || it.m.mentioned || entities.get(it.chat) instanceof Api.User) && keywordHit(it.m, f.keywords);
   };
   const watchOf = (w) => {
     const cs = chatsOf(w);
-    return { chat: chatLabel(w), ...(cs.length > 1 ? { chats: cs.map((x) => x.id) } : {}), directOnly: !!w.directOnly, includeMuted: !!w.includeMuted, ...(w.keywords ? { keywords: w.keywords } : {}), debounceSec: w.debounceSec ?? DEBOUNCE_SEC, minIntervalSec: w.minIntervalSec ?? 0, ...(w.note ? { note: w.note } : {}) };
+    return { chat: chatLabel(w), ...(cs.length > 1 ? { chats: cs.map((x) => x.id) } : {}), ...(w.topic ? { topic: w.topic, topicTitle: w.topicTitle } : {}), directOnly: !!w.directOnly, includeMuted: !!w.includeMuted, ...(w.keywords ? { keywords: w.keywords } : {}), debounceSec: w.debounceSec ?? DEBOUNCE_SEC, minIntervalSec: w.minIntervalSec ?? 0, ...(w.note ? { note: w.note } : {}) };
   };
-  const FIELDS = ['chat', 'title', 'chats', 'directOnly', 'includeMuted', 'keywords', 'debounceSec', 'minIntervalSec', 'note', 'project', 'since', 'delivered', 'lastAt', 'error', 'failures', 'failNotified'];
+  const FIELDS = ['chat', 'title', 'chats', 'topic', 'topicTitle', 'directOnly', 'includeMuted', 'keywords', 'debounceSec', 'minIntervalSec', 'note', 'project', 'since', 'delivered', 'lastAt', 'error', 'failures', 'failNotified'];
   const fieldsOf = (w) => Object.fromEntries(FIELDS.filter((k) => w[k] !== undefined).map((k) => [k, w[k]]));
   const saveWatches = () => {
     account.watches = [...watches].map(([sessionId, w]) => ({ sessionId, ...fieldsOf(w) }));
@@ -2272,12 +2277,20 @@ function createApp(enso, opts = {}) {
   tool('tg_watch', async (args, ctx) => {
     const c = await agentClient();
     if (!ctx?.sessionId) throw new Error('只能在会话里调用');
+    const hasTopic = args.topic != null && args.topic !== '';
+    const topic = Number(args.topic);
+    if (hasTopic && (!Number.isInteger(topic) || topic < 1)) throw new Error('topic 必须是话题 id（General 为 1）');
     const wanted = (Array.isArray(args.chats) ? args.chats : args.chat ? [args.chat] : []).map((x) => String(x ?? '').trim()).filter(Boolean).slice(0, 20);
     const chats = [];
+    let forum = false;
     for (const x of wanted) {
       const chat = await chatOf(c, x);
+      forum = !!chat.entity?.forum;
       if (!chats.some((v) => v.id === chat.id)) chats.push({ id: chat.id, title: chat.title });
     }
+    if (hasTopic && chats.length !== 1) throw new Error('按话题监听时只能指定一个聊天');
+    if (hasTopic && !forum) throw new Error(`「${chats[0].title}」不是开了话题的群`);
+    const topicTitle = hasTopic ? await topicName(c, chats[0].id, topic) : undefined;
     const old = watches.get(ctx.sessionId);
     if (old) {
       clearTimer(old.timer);
@@ -2287,6 +2300,7 @@ function createApp(enso, opts = {}) {
       chat: chats[0]?.id,
       title: chats.length ? chats.map((x) => x.title).join('、') : undefined,
       ...(chats.length > 1 ? { chats } : {}),
+      ...(hasTopic ? { topic, topicTitle } : {}),
       directOnly: !!args.directOnly,
       includeMuted: !chats.length && !!args.includeMuted,
       keywords: normalizeKeywords(args.keywords),
