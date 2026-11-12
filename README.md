@@ -50,6 +50,7 @@ EnsoCode 官方插件市场的源仓库 · [浏览插件](https://enso-plugins.j
 | Scheduler | `enso.scheduler` | 1.1.1 | 官方 | 定时任务：按 cron 到点向会话发送提示词或弹出系统通知，侧栏显示下次运行时间与倒计时。 |
 | Telegram | `enso.telegram` | 0.3.1 | 官方 | 用 Telegram Bot 远程使用 EnsoCode 会话：配对后发消息即进入会话，执行进度原位更新，回复以富文本发回；支持图片、群聊绑定、成员白名单与群聊上下文、插话、远程停止和双向同步。 |
 | Telegram 客户端 | `enso.tgclient` | 0.3.4 | 官方 | 在侧栏里用手机号登录自己的 Telegram 账号，像官方客户端一样聊天：会话列表与聊天分组、论坛话题、实时收发、相册、边下边播视频、表情与贴纸面板、编辑、回复、表情回应、已读详情、切换发言身份、机器人按钮与键盘、新消息系统通知；附带 Agent 工具，可查聊天、读写消息、订阅新消息。支持 socks5 与 MTProxy 代理。 |
+| 会话轨迹 | `enso.trajectory` | 0.1.0 | 官方 | 查看当前会话的轨迹：每一轮的用户提示、模型请求、工具与子代理调用、token、缓存命中和耗时。 |
 | 双语对照翻译 | `enso.translate` | 0.1.2 | 官方 | 把思考过程和回复正文译成目标语言，原文下面紧跟译文。代码、链接、路径和公式保持原样。 |
 | [深海女仆工坊](https://github.com/Small-tailqwq/dsh-deep-whale) | `enso.whalemaid` | 0.1.1 | 官方 | 鲸鱼娘女仆主题：深海蓝配金色描边，水晶宫殿作背景，两位女仆站在对话两侧，输入框系着蝴蝶结。美术 CC BY-NC-SA 4.0，禁止商用。 |
 | [Astronaut 宇航员](https://github.com/mediocrebaby/Astronauts) | `space.astronaut` | 1.4.0 | 社区 · [`mediocrebaby/Astronauts`](https://github.com/mediocrebaby/Astronauts) | Lunar 月白：黑白宇航员与中性灰阶主题。 |
