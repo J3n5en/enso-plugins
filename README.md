@@ -54,6 +54,7 @@ EnsoCode 官方插件市场的源仓库 · [浏览插件](https://enso-plugins.j
 | OpenSpec | `enso.openspec` | 0.1.0 | 官方 | 侧栏按阶段查看当前项目的 OpenSpec 变更：任务进度、下一步、工单，以及文档里能识别的 PR。实现和收尾会把提示发到对应的 Enso 会话。 |
 | [pstack](https://github.com/cursor/plugins/tree/main/pstack) | `enso.pstack` | 0.3.3 | 官方 | Lauren Tan 的 pstack 0.15.36（MIT）：poteto-mode 按任务挑选 playbook，配套 arena、interrogate、architect 等 58 个 skill 和工程原则，先深挖再并行。只在输入框选了「pstack」预设的会话里加载。在输入框按钮里为某个会话打开后，该会话的每条消息自动展开 poteto-mode。 |
 | Scheduler | `enso.scheduler` | 1.1.1 | 官方 | 定时任务：按 cron 到点向会话发送提示词或弹出系统通知，侧栏显示下次运行时间与倒计时。 |
+| Skill Usage | `enso.skillusage` | 0.1.0 | 官方 | 侧栏查看技能、MCP 和子代理真正被用了多少：哪些放进了上下文却很少或从未调用，以及它们大约占多少 token。 |
 | 雷霆战机 | `enso.skyfighter` | 0.1.0 | 官方 | 侧栏里的纵向弹幕战役：三种战机、五关空域、四色武器和关间强化。离线可玩。 |
 | Spreadsheet | `enso.spreadsheet` | 0.1.0 | 官方 | 在文件面板里打开并编辑表格：网格、公式、插入删除行列，以及选区的计数、求和与平均。 |
 | SQLite | `enso.sqlite` | 0.1.0 | 官方 | 浏览和查询 SQLite 数据库：可排序、筛选的表格，SQL 查询，以及表、视图、索引和触发器的 CREATE 语句。只读。 |

@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>技能用量</title>
+    <link rel="stylesheet" href="enso-ui.css" />
+    <style>
+      body { padding: 12px; display: flex; flex-direction: column; gap: 10px; min-height: 100vh; }
+      h1 { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+      .sub { margin: 2px 0 0; font-size: 11.5px; color: var(--muted-foreground); }
+      .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+      .filters { display: flex; flex-direction: column; gap: 8px; }
+      .row { display: flex; flex-wrap: wrap; gap: 6px; }
+      .row select { flex: 1; min-width: 120px; }
+      .search { width: 100%; }
+      .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; border-radius: var(--radius-md); overflow: hidden; background: var(--border); border: 1px solid var(--border); }
+      .stat { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; background: var(--card); }
+      .stat span { color: var(--muted-foreground); font-size: 10.5px; }
+      .stat b { font-size: 15px; font-weight: 600; letter-spacing: -0.02em; }
+      .stat em { font-style: normal; color: var(--muted-foreground); font-size: 10.5px; font-weight: 500; }
+      .note { font-size: 11.5px; color: var(--muted-foreground); }
+      .list { display: flex; flex-direction: column; gap: 8px; }
+      .card { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+      .card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+      .name { font-weight: 600; font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+      .badges { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+      .desc { font-size: 12px; color: var(--muted-foreground); }
+      .metrics { display: flex; flex-wrap: wrap; gap: 10px 14px; font-size: 11.5px; }
+      .metrics b { font-weight: 600; }
+      .metrics span { color: var(--muted-foreground); }
+      .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+      .foot { font-size: 11px; color: var(--muted-foreground); }
+      details.card { padding: 0; }
+      details.card summary { padding: 10px 12px; cursor: pointer; font-weight: 600; font-size: 12.5px; }
+      details.card .inner { padding: 0 12px 10px; display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+      .src { display: flex; flex-direction: column; gap: 1px; }
+      .src b { font-weight: 550; }
+      .warn { color: var(--warning); font-size: 12px; }
+      #status[hidden] { display: none; }
+    </style>
+  </head>
+  <body>
+    <div class="head">
+      <div>
+        <h1>技能用量</h1>
+        <p class="sub">放进上下文的，和真正调用过的。</p>
+      </div>
+      <button id="refresh" class="ui-btn ui-btn--outline ui-btn--sm" type="button">刷新</button>
+    </div>
+    <div class="filters">
+      <div class="row">
+        <select id="profile" class="ui-input" hidden></select>
+        <select id="project" class="ui-input" aria-label="项目"></select>
+        <select id="preset" class="ui-input" aria-label="预设"></select>
+      </div>
+      <div id="days" class="ui-seg" role="tablist" aria-label="时间范围">
+        <button type="button" data-days="7" aria-selected="false">7 天</button>
+        <button type="button" data-days="30" aria-selected="true">30 天</button>
+        <button type="button" data-days="90" aria-selected="false">90 天</button>
+        <button type="button" data-days="0" aria-selected="false">全部</button>
+      </div>
+      <div id="tabs" class="ui-seg" role="tablist" aria-label="视图">
+        <button type="button" data-tab="overview" aria-selected="true">总览</button>
+        <button type="button" data-tab="skill" aria-selected="false">技能</button>
+        <button type="button" data-tab="mcp" aria-selected="false">MCP</button>
+        <button type="button" data-tab="agent" aria-selected="false">子代理</button>
+        <button type="button" data-tab="unused" aria-selected="false">未使用</button>
+      </div>
+      <input id="search" class="ui-input search" type="search" placeholder="按名字筛选" aria-label="按名字筛选" />
+    </div>
+    <div id="status" class="note" hidden>正在读取会话…</div>
+    <div id="root"></div>
+    <script src="enso-ui.js"></script>
+    <script src="usage.js"></script>
+  </body>
+</html>
