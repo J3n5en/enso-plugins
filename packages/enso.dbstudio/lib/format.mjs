@@ -75,10 +75,38 @@ export function packValue(value, mode = 'preview') {
   return clip({ t: 'text', v: text }, mode);
 }
 
+/** 按 UTF-8 字节截断，不拆开代理对。 */
+export function truncateUtf8(text, maxBytes) {
+  const input = String(text ?? '');
+  if (maxBytes <= 0) return '';
+  if (Buffer.byteLength(input, 'utf8') <= maxBytes) return input;
+  let bytes = 0;
+  let i = 0;
+  while (i < input.length) {
+    const code = input.charCodeAt(i);
+    let next = i + 1;
+    let size;
+    if (code >= 0xd800 && code <= 0xdbff && i + 1 < input.length) {
+      const low = input.charCodeAt(i + 1);
+      if (low >= 0xdc00 && low <= 0xdfff) {
+        next = i + 2;
+        size = 4;
+      } else size = 3;
+    } else if (code <= 0x7f) size = 1;
+    else if (code <= 0x7ff) size = 2;
+    else size = 3;
+    if (bytes + size > maxBytes) break;
+    bytes += size;
+    i = next;
+  }
+  return input.slice(0, i);
+}
+
 function clip(cell, mode) {
   const limit = mode === 'full' ? FULL_CELL_CHARS : PREVIEW_CHARS;
-  if (cell.v.length <= limit) return cell;
-  return { ...cell, v: cell.v.slice(0, limit), n: cell.v.length, cut: true };
+  const truncated = truncateUtf8(cell.v, limit);
+  if (truncated === cell.v) return cell;
+  return { ...cell, v: truncated, n: cell.v.length, cut: true };
 }
 
 export function packRow(row, mode = 'preview') {

@@ -175,7 +175,7 @@ export function createApp(enso, deps = {}) {
       const session = map.get(oldest);
       map.delete(oldest);
       void session?.end?.().catch(() => {});
-      session?.close?.();
+      void session?.close?.();
     }
   }
 
@@ -200,7 +200,7 @@ export function createApp(enso, deps = {}) {
     const file = await resolveSqliteFile(projectRoot, record.path, { allowOutside: current.allowOutsideSqlite });
     const key = `${record.id}\0${file.real}\0${current.allowSqliteWrite ? 'w' : 'r'}`;
     let session = sqliteSessions.get(key);
-    if (!session) {
+    if (!session || session.closed) {
       session = new SqliteSession(file, { allowWrite: current.allowSqliteWrite });
       sqliteSessions.set(key, session);
       trim(sqliteSessions);
@@ -258,7 +258,7 @@ export function createApp(enso, deps = {}) {
     for (const [key, session] of sqliteSessions) {
       if (!key.startsWith(`${id}\0`)) continue;
       sqliteSessions.delete(key);
-      session.close();
+      void session.close();
     }
     return { ok: true };
   }
@@ -279,10 +279,10 @@ export function createApp(enso, deps = {}) {
       await session.configure(current.queryTimeout, record.engine === 'postgres' ? schema || 'public' : database || record.database);
       if (!database) {
         if (record.engine === 'postgres') {
-          const result = await session.simple(postgresDatabasesSql().text);
+          const result = await session.simple(postgresDatabasesSql().text, [], ctx?.signal);
           return { nodes: rowsOf(result).map((row) => ({ kind: 'database', name: field(row, 'name'), database: field(row, 'name') })) };
         }
-        const result = await session.simple('SHOW DATABASES');
+        const result = await session.simple('SHOW DATABASES', [], ctx?.signal);
         const names = mysqlDatabases(
           rowsOf(result).map((row) => ({ name: field(row, 'Database') || field(row, 'name') || Object.values(row)[0] })),
           record.database,
@@ -291,7 +291,7 @@ export function createApp(enso, deps = {}) {
       }
       if (!schema) {
         if (record.engine === 'postgres') {
-          const result = await session.simple(postgresSchemasSql().text);
+          const result = await session.simple(postgresSchemasSql().text, [], ctx?.signal);
           return {
             nodes: rowsOf(result).map((row) => ({ kind: 'schema', name: field(row, 'name'), database, schema: field(row, 'name') })),
           };
@@ -299,7 +299,7 @@ export function createApp(enso, deps = {}) {
         return { nodes: [{ kind: 'schema', name: database, database, schema: database }] };
       }
       const sql = record.engine === 'postgres' ? postgresRelationsSql() : mysqlRelationsSql();
-      const result = await session.simple(sql.text, [schema]);
+      const result = await session.simple(sql.text, [schema], ctx?.signal);
       return {
         nodes: rowsOf(result).map((row) => ({
           kind: String(field(row, 'kind') || '').toLowerCase() === 'view' ? 'view' : 'table',
@@ -353,7 +353,7 @@ export function createApp(enso, deps = {}) {
       const current = await settings();
       await session.configure(current.queryTimeout, record.engine === 'postgres' ? schema : database);
       const sql = record.engine === 'postgres' ? postgresColumnsSql() : mysqlColumnsSql();
-      const result = await session.simple(sql.text, [schema]);
+      const result = await session.simple(sql.text, [schema], ctx?.signal);
       const map = new Map();
       for (const row of rowsOf(result)) {
         const table = field(row, 'table_name');
@@ -379,14 +379,14 @@ export function createApp(enso, deps = {}) {
       const session = await serverSession(record, password, record.database);
       const current = await settings();
       await session.configure(current.queryTimeout, record.engine === 'postgres' ? 'public' : record.database);
-      await session.simple('SELECT 1 AS ok');
+      await session.simple('SELECT 1 AS ok', [], ctx?.signal);
       return { ok: true };
     } catch (error) {
       fail(error);
     }
   }
 
-  function startRun(connectionId, onStop) {
+  function startRun(connectionId, onStop, session = null) {
     const run = {
       id: `q_${crypto.randomUUID().replaceAll('-', '')}`,
       connectionId,
@@ -404,16 +404,30 @@ export function createApp(enso, deps = {}) {
       pull: null,
       stopped: false,
       reset: false,
+      session,
+      stopping: null,
       async stop() {
-        if (run.stopped) return;
+        if (run.stopping) return run.stopping;
         run.stopped = true;
         clearTimeout(run.timer);
-        busy.delete(connectionId);
-        try {
-          await onStop(run);
-        } catch {
-          // 连接正在关掉
-        }
+        run.stopping = (async () => {
+          try {
+            await onStop(run);
+          } catch {
+            // 连接正在关掉
+          }
+          if (run.controller.signal.aborted && run.session && run.session.closed !== true) {
+            try {
+              if (typeof run.session.cancel === 'function') await run.session.cancel();
+              else if (typeof run.session.end === 'function') await run.session.end();
+              else await run.session.close?.();
+            } catch {
+              // 已经关掉
+            }
+          }
+          busy.delete(connectionId);
+        })();
+        return run.stopping;
       },
     };
     run.controller.signal.addEventListener('abort', () => {
@@ -480,7 +494,10 @@ export function createApp(enso, deps = {}) {
 
   function arm(run, timeoutMs, outer) {
     run.timer = setTimeout(() => run.controller.abort(), timeoutMs);
-    outer?.addEventListener?.('abort', () => run.controller.abort(), { once: true });
+    if (!outer) return;
+    const stop = () => run.controller.abort();
+    if (outer.aborted) stop();
+    else outer.addEventListener('abort', stop, { once: true });
   }
 
   async function query(args, ctx) {
@@ -492,7 +509,7 @@ export function createApp(enso, deps = {}) {
     let statements = [];
     const tableMode = args?.mode === 'table';
     if (tableMode) statements = [{ text: selectStar(record.engine, schema, args.table, current.rowLimit) }];
-    else statements = statementsToRun(args?.sql, args?.selectionStart, args?.selectionEnd, args?.cursor);
+    else statements = statementsToRun(args?.sql, args?.selectionStart, args?.selectionEnd, args?.cursor, record.engine);
     if (!statements.length) throw new Error('没有可执行的语句');
     if (record.engine === 'sqlite') {
       for (const part of statements) {
@@ -518,7 +535,7 @@ export function createApp(enso, deps = {}) {
       }
       const session = await serverSession(record, password, database);
       await session.configure(current.queryTimeout, record.engine === 'postgres' ? schema : database);
-      return await runServer(session, record.id, statements, current, tableMode, ctx?.signal);
+      return await runServer(session, record.id, statements, current, tableMode, ctx?.signal, record.engine);
     } catch (error) {
       busy.delete(record.id);
       if (isCancel(error) || ctx?.signal?.aborted) return { cancelled: true, rows: [], columns: [], done: true, shown: 0 };
@@ -528,40 +545,44 @@ export function createApp(enso, deps = {}) {
 
   async function runSqlite(record, projectRoot, statements, current, tableMode, outer) {
     const session = await sqliteSession(record, projectRoot);
-    let affected = 0;
-    let finalSql = null;
-    let bounded = tableMode;
-    for (let index = 0; index < statements.length; index += 1) {
-      const limited = tableMode ? { sql: statements[index].text, bounded: true, rows: true } : applyLimit(statements[index].text, current.rowLimit);
-      const isLast = index === statements.length - 1;
-      if (!limited.rows) {
-        affected += Number((await session.exec(limited.sql)).count) || 0;
-        continue;
-      }
-      if (!isLast) {
-        let page = await session.query(limited.sql);
-        while (!page.done) page = await session.more();
-        continue;
-      }
-      finalSql = limited;
-      bounded = limited.bounded;
-    }
-    if (!finalSql) {
-      return { columns: [], rows: [], done: true, shown: 0, affected, statements: statements.length, tookMs: 0, cancelled: false, hitCap: false, bounded };
-    }
     const run = startRun(record.id, async (currentRun) => {
-      if (currentRun.controller.signal.aborted || currentRun.reset) session.cancel();
-    });
+      if (currentRun.controller.signal.aborted || currentRun.reset) await session.cancel();
+    }, session);
     try {
-      run.affected = affected;
       run.statements = statements.length;
-      run.bounded = bounded;
+      run.bounded = tableMode;
       run.pull = async () => {
         const page = await session.more();
         return { columns: page.columns, rows: page.rows || [], done: Boolean(page.done) };
       };
       arm(run, current.queryTimeout * 1000, outer);
-      const first = await session.query(finalSql.sql);
+      let final = null;
+      for (let index = 0; index < statements.length; index += 1) {
+        if (run.controller.signal.aborted) throw cancelled();
+        const limited = tableMode
+          ? { sql: statements[index].text, bounded: true, rows: true }
+          : applyLimit(statements[index].text, current.rowLimit, record.engine);
+        const isLast = index === statements.length - 1;
+        if (!limited.rows) {
+          run.affected += Number((await session.exec(limited.sql)).count) || 0;
+          continue;
+        }
+        if (!isLast) {
+          let page = await session.query(limited.sql);
+          while (!page.done) {
+            if (run.controller.signal.aborted) throw cancelled();
+            page = await session.more();
+          }
+          continue;
+        }
+        final = limited;
+        run.bounded = limited.bounded;
+      }
+      if (!final) {
+        run.done = true;
+        return await emit(run);
+      }
+      const first = await session.query(final.sql);
       run.columns = first.columns || [];
       if (first.rowSet === false) {
         run.done = true;
@@ -579,18 +600,20 @@ export function createApp(enso, deps = {}) {
     }
   }
 
-  async function runServer(session, connectionId, statements, current, tableMode, outer) {
+  async function runServer(session, connectionId, statements, current, tableMode, outer, engine) {
     const run = startRun(connectionId, async (currentRun) => {
       if (currentRun.controller.signal.aborted || currentRun.reset) await session.cancel();
       else await session.finishCursor?.();
-    });
+    }, session);
     run.statements = statements.length;
     arm(run, current.queryTimeout * 1000, outer);
     let final = null;
     try {
       for (let index = 0; index < statements.length; index += 1) {
         if (run.controller.signal.aborted) throw cancelled();
-        const limited = tableMode ? { sql: statements[index].text, bounded: true, rows: true } : applyLimit(statements[index].text, current.rowLimit);
+        const limited = tableMode
+          ? { sql: statements[index].text, bounded: true, rows: true }
+          : applyLimit(statements[index].text, current.rowLimit, engine);
         const isLast = index === statements.length - 1;
         if (!limited.rows) {
           run.affected += await session.exec(limited.sql, run.controller.signal);
@@ -676,7 +699,7 @@ export function createApp(enso, deps = {}) {
       for (const run of runs.values()) run.controller.abort();
       for (const session of pg.values()) void session.end().catch(() => {});
       for (const session of mysqlSessions.values()) void session.end().catch(() => {});
-      for (const session of sqliteSessions.values()) session.close();
+      for (const session of sqliteSessions.values()) void session.close();
       pg.clear();
       mysqlSessions.clear();
       sqliteSessions.clear();

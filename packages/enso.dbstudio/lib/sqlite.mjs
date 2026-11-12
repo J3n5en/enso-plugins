@@ -1,4 +1,4 @@
-import { open, readdir, readFile, realpath, stat } from 'node:fs/promises';
+import { open, readdir, readFile, realpath, rename, stat, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -167,9 +167,24 @@ async function loadSqlJs() {
   return sqlJsModule;
 }
 
-export function wrapSqlJs(db) {
+export function wrapSqlJs(db, filePath = '') {
+  let dirty = false;
+  const persist = async () => {
+    if (!dirty || !filePath) return;
+    const tmp = `${filePath}.${process.pid}.tmp`;
+    await writeFile(tmp, Buffer.from(db.export()));
+    await rename(tmp, filePath);
+    dirty = false;
+  };
   return {
     kind: 'sql.js',
+    persist,
+    touch() {
+      dirty = true;
+    },
+    resetDirty() {
+      dirty = false;
+    },
     prepare(sql) {
       const stmt = db.prepare(sql);
       const names = stmt.getColumnNames();
@@ -209,9 +224,14 @@ export function wrapSqlJs(db) {
     },
     exec(sql) {
       db.run(sql);
+      dirty = true;
     },
-    close() {
+    async close() {
+      try {
+        await persist();
+      } finally {
       db.close();
+      }
     },
   };
 }
@@ -227,10 +247,11 @@ export async function openDatabase(file, options = {}) {
     }
     const bytes = await readFile(file.real);
     const SQL = await loadSqlJs();
-    db = wrapSqlJs(new SQL.Database(bytes));
+    db = wrapSqlJs(new SQL.Database(bytes), file.real);
   }
   db.exec('PRAGMA query_only = ON');
   if (options.allowWrite) db.exec('PRAGMA query_only = OFF');
+  db.resetDirty?.();
   return db;
 }
 

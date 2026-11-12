@@ -10,7 +10,7 @@ export function packChunk(rawRows, { already = 0, hardCap = HARD_ROW_CAP, maxCha
       return { rows, rest: rawRows.slice(index), hitCap: true };
     }
     const packed = pack(rawRows[index], already + rows.length);
-    const size = JSON.stringify(packed).length + 1;
+    const size = Buffer.byteLength(JSON.stringify(packed), 'utf8') + 1;
     if (rows.length > 0 && used + size > maxChars) return { rows, rest: rawRows.slice(index), hitCap: false };
     rows.push(packed);
     used += size;

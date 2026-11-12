@@ -6,18 +6,21 @@ import test from 'node:test';
 import { createApp } from '../packages/enso.dbstudio/lib/app.mjs';
 import { packChunk } from '../packages/enso.dbstudio/lib/chunk.mjs';
 import { connectionFromEnv, parseEnv } from '../packages/enso.dbstudio/lib/envfile.mjs';
-import { packValue } from '../packages/enso.dbstudio/lib/format.mjs';
+import { packValue, truncateUtf8 } from '../packages/enso.dbstudio/lib/format.mjs';
 import { selectStar } from '../packages/enso.dbstudio/lib/ident.mjs';
+import { PREVIEW_CHARS } from '../packages/enso.dbstudio/lib/limits.mjs';
 import { applyLimit, destructiveReason, splitStatements, statementAt, statementInfo, sqliteBlockedReason, statementsToRun } from '../packages/enso.dbstudio/lib/scan.mjs';
 import { isCancel } from '../packages/enso.dbstudio/lib/servers.mjs';
 import { resolveSettings } from '../packages/enso.dbstudio/lib/settings.mjs';
 import { publicConnection } from '../packages/enso.dbstudio/lib/store.mjs';
-import { pullIterator, resolveSqliteFile } from '../packages/enso.dbstudio/lib/sqlite.mjs';
+import { SqliteSession } from '../packages/enso.dbstudio/lib/sqlite-session.mjs';
+import { pullIterator, resolveSqliteFile, wrapSqlJs } from '../packages/enso.dbstudio/lib/sqlite.mjs';
 import { killQuerySql, mysqlOptions, mysqlSsl, parseSslMode, postgresOptions, postgresSsl, sslNote } from '../packages/enso.dbstudio/lib/target.mjs';
 import { parseConnectionInput, parseServerUrl } from '../packages/enso.dbstudio/lib/url.mjs';
 import { configFileFromDataDir, redact, vaultFileFromDataDir } from '../packages/enso.dbstudio/lib/vault.mjs';
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 const manifest = JSON.parse(readFileSync(new URL('../packages/enso.dbstudio/enso-plugin.json', import.meta.url), 'utf8'));
 
@@ -163,6 +166,33 @@ test('语句切分、光标和 LIMIT 上限', () => {
   assert.match(bounded.sql, /LIMIT 100$/);
   assert.equal(applyLimit('SELECT * FROM customers LIMIT 5', 100).bounded, false);
   assert.equal(applyLimit("INSERT INTO customers (name) VALUES ('a')", 100).rows, false);
+  const locked = applyLimit('SELECT * FROM t FOR UPDATE', 100);
+  assert.equal(locked.bounded, true);
+  assert.ok(locked.sql.indexOf('LIMIT 100') < locked.sql.indexOf('FOR UPDATE'));
+  assert.equal(applyLimit('INSERT INTO t VALUES (1) RETURNING id', 100).bounded, false);
+  assert.equal(applyLimit('INSERT INTO t VALUES (1) RETURNING id', 100).sql.includes('LIMIT'), false);
+  assert.equal(applyLimit('SHOW TABLES', 100).bounded, false);
+  assert.equal(applyLimit('PRAGMA table_info(t)', 100).bounded, false);
+  assert.equal(applyLimit('EXPLAIN SELECT 1', 100).bounded, false);
+  assert.equal(applyLimit('DESCRIBE t', 100).bounded, false);
+  assert.equal(applyLimit('SELECT * FROM t LIMIT 0', 100).bounded, false);
+  assert.equal(applyLimit('SELECT * FROM t LIMIT 0', 100).sql, 'SELECT * FROM t LIMIT 0');
+  const withSelect = applyLimit('WITH src AS (SELECT 1) SELECT * FROM src', 100);
+  assert.equal(withSelect.bounded, true);
+  assert.match(withSelect.sql, /LIMIT 100$/);
+  assert.equal(applyLimit('WITH src AS (SELECT 1) INSERT INTO t SELECT * FROM src', 100).bounded, false);
+  const hashParts = splitStatements('SELECT 1; # comment ; DROP TABLE x\nSELECT 2', 'mysql').map((part) => part.text);
+  assert.equal(hashParts.length, 2);
+  assert.equal(hashParts[0], 'SELECT 1');
+  assert.match(hashParts[1], /SELECT 2/);
+  assert.equal(splitStatements('SELECT 1; # comment ; DROP TABLE x\nSELECT 2', 'mysql').length, 2);
+  const escaped = splitStatements("SELECT 'a\\'; DELETE FROM t'; SELECT 2", 'mysql').map((part) => part.text);
+  assert.equal(escaped.length, 2);
+  assert.match(escaped[0], /SELECT 'a/);
+  assert.equal(escaped[1], 'SELECT 2');
+  const eString = splitStatements("SELECT E'a\\'; still'; SELECT 2", 'postgres').map((part) => part.text);
+  assert.equal(eString.length, 2);
+  assert.equal(eString[1], 'SELECT 2');
   assert.equal(statementInfo('WITH src AS (SELECT 1) SELECT * FROM src').verb, 'select');
   assert.equal(statementInfo('WITH src AS (SELECT 1) INSERT INTO t SELECT 1').rows, false);
   assert.equal(statementInfo('INSERT INTO t SELECT 1 RETURNING id').rows, true);
@@ -293,8 +323,8 @@ test('密码只进入插件数据目录 vault.json，连接清单和环境变量
   }
 });
 
-test('SQLite 连接能查出真实行，大整数不丢精度，查询可以取消', async () => {
-  const { root, project, app, events } = await harness();
+test('SQLite 连接能查出真实行，大整数不丢精度', async () => {
+  const { root, project, app } = await harness();
   try {
     const { DatabaseSync } = await import('node:sqlite');
     const file = join(project, 'shop.db');
@@ -343,28 +373,6 @@ test('SQLite 连接能查出真实行，大整数不丢精度，查询可以取�
     );
     assert.equal(selected.rows.length, 1);
     assert.equal(selected.rows[0][0].v, 'Ada');
-
-    const hanging = app.handlers.query(
-      { connectionId: saved.connection.id, sql: 'SELECT id FROM customers', cursor: 0, selectionStart: 0, selectionEnd: 0 },
-      { projectRoot: project },
-    );
-    const started = await Promise.race([
-      hanging,
-      new Promise((resolve) => {
-        const timer = setInterval(() => {
-          if (events.some((event) => event.name === 'query')) {
-            clearInterval(timer);
-            resolve('event');
-          }
-        }, 5);
-      }),
-    ]);
-    if (started === 'event') {
-      const queryId = events.find((event) => event.name === 'query').data.queryId;
-      await app.handlers.cancel({ queryId });
-    }
-    const settled = await hanging;
-    assert.equal(settled.cancelled === true || Array.isArray(settled.rows), true);
   } finally {
     await app.dispose();
     await rm(root, { recursive: true, force: true });
@@ -577,6 +585,215 @@ test('破坏性语句先返回 needsConfirm，确认后才执行；prod 带连�
       { projectRoot: project },
     );
     assert.equal(empty.rows.length, 0);
+  } finally {
+    await app.dispose();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('中文单元格按 UTF-8 字节截断，载荷按字节封顶', () => {
+  const preview = packValue('汉'.repeat(100), 'preview');
+  assert.equal(preview.cut, true);
+  assert.ok(Buffer.byteLength(preview.v, 'utf8') <= PREVIEW_CHARS);
+  assert.equal(preview.v.includes('\uFFFD'), false);
+  assert.equal(truncateUtf8('😀', 3), '');
+  assert.equal(truncateUtf8('😀x', 4), '😀');
+  const packed = packChunk([['中'], ['中']], {
+    already: 0,
+    hardCap: 10,
+    maxChars: 12,
+    pack: (row) => row,
+  });
+  assert.equal(packed.rows.length, 1);
+  assert.deepEqual(packed.rest, [['中']]);
+});
+
+test('timestamp 不经 Date 转 UTC，timestamptz 仍走 ISO', () => {
+  const options = postgresOptions({ host: '127.0.0.1', port: 5432, user: 'u', database: 'd', sslmode: 'disable' }, '');
+  assert.deepEqual(options.types.timestamp.from, [1114]);
+  assert.equal(options.types.timestamp.parse('2024-01-15 08:00:00'), '2024-01-15 08:00:00');
+  assert.equal(packValue('2024-01-15 08:00:00').v, '2024-01-15 08:00:00');
+  const instant = new Date('2024-01-15T08:00:00.000Z');
+  assert.equal(packValue(instant).v, instant.toISOString());
+});
+
+test('取消 SQLite 查询会停住 worker 并返回 cancelled', async () => {
+  const { root, project, app } = await harness({ config: { rowLimit: 1000 } });
+  try {
+    const { DatabaseSync } = await import('node:sqlite');
+    const file = join(project, 'shop.db');
+    const db = new DatabaseSync(file);
+    db.exec('CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT)');
+    const insert = db.prepare('INSERT INTO customers (id, name) VALUES (?, ?)');
+    for (let i = 1; i <= 250; i += 1) insert.run(BigInt(i), `n${i}`);
+    db.close();
+
+    const saved = await app.handlers.save({ name: 'QA SQLite', engine: 'sqlite', env: 'dev', path: 'shop.db' });
+    const first = await app.handlers.query(
+      { connectionId: saved.connection.id, sql: 'SELECT id FROM customers', cursor: 0 },
+      { projectRoot: project },
+    );
+    assert.equal(first.done, false);
+    assert.ok(first.queryId);
+    const cancelled = await app.handlers.cancel({ queryId: first.queryId });
+    assert.equal(cancelled.cancelled, true);
+    const again = await app.handlers.query(
+      { connectionId: saved.connection.id, sql: 'SELECT COUNT(*) FROM customers', cursor: 0 },
+      { projectRoot: project },
+    );
+    assert.equal(again.cancelled, false);
+    assert.equal(again.rows.length, 1);
+
+    const resolved = await resolveSqliteFile(project, 'shop.db');
+    const session = new SqliteSession(resolved);
+    await session.open();
+    const hanging = session.query('WITH RECURSIVE t(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM t) SELECT n FROM t');
+    hanging.catch(() => {});
+    for (let i = 0; i < 40 && session.pending.size === 0; i += 1) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    assert.ok(session.pending.size > 0);
+    const worker = session.worker;
+    assert.ok(worker);
+    const exited = new Promise((resolve) => worker.once('exit', () => resolve(true)));
+    await session.cancel();
+    await assert.rejects(hanging);
+    assert.equal(session.worker, null);
+    assert.equal(session.closed, true);
+    assert.equal(await Promise.race([exited, new Promise((resolve) => setTimeout(() => resolve(false), 2000))]), true);
+  } finally {
+    await app.dispose();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('多语句取消在前置语句执行前就能停下', async () => {
+  const { root, project, app } = await harness({ config: { allowSqliteWrite: true } });
+  try {
+    await sqliteFile(project, 'shop.db');
+    const saved = await app.handlers.save({ name: 'QA SQLite', engine: 'sqlite', env: 'dev', path: 'shop.db' });
+    const controller = new AbortController();
+    controller.abort();
+    const result = await app.handlers.query(
+      {
+        connectionId: saved.connection.id,
+        sql: "INSERT INTO customers (id, name) VALUES (99, 'x'); SELECT 1",
+        cursor: 0,
+        confirm: true,
+      },
+      { projectRoot: project, signal: controller.signal },
+    );
+    assert.equal(result.cancelled, true);
+    const check = await app.handlers.query(
+      { connectionId: saved.connection.id, sql: 'SELECT id FROM customers WHERE id = 99', cursor: 0 },
+      { projectRoot: project },
+    );
+    assert.equal(check.cancelled, false);
+    assert.equal(check.rows.length, 0);
+  } finally {
+    await app.dispose();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('sql.js 写语句会原子写回文件', async () => {
+  const require = createRequire(import.meta.url);
+  const init = require('../packages/enso.dbstudio/vendor/sql-wasm.cjs');
+  const wasm = fileURLToPath(new URL('../packages/enso.dbstudio/vendor/sql-wasm.wasm', import.meta.url));
+  const SQL = await init({ locateFile: () => wasm });
+  const dir = await mkdtemp(join(tmpdir(), 'sqljs-'));
+  try {
+    const path = join(dir, 't.db');
+    const db = wrapSqlJs(new SQL.Database(), path);
+    db.exec('CREATE TABLE t (id INTEGER, name TEXT)');
+    db.exec("INSERT INTO t VALUES (1, 'Ada')");
+    await db.persist();
+    const bytes = await readFile(path);
+    assert.equal(bytes.subarray(0, 15).toString(), 'SQLite format 3');
+    await db.close();
+    const { DatabaseSync } = await import('node:sqlite');
+    const again = new DatabaseSync(path);
+    const rows = again.prepare('SELECT name FROM t').all();
+    assert.equal(rows[0].name, 'Ada');
+    again.close();
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('目录查询走已配置连接并响应取消', async () => {
+  let reservedUnsafe = 0;
+  let poolUnsafe = 0;
+  let pending = null;
+  const postgres = () => {
+    const api = {
+      closed: false,
+      async reserve() {
+        return {
+          unsafe(text) {
+            reservedUnsafe += 1;
+            const query = {
+              text,
+              cancel() {
+                pending?.reject(Object.assign(new Error('canceling statement due to user request'), { code: '57014' }));
+                return Promise.resolve();
+              },
+              then(resolve, reject) {
+                if (String(text).includes('pg_database')) {
+                  pending = { resolve, reject };
+                  return;
+                }
+                resolve([{ name: 'shop' }]);
+              },
+            };
+            return query;
+          },
+        };
+      },
+      unsafe() {
+        poolUnsafe += 1;
+        return Promise.resolve([]);
+      },
+      async end() {
+        api.closed = true;
+      },
+      async cancel() {
+        api.closed = true;
+      },
+    };
+    return api;
+  };
+  const { root, app } = await harness({ deps: { drivers: { postgres, createConnection() {} } } });
+  try {
+    const saved = await app.handlers.save({
+      name: 'QA',
+      engine: 'postgres',
+      host: 'db.internal',
+      port: 5432,
+      user: 'shop',
+      database: 'shop',
+      password: 'pw',
+    });
+    const controller = new AbortController();
+    const hanging = app.handlers.tree({ connectionId: saved.connection.id }, { signal: controller.signal });
+    await new Promise((resolve, reject) => {
+      const timer = setInterval(() => {
+        if (pending) {
+          clearInterval(timer);
+          resolve();
+        }
+      }, 5);
+      setTimeout(() => {
+        clearInterval(timer);
+        reject(new Error('目录查询没有开始'));
+      }, 2000);
+    });
+    controller.abort();
+    const error = await hanging.catch((err) => err);
+    assert.ok(reservedUnsafe > 0);
+    assert.equal(poolUnsafe, 0);
+    assert.equal(error.code, 'ABORTED');
+    assert.match(error.message, /已取消/);
   } finally {
     await app.dispose();
     await rm(root, { recursive: true, force: true });

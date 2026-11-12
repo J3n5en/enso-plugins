@@ -46,8 +46,18 @@ class PostgresSession {
     return this.reserved;
   }
 
-  async simple(text, params = []) {
-    return this.sql.unsafe(text, params);
+  async simple(text, params = [], signal) {
+    const reserved = await this.reserve();
+    const query = reserved.unsafe(text, params);
+    const stop = () => {
+      void query.cancel?.().catch(() => {});
+    };
+    const unlisten = listen(signal, stop);
+    try {
+      return await query;
+    } finally {
+      unlisten();
+    }
   }
 
   async configure(seconds, schema) {
@@ -173,9 +183,17 @@ class MysqlSession {
     if (!/^[1-9]\d{0,19}$/.test(this.threadId)) throw new Error('没有拿到连接编号，无法在需要时取消查询');
   }
 
-  async simple(text, params = []) {
-    const [rows, fields] = await this.connection.query(text, params);
-    return { rows, fields };
+  async simple(text, params = [], signal) {
+    const stop = () => {
+      void this.kill();
+    };
+    const unlisten = listen(signal, stop);
+    try {
+      const [rows, fields] = await this.connection.query(text, params);
+      return { rows, fields };
+    } finally {
+      unlisten();
+    }
   }
 
   async configure(seconds, database) {

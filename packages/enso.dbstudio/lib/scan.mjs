@@ -33,9 +33,25 @@ const VERBS = new Set([
 ]);
 
 const ROW_VERBS = new Set(['select', 'table', 'values', 'show', 'explain', 'pragma', 'describe', 'desc']);
+const LIMIT_VERBS = new Set(['select', 'table', 'values']);
+const MYSQL_ENGINES = new Set(['mysql', 'mariadb']);
+const READ_VERBS = new Set(['select', 'table', 'values', 'show', 'explain', 'describe', 'desc']);
 
 function isIdent(char) {
   return /[A-Za-z0-9_]/.test(char);
+}
+
+function isMysql(engine) {
+  return MYSQL_ENGINES.has(engine);
+}
+
+/** PostgreSQL `E'…'` / `e'…'`。`BE'…'` 这种标识符不算。 */
+function isEString(text, quoteIndex) {
+  if (quoteIndex < 1) return false;
+  const mark = text[quoteIndex - 1];
+  if (mark !== 'e' && mark !== 'E') return false;
+  if (quoteIndex === 1) return true;
+  return !isIdent(text[quoteIndex - 2]);
 }
 
 function skipLine(text, index) {
@@ -49,19 +65,22 @@ function skipBlock(text, index) {
   return close === -1 ? text.length : close + 2;
 }
 
-function skipQuote(text, index, quote) {
+function skipQuote(text, index, quote, engine) {
+  const mysql = isMysql(engine);
+  const backslash =
+    quote === '`' || (quote === "'" && (mysql || (engine === 'postgres' && isEString(text, index)))) || (quote === '"' && mysql);
   let i = index + 1;
   while (i < text.length) {
+    if (backslash && text[i] === '\\' && i + 1 < text.length) {
+      i += 2;
+      continue;
+    }
     if (text[i] === quote) {
       if (text[i + 1] === quote) {
         i += 2;
         continue;
       }
       return i + 1;
-    }
-    if (text[i] === '\\' && quote === '`' && i + 1 < text.length) {
-      i += 2;
-      continue;
     }
     i += 1;
   }
@@ -84,35 +103,35 @@ function skipDollar(text, index) {
   return close === -1 ? text.length : close + tag.length;
 }
 
+function skipNonSql(text, index, engine) {
+  const char = text[index];
+  const next = text[index + 1];
+  if (char === '-' && next === '-') return skipLine(text, index);
+  if (char === '/' && next === '*') return skipBlock(text, index);
+  if (isMysql(engine) && char === '#') return skipLine(text, index);
+  if (char === "'" || char === '"' || char === '`') return skipQuote(text, index, char, engine);
+  if (char === '$' && dollarTagAt(text, index)) return skipDollar(text, index);
+  return index;
+}
+
 /**
  * 按分号切语句。字符串、注释、反引号、双引号和 PostgreSQL 美元引号里的分号不算。
  * 返回的 text 去掉首尾空白，但不含结尾分号。
+ * engine 为 mysql/mariadb 时认 `#` 行注释，并在字符串里处理反斜杠转义；
+ * postgres 只在 `E'…'` 里处理反斜杠。
  */
-export function splitStatements(sql) {
+export function splitStatements(sql, engine) {
   const text = String(sql ?? '');
   const parts = [];
   let start = 0;
   let i = 0;
   while (i < text.length) {
-    const char = text[i];
-    const next = text[i + 1];
-    if (char === '-' && next === '-') {
-      i = skipLine(text, i);
+    const skipped = skipNonSql(text, i, engine);
+    if (skipped !== i) {
+      i = skipped;
       continue;
     }
-    if (char === '/' && next === '*') {
-      i = skipBlock(text, i);
-      continue;
-    }
-    if (char === "'" || char === '"' || char === '`') {
-      i = skipQuote(text, i, char);
-      continue;
-    }
-    if (char === '$' && dollarTagAt(text, i)) {
-      i = skipDollar(text, i);
-      continue;
-    }
-    if (char === ';') {
+    if (text[i] === ';') {
       const raw = text.slice(start, i);
       if (raw.trim()) parts.push({ start, end: i, text: raw.trim() });
       i += 1;
@@ -127,9 +146,9 @@ export function splitStatements(sql) {
 }
 
 /** 光标落在某条语句上；落在语句之间的空白时归到前一条。 */
-export function statementAt(sql, index) {
+export function statementAt(sql, index, engine) {
   const text = String(sql ?? '');
-  const parts = splitStatements(text);
+  const parts = splitStatements(text, engine);
   if (!parts.length) return null;
   const at = Math.max(0, Math.min(Number.isFinite(index) ? index : text.length, text.length));
   for (const part of parts) {
@@ -144,18 +163,18 @@ export function statementAt(sql, index) {
 }
 
 /** 有选区就只跑选区里的语句，否则跑光标所在的那一条。 */
-export function statementsToRun(sql, selectionStart, selectionEnd, cursor) {
+export function statementsToRun(sql, selectionStart, selectionEnd, cursor, engine) {
   const text = String(sql ?? '');
   const start = Number(selectionStart);
   const end = Number(selectionEnd);
   if (Number.isInteger(start) && Number.isInteger(end) && end > start && start >= 0 && end <= text.length) {
-    return splitStatements(text.slice(start, end));
+    return splitStatements(text.slice(start, end), engine);
   }
-  const one = statementAt(text, Number.isFinite(cursor) ? cursor : text.length);
+  const one = statementAt(text, Number.isFinite(cursor) ? cursor : text.length, engine);
   return one ? [one] : [];
 }
 
-function inspect(sql) {
+function inspect(sql, engine) {
   const text = String(sql ?? '');
   const words = [];
   let depth = 0;
@@ -165,24 +184,12 @@ function inspect(sql) {
   let where = false;
   let i = 0;
   while (i < text.length) {
+    const skipped = skipNonSql(text, i, engine);
+    if (skipped !== i) {
+      i = skipped;
+      continue;
+    }
     const char = text[i];
-    const next = text[i + 1];
-    if (char === '-' && next === '-') {
-      i = skipLine(text, i);
-      continue;
-    }
-    if (char === '/' && next === '*') {
-      i = skipBlock(text, i);
-      continue;
-    }
-    if (char === "'" || char === '"' || char === '`') {
-      i = skipQuote(text, i, char);
-      continue;
-    }
-    if (char === '$' && dollarTagAt(text, i)) {
-      i = skipDollar(text, i);
-      continue;
-    }
     if (char === '(') {
       depth += 1;
       i += 1;
@@ -218,29 +225,17 @@ function inspect(sql) {
   return { verb, limit, fetch, returning, where };
 }
 
-function eachIdent(sql, onWord) {
+function eachIdent(sql, onWord, engine) {
   const text = String(sql ?? '');
   let depth = 0;
   let i = 0;
   while (i < text.length) {
+    const skipped = skipNonSql(text, i, engine);
+    if (skipped !== i) {
+      i = skipped;
+      continue;
+    }
     const char = text[i];
-    const next = text[i + 1];
-    if (char === '-' && next === '-') {
-      i = skipLine(text, i);
-      continue;
-    }
-    if (char === '/' && next === '*') {
-      i = skipBlock(text, i);
-      continue;
-    }
-    if (char === "'" || char === '"' || char === '`') {
-      i = skipQuote(text, i, char);
-      continue;
-    }
-    if (char === '$' && dollarTagAt(text, i)) {
-      i = skipDollar(text, i);
-      continue;
-    }
     if (char === '(') {
       depth += 1;
       i += 1;
@@ -262,8 +257,8 @@ function eachIdent(sql, onWord) {
   }
 }
 
-export function statementInfo(sql) {
-  const info = inspect(sql);
+export function statementInfo(sql, engine) {
+  const info = inspect(sql, engine);
   const rows = info.returning || ROW_VERBS.has(info.verb);
   return { ...info, rows };
 }
@@ -299,15 +294,69 @@ export function sqliteBlockedReason(sql) {
   return blocked;
 }
 
+function lockClauseIndex(sql, engine) {
+  const text = String(sql ?? '');
+  let depth = 0;
+  let i = 0;
+  while (i < text.length) {
+    const skipped = skipNonSql(text, i, engine);
+    if (skipped !== i) {
+      i = skipped;
+      continue;
+    }
+    const char = text[i];
+    if (char === '(') {
+      depth += 1;
+      i += 1;
+      continue;
+    }
+    if (char === ')') {
+      depth = Math.max(0, depth - 1);
+      i += 1;
+      continue;
+    }
+    if (depth === 0 && /[A-Za-z_]/.test(char)) {
+      const begin = i;
+      i += 1;
+      while (i < text.length && isIdent(text[i])) i += 1;
+      const word = text.slice(begin, i).toLowerCase();
+      if (word === 'for' || word === 'lock') {
+        const rest = text.slice(begin).toLowerCase();
+        if (word === 'for' && /^for\s+(update|share|no\s+key\s+update|key\s+share)\b/.test(rest)) return begin;
+        if (word === 'lock' && /^lock\s+in\s+share\s+mode\b/.test(rest)) return begin;
+      }
+      continue;
+    }
+    i += 1;
+  }
+  return -1;
+}
+
 /**
- * 会返回行、且顶层没有 LIMIT / FETCH 的语句，补上 LIMIT。
- * 不改写 INSERT/UPDATE/DELETE（除非带 RETURNING），也不重复添加 LIMIT。
+ * 只给顶层 SELECT / TABLE / VALUES（含 WITH 的最终查询）补 LIMIT。
+ * LIMIT 插在 FOR UPDATE / FOR SHARE / LOCK IN SHARE MODE 之前。
+ * RETURNING、SHOW、PRAGMA、EXPLAIN、DESCRIBE 不改写；已有 LIMIT / FETCH 也不再追加。
  */
-export function applyLimit(sql, limit = DEFAULT_ROW_LIMIT) {
+export function applyLimit(sql, limit = DEFAULT_ROW_LIMIT, engine) {
   const trimmed = String(sql ?? '').trim().replace(/;+\s*$/u, '').trim();
   const cap = clampInt(limit, 1, MAX_ROW_LIMIT, DEFAULT_ROW_LIMIT);
-  const info = statementInfo(trimmed);
-  if (!info.rows) return { sql: trimmed, bounded: false, rows: false };
+  const info = inspect(trimmed, engine);
+  const rows = info.returning || ROW_VERBS.has(info.verb);
+  if (!LIMIT_VERBS.has(info.verb)) return { sql: trimmed, bounded: false, rows };
   if (info.limit || info.fetch) return { sql: trimmed, bounded: false, rows: true };
-  return { sql: `${trimmed}\nLIMIT ${cap}`, bounded: true, rows: true };
+  const lockAt = lockClauseIndex(trimmed, engine);
+  if (lockAt === -1) return { sql: `${trimmed}\nLIMIT ${cap}`, bounded: true, rows: true };
+  return {
+    sql: `${trimmed.slice(0, lockAt).trimEnd()}\nLIMIT ${cap}\n${trimmed.slice(lockAt)}`,
+    bounded: true,
+    rows: true,
+  };
+}
+
+/** sql.js 用来判断要不要把内存库写回文件。PRAGMA / INSERT / RETURNING 都算写。 */
+export function statementWrites(sql, engine) {
+  const info = inspect(sql, engine);
+  if (info.returning) return true;
+  if (!info.verb) return false;
+  return !READ_VERBS.has(info.verb);
 }

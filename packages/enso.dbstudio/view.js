@@ -205,7 +205,7 @@ function renderHeader() {
   } else badgeEl.hidden = true;
   $('title').textContent = current ? current.name : 'DB Studio';
   $('run').disabled = running || !active;
-  $('cancel').disabled = !running;
+  $('cancel').disabled = !inflight;
 }
 
 function renderTree() {
@@ -439,7 +439,6 @@ function askConfirm(payload) {
 async function runQuery(extra) {
   if (!active || running) return;
   running = true;
-  inflight = null;
   renderHeader();
   setBanner('');
   const started = performance.now();
@@ -464,6 +463,7 @@ async function runQuery(extra) {
       payload = await enso.call('query', { ...request, confirm: true });
     }
     result = { ...payload, offset: 0 };
+    inflight = payload.queryId && !payload.done && !payload.cancelled ? payload.queryId : null;
     if (payload.cancelled) {
       renderStatus('已取消');
       return;
@@ -480,9 +480,9 @@ async function runQuery(extra) {
   } catch (error) {
     setBanner(error.message || String(error));
     renderStatus('查询失败');
+    inflight = null;
   } finally {
     running = false;
-    inflight = null;
     renderHeader();
   }
 }
@@ -490,15 +490,18 @@ async function runQuery(extra) {
 async function moreRows() {
   if (!result?.queryId || running) return;
   running = true;
+  inflight = result.queryId;
   renderHeader();
   try {
     const payload = await enso.call('more', { queryId: result.queryId });
     if (payload.cancelled) {
+      inflight = null;
       renderStatus('已取消');
       return;
     }
     const offset = result.rows.length;
     result = { ...result, ...payload, rows: [...result.rows, ...(payload.rows || [])], offset: 0 };
+    if (payload.done) inflight = null;
     renderGrid();
     renderStatus(`${result.shown ?? result.rows.length} 行 · ${payload.tookMs ?? 0} ms${payload.hitCap ? ` · 已到 ${model.hardCap} 行上限` : ''}`);
     selectedCell = offset;
@@ -511,9 +514,14 @@ async function moreRows() {
 }
 
 async function cancelQuery() {
-  if (!inflight) return;
+  const queryId = inflight || result?.queryId;
+  if (!queryId) return;
   try {
-    await enso.call('cancel', { queryId: inflight });
+    await enso.call('cancel', { queryId });
+    inflight = null;
+    if (result) result = { ...result, done: true, cancelled: true };
+    renderStatus('已取消');
+    renderHeader();
   } catch (error) {
     setBanner(error.message || String(error));
   }

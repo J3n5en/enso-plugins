@@ -87,6 +87,14 @@ export function postgresOptions(conn, password) {
     fetch_types: false,
     prepare: false,
     connection: { application_name: 'enso.dbstudio' },
+    types: {
+      timestamp: {
+        to: 1114,
+        from: [1114],
+        parse: (value) => value,
+        serialize: (value) => value,
+      },
+    },
   };
 }
 

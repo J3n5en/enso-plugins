@@ -17,6 +17,7 @@ export class SqliteSession {
     this.pending = new Map();
     this.seq = 0;
     this.kind = null;
+    this.closed = false;
   }
 
   rejectAll(error) {
@@ -27,6 +28,7 @@ export class SqliteSession {
   dropWorker() {
     const worker = this.worker;
     this.worker = null;
+    this.closed = true;
     this.rejectAll(aborted());
     if (worker) void worker.terminate();
   }
@@ -96,10 +98,32 @@ export class SqliteSession {
 
   cancel() {
     this.kind = null;
-    this.dropWorker();
+    const worker = this.worker;
+    this.worker = null;
+    this.closed = true;
+    this.rejectAll(aborted());
+    if (worker) return worker.terminate();
   }
 
-  close() {
-    this.cancel();
+  async close() {
+    this.kind = null;
+    if (!this.worker) {
+      this.closed = true;
+      return;
+    }
+    let timer;
+    try {
+      await Promise.race([
+        this.call('close', {}),
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error('close timeout')), 5000);
+        }),
+      ]);
+    } catch {
+      // 超时再 terminate
+    } finally {
+      clearTimeout(timer);
+    }
+    this.dropWorker();
   }
 }
