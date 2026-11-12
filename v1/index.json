@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-12T05:56:27.978Z",
-  "sequence": 88,
+  "generatedAt": "2026-11-12T05:56:44.828Z",
+  "sequence": 89,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -1433,6 +1433,41 @@
           "sha256": "24226efe1b304059a5fc3d4a09b4ba57e40bb9c245bb27abef428ec33927bd94",
           "size": 254616,
           "publishedAt": "2026-11-12T05:39:27.183Z"
+        }
+      ]
+    },
+    {
+      "id": "enso.sqlite",
+      "name": "SQLite",
+      "description": "浏览和查询 SQLite 数据库：可排序、筛选的表格，SQL 查询，以及表、视图、索引和触发器的 CREATE 语句。只读。",
+      "tier": "official",
+      "tags": [
+        "sqlite",
+        "database",
+        "files"
+      ],
+      "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.sqlite.svg",
+      "category": "productivity",
+      "readme": {
+        "path": "packages/enso.sqlite/0.1.0.readme.md",
+        "sha256": "5d55cabcf0f977cb3dff951d73d30a05cb3ecd0dcfe23ffe26e1a385abd63058",
+        "size": 3607
+      },
+      "latest": "0.1.0",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "engines": {
+            "enso": ">=0.3.4"
+          },
+          "permissions": [
+            "ui.view",
+            "fs.read"
+          ],
+          "path": "packages/enso.sqlite/0.1.0.zip",
+          "sha256": "8abad651fd9fbfcd58e173693fade8d25b39bc91dbdc704378cb77ffcaa8ba61",
+          "size": 850231,
+          "publishedAt": "2026-11-12T05:56:44.828Z"
         }
       ]
     },
