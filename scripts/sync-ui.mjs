@@ -16,9 +16,12 @@ export const UI_PACKAGES = [
   'enso.github',
   'enso.hongguo',
   'enso.kanban',
+  'enso.linear',
+  'enso.openspec',
   'enso.scheduler',
   'enso.telegram',
   'enso.tgclient',
+  'enso.walkthrough',
 ];
 
 /** 返回与 shared/ 不一致的副本，供 validate 报错 */
