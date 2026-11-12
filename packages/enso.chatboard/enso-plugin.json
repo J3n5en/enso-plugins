@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "enso.chatboard",
+  "name": "Chat Board",
+  "version": "0.1.0",
+  "icon": "icon.svg",
+  "description": "跨项目会话看板：每张卡片就是一个会话（状态含 coworker），可分列、标未读、写备注，点卡片切换到该会话。",
+  "main": "main.mjs",
+  "permissions": ["ui.view", "session.readAll", "session.focus", "session.create"],
+  "contributes": {
+    "views": [{ "id": "board", "title": "会话看板", "entry": "board.html" }]
+  }
+}

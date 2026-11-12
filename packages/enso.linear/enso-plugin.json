@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 1,
+  "id": "enso.linear",
+  "name": "Linear",
+  "version": "0.1.0",
+  "icon": "icon.svg",
+  "description": "在侧栏查看 Linear 议题：我的、当前周期、待办和分拣。按当前 git 分支高亮对应议题，可看状态、子议题、链接和评论，并在 Enso 会话里开始处理。用 Personal API Key，或用 PKCE 登录自建 OAuth 应用（不需要 Client Secret）。",
+  "engines": {
+    "enso": ">=0.2.14"
+  },
+  "main": "main.mjs",
+  "permissions": ["agent.tool", "net.fetch", "ui.view", "ui.openExternal", "session.create", "composer.draft"],
+  "net": {
+    "domains": ["api.linear.app"]
+  },
+  "contributes": {
+    "configuration": [
+      {
+        "key": "apiKey",
+        "title": "Personal API Key",
+        "description": "Linear → 设置 → 账户 → 安全与访问 → Personal API keys。改状态和评论需要读写权限。也可改用侧栏里的 OAuth 登录。",
+        "secret": true
+      },
+      {
+        "key": "oauthClientId",
+        "title": "OAuth Client ID（可选）",
+        "description": "自建 Linear OAuth 应用的 Client ID，这是公开标识。回调地址填 http://127.0.0.1:47321/callback。不要填写 Client Secret。",
+        "secret": false
+      }
+    ],
+    "views": [{ "id": "linear", "title": "Linear", "entry": "view.html" }],
+    "methods": [
+      { "name": "state", "timeoutMs": 20000 },
+      { "name": "login", "timeoutMs": 20000 },
+      { "name": "submitCode", "timeoutMs": 30000 },
+      { "name": "cancelLogin", "timeoutMs": 5000 },
+      { "name": "logout", "timeoutMs": 20000 },
+      { "name": "setTeam", "timeoutMs": 5000 },
+      { "name": "list", "timeoutMs": 30000 },
+      { "name": "search", "timeoutMs": 30000 },
+      { "name": "view", "timeoutMs": 30000 },
+      { "name": "comment", "timeoutMs": 30000 },
+      { "name": "update", "timeoutMs": 30000 },
+      { "name": "start", "timeoutMs": 30000 },
+      { "name": "open", "timeoutMs": 10000 }
+    ],
+    "agentTools": [
+      {
+        "name": "linear_list",
+        "readOnly": true,
+        "description": "List Linear issues. view is mine (assigned to you, grouped by status), cycle (the team's active cycle), backlog, or triage. team is a team id or key; omit it on mine to include every team. Optional query filters the fetched rows locally.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "view": { "type": "string", "enum": ["mine", "cycle", "backlog", "triage"], "description": "Default mine" },
+            "team": { "type": "string", "description": "Team id or key, such as ENG" },
+            "query": { "type": "string", "description": "Local filter on identifier, title, assignee, project, state, or label" }
+          }
+        }
+      },
+      {
+        "name": "linear_search",
+        "readOnly": true,
+        "description": "Full-text search Linear issues. Returns identifier, title, status, assignee, and url.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": { "type": "string" },
+            "team": { "type": "string", "description": "Optional team id or key" }
+          },
+          "required": ["query"]
+        }
+      },
+      {
+        "name": "linear_view",
+        "readOnly": true,
+        "description": "View one Linear issue by identifier (ENG-123) or UUID, including description, status, sub-issues, links, and comments.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "description": "Issue identifier or UUID" }
+          },
+          "required": ["id"]
+        }
+      },
+      {
+        "name": "linear_comment",
+        "description": "Post a comment on a Linear issue.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "description": "Issue identifier or UUID" },
+            "body": { "type": "string", "description": "Markdown comment" }
+          },
+          "required": ["id", "body"]
+        }
+      },
+      {
+        "name": "linear_update",
+        "description": "Update a Linear issue's status, priority, or assignee. priority is 0 none, 1 urgent, 2 high, 3 medium, 4 low. Pass assigneeId as an empty string to unassign.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "description": "Issue identifier or UUID" },
+            "stateId": { "type": "string", "description": "Workflow state UUID from linear_view" },
+            "priority": { "type": "integer", "description": "0 none, 1 urgent, 2 high, 3 medium, 4 low" },
+            "assigneeId": { "type": "string", "description": "User UUID, or empty to unassign" }
+          },
+          "required": ["id"]
+        }
+      },
+      {
+        "name": "linear_start",
+        "description": "Open a new Enso session to start work on a Linear issue. The prompt includes the identifier, title, description, and suggested git branch.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "description": "Issue identifier or UUID" }
+          },
+          "required": ["id"]
+        }
+      }
+    ]
+  }
+}
