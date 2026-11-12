@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-11T17:16:32.725Z",
-  "sequence": 76,
+  "generatedAt": "2026-11-12T02:14:49.675Z",
+  "sequence": 77,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -133,11 +133,11 @@
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.bridge.svg",
       "category": "agent",
       "readme": {
-        "path": "packages/enso.bridge/1.0.1.readme.md",
+        "path": "packages/enso.bridge/1.0.2.readme.md",
         "sha256": "737fe30a22f69c2ec2bdb28871c4b37939717d3b37bf0ebdc6565b99f8ecdbf8",
         "size": 1434
       },
-      "latest": "1.0.1",
+      "latest": "1.0.2",
       "versions": [
         {
           "version": "1.0.0",
@@ -170,6 +170,22 @@
           "sha256": "7f767981e0e4d331114571a630547f6dfd7925866a171f45e17b66130402d048",
           "size": 76757,
           "publishedAt": "2026-11-11T17:16:32.725Z"
+        },
+        {
+          "version": "1.0.2",
+          "permissions": [
+            "ui.view",
+            "process.background",
+            "agent.tool",
+            "agent.inject",
+            "agent.observe",
+            "session.read",
+            "session.focus"
+          ],
+          "path": "packages/enso.bridge/1.0.2.zip",
+          "sha256": "f06c7efaea33439e894bc7df6463fa63ab0483ffbd6b0f1e943df2a393ab3bb8",
+          "size": 76809,
+          "publishedAt": "2026-11-12T02:14:49.675Z"
         }
       ]
     },
@@ -510,11 +526,11 @@
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.github.svg",
       "category": "integrations",
       "readme": {
-        "path": "packages/enso.github/0.2.0.readme.md",
+        "path": "packages/enso.github/0.2.1.readme.md",
         "sha256": "d1e8663fd1b7af0247f10d25aefefa90f2b50bc776fdecd261182e10166e6300",
         "size": 2735
       },
-      "latest": "0.2.0",
+      "latest": "0.2.1",
       "versions": [
         {
           "version": "0.1.0",
@@ -563,6 +579,22 @@
           "sha256": "d287c721f1fe0a3b68ec2f3c659e26e1a7f8f8e314d95979458dd30baaf968cc",
           "size": 72004,
           "publishedAt": "2026-11-08T08:01:45.063Z"
+        },
+        {
+          "version": "0.2.1",
+          "engines": {
+            "enso": ">=0.2.14"
+          },
+          "permissions": [
+            "agent.tool",
+            "net.fetch",
+            "ui.view",
+            "ui.openExternal"
+          ],
+          "path": "packages/enso.github/0.2.1.zip",
+          "sha256": "ca3e413104453b8adcd4b4833fc9098171defeb71785676a9b1e5ecaf74c1b1d",
+          "size": 72134,
+          "publishedAt": "2026-11-12T02:14:49.675Z"
         }
       ]
     },
@@ -708,11 +740,11 @@
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.kanban.svg",
       "category": "productivity",
       "readme": {
-        "path": "packages/enso.kanban/1.0.3.readme.md",
+        "path": "packages/enso.kanban/1.0.4.readme.md",
         "sha256": "3bb3d476b2bc99e56a7a37fa1ae3794c3626401142ebd45da1982c3a4b4f39d0",
         "size": 1724
       },
-      "latest": "1.0.3",
+      "latest": "1.0.4",
       "versions": [
         {
           "version": "1.0.0",
@@ -777,6 +809,22 @@
           "sha256": "96a07aa9dfc0450dac3cf74afaeca6765cde8724787c798b31f9b7f88070b65a",
           "size": 72210,
           "publishedAt": "2026-11-07T12:01:21.782Z"
+        },
+        {
+          "version": "1.0.4",
+          "permissions": [
+            "ui.view",
+            "agent.tool",
+            "agent.inject",
+            "composer.draft",
+            "session.read",
+            "session.focus",
+            "session.create"
+          ],
+          "path": "packages/enso.kanban/1.0.4.zip",
+          "sha256": "f29e318a2988d79023e40af94c3731561e29bbf4f814ee002d233b745185aef5",
+          "size": 72236,
+          "publishedAt": "2026-11-12T02:14:49.675Z"
         }
       ]
     },
@@ -1085,11 +1133,11 @@
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.scheduler.svg",
       "category": "productivity",
       "readme": {
-        "path": "packages/enso.scheduler/1.1.0.readme.md",
+        "path": "packages/enso.scheduler/1.1.1.readme.md",
         "sha256": "b2a007615245579412a7c11a0fc0e3c9b84d936a9a5af51a051879e9f09f2921",
         "size": 2168
       },
-      "latest": "1.1.0",
+      "latest": "1.1.1",
       "versions": [
         {
           "version": "1.0.0",
@@ -1156,6 +1204,20 @@
           "sha256": "e9bbe1be1752703f6127d7dd77bddf30d72c34f9cc3f8f50912d843910b92c70",
           "size": 70026,
           "publishedAt": "2026-11-11T13:48:11.212Z"
+        },
+        {
+          "version": "1.1.1",
+          "permissions": [
+            "agent.tool",
+            "ui.view",
+            "process.background",
+            "agent.inject",
+            "ui.notify"
+          ],
+          "path": "packages/enso.scheduler/1.1.1.zip",
+          "sha256": "962645101d2a5972da3ac8075625e9d59741c3e2df8389e529e56ccc1bb5c0b3",
+          "size": 70052,
+          "publishedAt": "2026-11-12T02:14:49.675Z"
         }
       ]
     },
@@ -1290,11 +1352,11 @@
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.tgclient.svg",
       "category": "integrations",
       "readme": {
-        "path": "packages/enso.tgclient/0.3.2.readme.md",
+        "path": "packages/enso.tgclient/0.3.3.readme.md",
         "sha256": "fcd4a60fbf730a2df0fd94e212be65e3aee988ea53640979a9d4b628ba0904c5",
         "size": 3832
       },
-      "latest": "0.3.2",
+      "latest": "0.3.3",
       "versions": [
         {
           "version": "0.1.0",
@@ -1385,6 +1447,24 @@
           "sha256": "9f5a077061842ae0c5a589d3835c9e639908246f9a41cbd20e9c25279972a5ed",
           "size": 1320191,
           "publishedAt": "2026-11-11T16:57:47.347Z"
+        },
+        {
+          "version": "0.3.3",
+          "engines": {
+            "enso": ">=0.2.14"
+          },
+          "permissions": [
+            "agent.tool",
+            "agent.inject",
+            "ui.view",
+            "ui.notify",
+            "ui.openExternal",
+            "process.background"
+          ],
+          "path": "packages/enso.tgclient/0.3.3.zip",
+          "sha256": "25faa97ccbfceb213dcbfbc49680cbcd15b31c829713706b4b9fe76c41180eae",
+          "size": 1320373,
+          "publishedAt": "2026-11-12T02:14:49.675Z"
         }
       ]
     },
