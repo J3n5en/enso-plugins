@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-12T05:55:24.620Z",
-  "sequence": 84,
+  "generatedAt": "2026-11-12T05:55:42.142Z",
+  "sequence": 85,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -117,6 +117,45 @@
           "sha256": "f3ab3f21e3ae9d4182904468ab1ddf8d9bcaf2578821db383241fb7a0b06e9ec",
           "size": 43146,
           "publishedAt": "2026-11-05T05:58:04.027Z"
+        }
+      ]
+    },
+    {
+      "id": "enso.agentinbox",
+      "name": "Agent Inbox",
+      "description": "跨项目收件箱：把各会话里等你审批的工具调用、等你回答的提问，以及失败的主会话收成按项目分组的列表，带未读数，点击切回当前项目的会话。",
+      "tier": "official",
+      "tags": [
+        "inbox",
+        "sessions",
+        "approvals"
+      ],
+      "homepage": "https://github.com/J3n5en/enso-plugins/tree/main/packages/enso.agentinbox",
+      "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.agentinbox.svg",
+      "category": "productivity",
+      "readme": {
+        "path": "packages/enso.agentinbox/0.1.0.readme.md",
+        "sha256": "c7f1fdebca8638ec5fbad6751afd2997d192de2134f821906ce5b434067aec34",
+        "size": 4058
+      },
+      "latest": "0.1.0",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "engines": {
+            "enso": ">=0.3.2"
+          },
+          "permissions": [
+            "ui.view",
+            "agent.observe",
+            "process.background",
+            "session.readAll",
+            "session.focus"
+          ],
+          "path": "packages/enso.agentinbox/0.1.0.zip",
+          "sha256": "a889583e9af01ac93c515458b445eec7b1acf35d6c3a4a9a62e168b0e6689fdf",
+          "size": 62776,
+          "publishedAt": "2026-11-12T05:55:42.142Z"
         }
       ]
     },
