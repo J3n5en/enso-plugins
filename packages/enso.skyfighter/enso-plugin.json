@@ -4,7 +4,7 @@
   "name": "雷霆战机",
   "version": "0.1.0",
   "icon": "icon.svg",
-  "description": "侧栏里的竖版打飞机：敌机波次、火力升级、道具和首领，离线就能玩。",
+  "description": "侧栏里的纵向弹幕战役：三种战机、五关空域、四色武器和关间强化。离线可玩。",
   "main": "main.mjs",
   "permissions": ["ui.view"],
   "contributes": {
