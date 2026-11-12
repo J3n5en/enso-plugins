@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-12T05:55:56.585Z",
-  "sequence": 86,
+  "generatedAt": "2026-11-12T05:56:13.498Z",
+  "sequence": 87,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -1399,6 +1399,45 @@
           "sha256": "24226efe1b304059a5fc3d4a09b4ba57e40bb9c245bb27abef428ec33927bd94",
           "size": 254616,
           "publishedAt": "2026-11-12T05:39:27.183Z"
+        }
+      ]
+    },
+    {
+      "id": "enso.tasklauncher",
+      "name": "任务启动",
+      "description": "从当前项目的 GitHub issue 用可编辑的提示词启动 Enso 会话：列出 origin 的 issue，套用提示词模板，再新建会话并聚焦。可选在干净的工作区创建并切换分支。不创建 worktree，也不替代 GitHub 插件。",
+      "tier": "official",
+      "tags": [
+        "github",
+        "issues",
+        "session"
+      ],
+      "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.tasklauncher.svg",
+      "category": "integrations",
+      "readme": {
+        "path": "packages/enso.tasklauncher/0.1.0.readme.md",
+        "sha256": "3e0e39bf3806e577728628e0e3f4ef867fca841f720cdbe8f77cd8c9c73b6bad",
+        "size": 4389
+      },
+      "latest": "0.1.0",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "engines": {
+            "enso": ">=0.2.14"
+          },
+          "permissions": [
+            "agent.tool",
+            "net.fetch",
+            "ui.view",
+            "ui.openExternal",
+            "session.create",
+            "session.focus"
+          ],
+          "path": "packages/enso.tasklauncher/0.1.0.zip",
+          "sha256": "9e2cdcf2478c258c317adf5227e02016b8dc193fb9e69c4791f8e1cf86d8c911",
+          "size": 79163,
+          "publishedAt": "2026-11-12T05:56:13.498Z"
         }
       ]
     },
