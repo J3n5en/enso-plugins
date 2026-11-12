@@ -6,7 +6,7 @@ import { CATEGORY_LABELS, type Category } from '@/lib/market';
 import { spring } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 
-/** 分类胶囊；只列索引里有插件的分类，计数随搜索与来源筛选变化 */
+/** 与来源切换同款的分段控件，窄屏自动换行；计数为 0 的分类不显示（选中的除外） */
 export function CategoryTabs({
   items,
   value,
@@ -18,14 +18,9 @@ export function CategoryTabs({
   counts: Record<Category | '', number>;
   onChange: (category: Category | '') => void;
 }) {
-  const tabs: (Category | '')[] = ['', ...items];
+  const tabs: (Category | '')[] = ['', ...items.filter((c) => counts[c] > 0 || c === value)];
   return (
-    <HoverFill
-      role="tablist"
-      aria-label="分类"
-      className="-mx-1 flex items-center gap-1 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-      fillClassName="rounded-full bg-foreground/[0.04]"
-    >
+    <HoverFill role="tablist" aria-label="分类" className="flex flex-wrap items-center gap-0.5 rounded-lg bg-muted p-1" fillClassName="rounded-md bg-foreground/[0.04]">
       {tabs.map((tab) => {
         const active = tab === value;
         return (
@@ -36,11 +31,11 @@ export function CategoryTabs({
             data-fill
             onClick={() => onChange(tab)}
             className={cn(
-              'relative flex h-7 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm whitespace-nowrap outline-none transition-colors duration-200 focus-visible:ring-[3px] focus-visible:ring-ring/50',
-              active ? 'font-medium text-foreground' : 'text-muted-foreground hover:text-foreground',
+              'relative flex h-7 items-center gap-1.5 rounded-md px-3 text-sm font-medium whitespace-nowrap outline-none transition-colors duration-200 focus-visible:ring-[3px] focus-visible:ring-ring/50',
+              active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
             )}
           >
-            {active && <motion.span layoutId="category-indicator" transition={spring} className="absolute inset-0 -z-10 rounded-full border bg-background shadow-xs dark:bg-input/40" />}
+            {active && <motion.span layoutId="category-indicator" transition={spring} className="absolute inset-0 -z-10 rounded-md bg-background shadow-sm dark:bg-input/40" />}
             {tab ? CATEGORY_LABELS[tab] : '全部分类'}
             <TextSwap value={counts[tab]} className="text-xs text-muted-foreground" />
           </button>
