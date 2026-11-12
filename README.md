@@ -42,6 +42,7 @@ EnsoCode 官方插件市场的源仓库 · [浏览插件](https://enso-plugins.j
 | GitHub | `enso.github` | 0.2.1 | 官方 | 在侧栏查看、回复、关闭和重开当前项目的 GitHub issue 与 PR，也可查看 Actions 运行、失败原因与日志，并重跑或取消。会话里的 agent 也能调用。支持设备码登录，已登录的 gh CLI 可直接复用。 |
 | 红果短剧 | `enso.hongguo` | 0.2.14 | 社区 | 在侧栏里浏览、搜索并播放红果短剧（基于 openhongguo 匿名 SDK）。仅供学习研究。 |
 | Kanban | `enso.kanban` | 1.0.4 | 官方 | 项目看板：同一项目的所有会话共享，人和会话都能创建、编辑、拖动卡片。 |
+| Linear | `enso.linear` | 0.1.0 | 官方 | 在侧栏查看 Linear 议题：我的、当前周期、待办和分拣。按当前 git 分支高亮对应议题，可看状态、子议题、链接和评论，并在 Enso 会话里开始处理。用 Personal API Key，或用 PKCE 登录自建 OAuth 应用（不需要 Client Secret）。 |
 | 噜噜和噜妹 | `enso.lulu` | 0.1.0 | 官方 | 噜噜和噜妹主题：奶油橘底配焦糖棕，两人在侧栏并排，噜噜在输入框后探头，思考时托腮。 |
 | Monokai Pro | `enso.monokaipro` | 1.0.0 | 社区 | Monokai Pro 风格深浅双色主题：炭黑/暖白画布，粉强调色，偏精致专业。 |
 | 奶龙 | `enso.nailong` | 0.1.5 | 官方 | 奶龙主题：奶油黄配巧克力棕，奶龙在输入框后面探头、在侧栏躺平、思考时「在忙」。 |
