@@ -257,6 +257,11 @@ if (!file) {
       else bridge.pending = { scene, reason };
     },
   });
+  const flush = () => void sync.flush();
+  window.addEventListener('pagehide', flush);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flush();
+  });
   sync.ready
     .then((scene) => {
       rootNode.render(<Editor sync={sync} initial={scene} />);
