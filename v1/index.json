@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-12T05:57:32.854Z",
-  "sequence": 91,
+  "generatedAt": "2026-11-12T05:57:52.847Z",
+  "sequence": 92,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -1438,6 +1438,41 @@
           "sha256": "962645101d2a5972da3ac8075625e9d59741c3e2df8389e529e56ccc1bb5c0b3",
           "size": 70052,
           "publishedAt": "2026-11-12T02:14:49.675Z"
+        }
+      ]
+    },
+    {
+      "id": "enso.skillusage",
+      "name": "Skill Usage",
+      "description": "侧栏查看技能、MCP 和子代理真正被用了多少：哪些放进了上下文却很少或从未调用，以及它们大约占多少 token。",
+      "tier": "official",
+      "tags": [
+        "skills",
+        "mcp",
+        "usage",
+        "observability"
+      ],
+      "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.skillusage.svg",
+      "category": "insights",
+      "readme": {
+        "path": "packages/enso.skillusage/0.1.0.readme.md",
+        "sha256": "3ebbfda9fc73c31e978206df3ade4d430b1e2053950d23c604a9fe6c4e7814ea",
+        "size": 5548
+      },
+      "latest": "0.1.0",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "engines": {
+            "enso": ">=0.2.0"
+          },
+          "permissions": [
+            "ui.view"
+          ],
+          "path": "packages/enso.skillusage/0.1.0.zip",
+          "sha256": "66524bd0dc2f22e553f10ede9b4bf0fc2ec67aafec62e8887c486ffaaed72471",
+          "size": 110452,
+          "publishedAt": "2026-11-12T05:57:52.847Z"
         }
       ]
     },
