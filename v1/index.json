@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-12T05:56:13.498Z",
-  "sequence": 87,
+  "generatedAt": "2026-11-12T05:56:27.978Z",
+  "sequence": 88,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -299,6 +299,40 @@
           "sha256": "d404397d97b26064be53ca5e67d2cfb96743e6d98f5e8502089d7e9a8eb4ef24",
           "size": 85587,
           "publishedAt": "2026-11-08T15:53:29.016Z"
+        }
+      ]
+    },
+    {
+      "id": "enso.chatboard",
+      "name": "Chat Board",
+      "description": "跨项目会话看板：每张卡片就是一个会话（状态含 coworker），可分列、标未读、写备注，点卡片切换到该会话。",
+      "tier": "official",
+      "tags": [
+        "ui",
+        "session",
+        "productivity"
+      ],
+      "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.chatboard.svg",
+      "category": "productivity",
+      "readme": {
+        "path": "packages/enso.chatboard/0.1.0.readme.md",
+        "sha256": "4c4e082aca7d37bc0f4da7871b4966dcbf483867feb797221d9e44931b597381",
+        "size": 3793
+      },
+      "latest": "0.1.0",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "permissions": [
+            "ui.view",
+            "session.readAll",
+            "session.focus",
+            "session.create"
+          ],
+          "path": "packages/enso.chatboard/0.1.0.zip",
+          "sha256": "2233c0af69da4719057fc64ce3e98c61c26949ad36231076b0577de1836ffec5",
+          "size": 94012,
+          "publishedAt": "2026-11-12T05:56:27.978Z"
         }
       ]
     },
