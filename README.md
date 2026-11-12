@@ -47,11 +47,14 @@ EnsoCode 官方插件市场的源仓库 · [浏览插件](https://enso-plugins.j
 | Monokai Pro | `enso.monokaipro` | 1.0.0 | 社区 | Monokai Pro 风格深浅双色主题：炭黑/暖白画布，粉强调色，偏精致专业。 |
 | 奶龙 | `enso.nailong` | 0.1.5 | 官方 | 奶龙主题：奶油黄配巧克力棕，奶龙在输入框后面探头、在侧栏躺平、思考时「在忙」。 |
 | 奶蛙 | `enso.naiwa` | 0.1.2 | 官方 | 奶蛙主题：荷叶绿配奶黄，奶蛙在输入框后面探头、在侧栏爬行、思考时托腮，干完活就捧腹大笑。 |
+| OpenSpec | `enso.openspec` | 0.1.0 | 官方 | 侧栏按阶段查看当前项目的 OpenSpec 变更：任务进度、下一步、工单，以及文档里能识别的 PR。实现和收尾会把提示发到对应的 Enso 会话。 |
 | [pstack](https://github.com/cursor/plugins/tree/main/pstack) | `enso.pstack` | 0.3.3 | 官方 | Lauren Tan 的 pstack 0.15.36（MIT）：poteto-mode 按任务挑选 playbook，配套 arena、interrogate、architect 等 58 个 skill 和工程原则，先深挖再并行。只在输入框选了「pstack」预设的会话里加载。在输入框按钮里为某个会话打开后，该会话的每条消息自动展开 poteto-mode。 |
 | Scheduler | `enso.scheduler` | 1.1.1 | 官方 | 定时任务：按 cron 到点向会话发送提示词或弹出系统通知，侧栏显示下次运行时间与倒计时。 |
+| 雷霆战机 | `enso.skyfighter` | 0.1.0 | 官方 | 侧栏里的纵向弹幕战役：三种战机、五关空域、四色武器和关间强化。离线可玩。 |
 | Telegram | `enso.telegram` | 0.3.1 | 官方 | 用 Telegram Bot 远程使用 EnsoCode 会话：配对后发消息即进入会话，执行进度原位更新，回复以富文本发回；支持图片、群聊绑定、成员白名单与群聊上下文、插话、远程停止和双向同步。 |
-| Telegram 客户端 | `enso.tgclient` | 0.3.4 | 官方 | 在侧栏里用手机号登录自己的 Telegram 账号，像官方客户端一样聊天：会话列表与聊天分组、论坛话题、实时收发、相册、边下边播视频、表情与贴纸面板、编辑、回复、表情回应、已读详情、切换发言身份、机器人按钮与键盘、新消息系统通知；附带 Agent 工具，可查聊天、读写消息、订阅新消息。支持 socks5 与 MTProxy 代理。 |
+| Telegram 客户端 | `enso.tgclient` | 0.4.0 | 官方 | 在侧栏里用手机号登录自己的 Telegram 账号，像官方客户端一样聊天：会话列表与聊天分组、论坛话题、实时收发、相册、边下边播视频、表情与贴纸面板、编辑、回复、表情回应、已读详情、切换发言身份、机器人按钮与键盘、新消息系统通知；附带 Agent 工具，可查聊天、读写消息、订阅新消息。支持 socks5 与 MTProxy 代理。 |
 | 双语对照翻译 | `enso.translate` | 0.1.2 | 官方 | 把思考过程和回复正文译成目标语言，原文下面紧跟译文。代码、链接、路径和公式保持原样。 |
+| Walkthrough | `enso.walkthrough` | 0.1.0 | 官方 | 把 Git diff、提交范围或当前会话的改动收成一步步的讲解：每步有标题、说明和对应代码，可以改文字，一次看一步。 |
 | [深海女仆工坊](https://github.com/Small-tailqwq/dsh-deep-whale) | `enso.whalemaid` | 0.1.1 | 官方 | 鲸鱼娘女仆主题：深海蓝配金色描边，水晶宫殿作背景，两位女仆站在对话两侧，输入框系着蝴蝶结。美术 CC BY-NC-SA 4.0，禁止商用。 |
 | [Astronaut 宇航员](https://github.com/mediocrebaby/Astronauts) | `space.astronaut` | 1.4.0 | 社区 · [`mediocrebaby/Astronauts`](https://github.com/mediocrebaby/Astronauts) | Lunar 月白：黑白宇航员与中性灰阶主题。 |
 | [YCE Prompt Enhance](https://github.com/xiamuwnagwang/enso-yce) | `yce.enhance` | 0.1.1 | 社区 · [`xiamuwnagwang/enso-yce`](https://github.com/xiamuwnagwang/enso-yce) | YCE 提示词增强：复用宿主已配置的 yce-mcp，在输入框一键将模糊草稿改写为清晰、结构化的提示词。 |
