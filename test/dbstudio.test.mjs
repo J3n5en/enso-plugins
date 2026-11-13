@@ -10,7 +10,7 @@ import { packValue, truncateUtf8 } from '../packages/enso.dbstudio/lib/format.mj
 import { selectStar } from '../packages/enso.dbstudio/lib/ident.mjs';
 import { PREVIEW_CHARS } from '../packages/enso.dbstudio/lib/limits.mjs';
 import { applyLimit, destructiveReason, splitStatements, statementAt, statementInfo, sqliteBlockedReason, statementsToRun } from '../packages/enso.dbstudio/lib/scan.mjs';
-import { isCancel } from '../packages/enso.dbstudio/lib/servers.mjs';
+import { createPostgres, isCancel } from '../packages/enso.dbstudio/lib/servers.mjs';
 import { resolveSettings } from '../packages/enso.dbstudio/lib/settings.mjs';
 import { publicConnection } from '../packages/enso.dbstudio/lib/store.mjs';
 import { SqliteSession } from '../packages/enso.dbstudio/lib/sqlite-session.mjs';
@@ -55,10 +55,10 @@ async function harness(options = {}) {
   return { root, project, dataDir, texts, config, enso, app, events };
 }
 
-test('清单只申请侧栏和项目读取，版本是 0.1.1，密码走 vault.json', () => {
+test('清单只申请侧栏和项目读取，版本是 0.1.2，密码走 vault.json', () => {
   assert.equal(manifest.schemaVersion, 1);
   assert.equal(manifest.id, 'enso.dbstudio');
-  assert.equal(manifest.version, '0.1.1');
+  assert.equal(manifest.version, '0.1.2');
   assert.deepEqual(manifest.permissions, ['ui.view', 'fs.read']);
   assert.deepEqual(manifest.fs.read, ['.']);
   assert.equal(manifest.fs.write, undefined);
@@ -798,4 +798,28 @@ test('目录查询走已配置连接并响应取消', async () => {
     await app.dispose();
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test('PostgreSQL 开启 fetch_types，避免 reserve 请求被驱动丢弃', () => {
+  const options = postgresOptions({ host: '127.0.0.1', port: 5432, user: 'u', database: 'd', sslmode: 'disable' }, '');
+  assert.equal(options.fetch_types, true);
+});
+
+test('PostgreSQL reserve 超时后报错并允许重试', async () => {
+  let calls = 0;
+  const conn = { release() {} };
+  const postgres = () => ({
+    reserve() {
+      calls += 1;
+      return calls === 1 ? new Promise(() => {}) : Promise.resolve(conn);
+    },
+    async end() {},
+  });
+  const session = createPostgres(postgres, { host: '127.0.0.1', port: 5432, user: 'u', database: 'd' }, '');
+  session.options.connect_timeout = 0.05;
+  await assert.rejects(session.reserve(), /建立连接超时/);
+  assert.equal(session.reserved, null);
+  assert.equal(await session.reserve(), conn);
+  assert.equal(calls, 2);
+  await session.end();
 });

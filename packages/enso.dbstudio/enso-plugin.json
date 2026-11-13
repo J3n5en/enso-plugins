@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "enso.dbstudio",
   "name": "DB Studio",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "icon": "icon.svg",
   "description": "在侧栏连接 PostgreSQL、MySQL/MariaDB 和 SQLite，浏览库表并运行 SQL。结果按页流式读取，可取消正在执行的查询。密码保存在插件数据目录的 vault.json。",
   "engines": { "enso": ">=0.3.4" },
