@@ -1,0 +1,7 @@
+{
+  "tier": "community",
+  "category": "fun",
+  "tags": ["ui", "audio"],
+  "homepage": "https://github.com/boxpiggy/box-radio",
+  "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/box.radio.svg"
+}
