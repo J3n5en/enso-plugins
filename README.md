@@ -30,7 +30,7 @@ EnsoCode 官方插件市场的源仓库 · [浏览插件](https://enso-plugins.j
 <!-- plugins:start -->
 | 插件 | id | 版本 | 来源 | 介绍 |
 | --- | --- | --- | --- | --- |
-| 爱丽丝的茶会 | `aierlanta.alicetheme` | 0.3.2 | 社区 | 爱丽丝的茶会主题：蓝白格纹配蕾丝，Alice 趴在输入框上，侧栏、待办和代码块各有茶会小摆件，随会话状态换表情。另有奶油黄配色的「爱丽丝的茶会 · 蜂蜜」，和带花园壁纸的「爱丽丝的茶会 · 花园」（深浅色和运行中、等待、出错各一张）。作者 Alice Aierlanta。 |
+| 爱丽丝的茶会 | `aierlanta.alicetheme` | 0.3.3 | 社区 | 爱丽丝的茶会主题：蓝白格纹配蕾丝，Alice 趴在输入框上，侧栏、待办和代码块各有茶会小摆件，随会话状态换表情。另有奶油黄配色的「爱丽丝的茶会 · 蜂蜜」，和带花园壁纸的「爱丽丝的茶会 · 花园」（深浅色和运行中、等待、出错各一张）。作者 Alice Aierlanta。 |
 | [Box Radio](https://github.com/boxpiggy/box-radio) | `box.radio` | 0.3.2 | 社区 | 在侧栏里浏览、搜索、收藏并收听互联网电台（Radio Browser，HTTP MP3/AAC）。 |
 | [BCE Prompt Enhance](https://github.com/linqiu919/dsh-bce) | `dsh.bce` | 0.1.5 | 社区 · [`linqiu919/dsh-bce`](https://github.com/linqiu919/dsh-bce) | Better Context Engine 提示词增强：增量索引项目，精准补全代码上下文，让提问更清楚、回答更准确。 |
 | [Agent Inbox](https://github.com/J3n5en/enso-plugins/tree/main/packages/enso.agentinbox) | `enso.agentinbox` | 0.1.1 | 官方 | 跨项目收件箱：把各会话里等你审批的工具调用、等你回答的提问，以及失败的主会话收成按项目分组的列表，带未读数，点击切回当前项目的会话。 |
