@@ -39,7 +39,7 @@ EnsoCode 官方插件市场的源仓库 · [浏览插件](https://enso-plugins.j
 | Bugbot Review | `enso.bugbot` | 0.1.0 | 官方 | 移植自 Cursor review-bugbot 与 Agent Review：本地 Git diff 组装（自动识别默认基准分支、剔除 linguist-generated 文件、合并 .cursor/BUGBOT.md 规则与最小改动行数门禁）、只读 bugbot 审查子代理、/review-bugbot 技能以及侧栏 Findings 面板与一键 Fix in Chat。 |
 | Chat Board | `enso.chatboard` | 0.1.0 | 官方 | 跨项目会话看板：每张卡片就是一个会话（状态含 coworker），可分列、标未读、写备注，点卡片切换到该会话。 |
 | Context Window | `enso.context` | 0.1.3 | 官方 | 侧栏里看当前会话的上下文窗口：各部分占多少、还剩多少、提示词缓存命中率。 |
-| DB Studio | `enso.dbstudio` | 0.1.1 | 官方 | 在侧栏连接 PostgreSQL、MySQL/MariaDB 和 SQLite，浏览库表并运行 SQL。结果按页流式读取，可取消正在执行的查询。密码保存在插件数据目录的 vault.json。 |
+| DB Studio | `enso.dbstudio` | 0.1.2 | 官方 | 在侧栏连接 PostgreSQL、MySQL/MariaDB 和 SQLite，浏览库表并运行 SQL。结果按页流式读取，可取消正在执行的查询。密码保存在插件数据目录的 vault.json。 |
 | Notes | `enso.example.notes` | 1.0.3 | 官方 | 侧栏里的便签：存在插件自己的数据目录，可一键插入输入框。 |
 | Sage Focus · 鼠尾草·专注（仅深色模式） | `enso.example.sagefocus` | 1.0.3 | 社区 | 仅在深色模式下生效，浅色模式沿用 Enso 默认配色。低饱和暖灰绿主题，不修改编辑器语法高亮或终端配色。 |
 | Word Stats | `enso.example.wordstats` | 1.0.3 | 官方 | 统计项目里文本文件的字数、行数与高频词，结果以卡片展示；提供条形图代码块。 |
