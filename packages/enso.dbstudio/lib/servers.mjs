@@ -42,7 +42,24 @@ class PostgresSession {
   }
 
   async reserve() {
-    if (!this.reserved) this.reserved = await this.sql.reserve();
+    if (this.reserved) return this.reserved;
+    const seconds = Number(this.options?.connect_timeout) || 15;
+    const pending = this.sql.reserve();
+    let timer;
+    const expired = new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        pending.then((conn) => conn?.release?.(), () => {});
+        reject(new Error(`建立连接超时（${seconds}s），可能是驱动或网络问题`));
+      }, seconds * 1000);
+    });
+    try {
+      this.reserved = await Promise.race([pending, expired]);
+    } catch (error) {
+      this.reserved = null;
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
     return this.reserved;
   }
 
