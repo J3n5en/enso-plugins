@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "box.radio",
+  "name": "Box Radio",
+  "version": "0.3.2",
+  "description": "在侧栏里浏览、搜索、收藏并收听互联网电台（Radio Browser，HTTP MP3/AAC）。",
+  "main": "main.mjs",
+  "icon": "icon.svg",
+  "permissions": ["ui.view"],
+  "contributes": {
+    "views": [{ "id": "radio", "title": "Box Radio", "entry": "index.html" }],
+    "methods": [
+      { "name": "discover", "timeoutMs": 30000 },
+      { "name": "search", "timeoutMs": 30000 },
+      { "name": "byRegion", "timeoutMs": 60000 },
+      { "name": "open", "timeoutMs": 30000 },
+      { "name": "chunk", "timeoutMs": 15000 },
+      { "name": "stop", "timeoutMs": 5000 },
+      { "name": "cover", "timeoutMs": 20000 }
+    ]
+  }
+}

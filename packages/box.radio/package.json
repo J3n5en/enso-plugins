@@ -1,0 +1,23 @@
+{
+  "name": "box-radio",
+  "version": "0.3.2",
+  "description": "EnsoCode 侧栏插件：浏览、搜索、收藏并收听互联网电台。",
+  "main": "main.mjs",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/boxpiggy/box-radio.git"
+  },
+  "keywords": [],
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/boxpiggy/box-radio/issues"
+  },
+  "homepage": "https://github.com/boxpiggy/box-radio#readme",
+  "dependencies": {}
+}

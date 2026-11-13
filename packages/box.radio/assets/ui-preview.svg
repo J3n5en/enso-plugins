@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="520" viewBox="0 0 360 520" role="img" aria-label="Box Radio 侧栏预览">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fafafa"/>
+      <stop offset="1" stop-color="#f4f4f5"/>
+    </linearGradient>
+  </defs>
+  <rect width="360" height="520" rx="16" fill="url(#bg)" stroke="#e4e4e7"/>
+  <text x="24" y="42" font-family="-apple-system,Segoe UI,sans-serif" font-size="16" font-weight="600" fill="#18181b">Box Radio</text>
+  <rect x="20" y="56" width="320" height="32" rx="8" fill="#fff" stroke="#e4e4e7"/>
+  <text x="32" y="77" font-family="-apple-system,Segoe UI,sans-serif" font-size="12" fill="#a1a1aa">搜索电台</text>
+  <rect x="20" y="100" width="52" height="26" rx="8" fill="#f4f4f5" stroke="#e4e4e7"/>
+  <text x="30" y="118" font-family="-apple-system,Segoe UI,sans-serif" font-size="12" fill="#18181b">热门</text>
+  <text x="86" y="118" font-family="-apple-system,Segoe UI,sans-serif" font-size="12" fill="#71717a">分类</text>
+  <text x="136" y="118" font-family="-apple-system,Segoe UI,sans-serif" font-size="12" fill="#71717a">收藏</text>
+  <g font-family="-apple-system,Segoe UI,sans-serif">
+    <rect x="20" y="142" width="320" height="56" fill="none"/>
+    <circle cx="44" cy="170" r="16" fill="#e4e4e7"/>
+    <text x="44" y="174" text-anchor="middle" font-size="11" fill="#71717a">中</text>
+    <text x="70" y="166" font-size="13" font-weight="600" fill="#18181b">中国之声</text>
+    <text x="70" y="184" font-size="11" fill="#71717a">CN · 64 kbps</text>
+    <rect x="20" y="198" width="320" height="1" fill="#e4e4e7"/>
+    <circle cx="44" cy="226" r="16" fill="#18181b"/>
+    <text x="44" y="230" text-anchor="middle" font-size="11" fill="#fafafa">广</text>
+    <text x="70" y="222" font-size="13" font-weight="600" fill="#18181b">广东城市之声</text>
+    <text x="70" y="240" font-size="11" fill="#71717a">正在收听</text>
+    <rect x="20" y="254" width="320" height="1" fill="#e4e4e7"/>
+    <circle cx="44" cy="282" r="16" fill="#e4e4e7"/>
+    <text x="44" y="286" text-anchor="middle" font-size="11" fill="#71717a">北</text>
+    <text x="70" y="278" font-size="13" fill="#18181b">北京音乐广播</text>
+    <text x="70" y="296" font-size="11" fill="#71717a">CN · 128 kbps</text>
+    <rect x="20" y="310" width="320" height="1" fill="#e4e4e7"/>
+    <circle cx="44" cy="338" r="16" fill="#e4e4e7"/>
+    <text x="44" y="342" text-anchor="middle" font-size="11" fill="#71717a">上</text>
+    <text x="70" y="334" font-size="13" fill="#18181b">上海经典金曲广播</text>
+    <text x="70" y="352" font-size="11" fill="#71717a">CN · 64 kbps</text>
+  </g>
+  <rect x="0" y="456" width="360" height="64" fill="#fff" stroke="#e4e4e7"/>
+  <rect x="16" y="472" width="32" height="32" rx="6" fill="#18181b"/>
+  <text x="32" y="493" text-anchor="middle" font-family="-apple-system,Segoe UI,sans-serif" font-size="11" fill="#fafafa">广</text>
+  <text x="58" y="486" font-family="-apple-system,Segoe UI,sans-serif" font-size="12" fill="#18181b">广东城市之声</text>
+  <text x="58" y="502" font-family="-apple-system,Segoe UI,sans-serif" font-size="10" fill="#71717a">直播中</text>
+  <rect x="236" y="480" width="28" height="28" rx="6" fill="#18181b"/>
+  <rect x="244" y="486" width="4" height="16" rx="1" fill="#fff"/>
+  <rect x="252" y="486" width="4" height="16" rx="1" fill="#fff"/>
+  <rect x="276" y="490" width="64" height="8" rx="4" fill="#e4e4e7"/>
+  <rect x="276" y="490" width="42" height="8" rx="4" fill="#18181b"/>
+</svg>
