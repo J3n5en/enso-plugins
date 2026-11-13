@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-12T11:22:58.235Z",
-  "sequence": 101,
+  "generatedAt": "2026-11-13T01:23:04.977Z",
+  "sequence": 102,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -53,6 +53,37 @@
           "sha256": "12dd3d6f53fffcd7caa0ee010e8e4808f1a97d76ba546d077fb835abbfdb9cf2",
           "size": 6581409,
           "publishedAt": "2026-11-10T02:03:19.275Z"
+        }
+      ]
+    },
+    {
+      "id": "box.radio",
+      "name": "Box Radio",
+      "description": "在侧栏里浏览、搜索、收藏并收听互联网电台（Radio Browser，HTTP MP3/AAC）。",
+      "tier": "community",
+      "tags": [
+        "ui",
+        "audio"
+      ],
+      "homepage": "https://github.com/boxpiggy/box-radio",
+      "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/box.radio.svg",
+      "category": "fun",
+      "readme": {
+        "path": "packages/box.radio/0.3.2.readme.md",
+        "sha256": "a3f1158c7a40cf34d855a3101977ae181249c8fcde345008cf08f65c57c3f47a",
+        "size": 2169
+      },
+      "latest": "0.3.2",
+      "versions": [
+        {
+          "version": "0.3.2",
+          "permissions": [
+            "ui.view"
+          ],
+          "path": "packages/box.radio/0.3.2.zip",
+          "sha256": "db78b2d07fbbc061c53aaaf27d8f06532856cd56906a2a6999186d22362fa3fc",
+          "size": 1455011,
+          "publishedAt": "2026-11-13T01:23:04.977Z"
         }
       ]
     },
