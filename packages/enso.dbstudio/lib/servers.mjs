@@ -23,6 +23,15 @@ function listen(signal, stop) {
   return () => signal.removeEventListener('abort', stop);
 }
 
+// postgres.js 的 cancel() 返回 null/undefined 而非 Promise，不能直接链 .catch。
+function cancelQuery(query) {
+  try {
+    Promise.resolve(typeof query?.cancel === 'function' ? query.cancel() : undefined).catch(() => {});
+  } catch {
+    // 查询已经结束
+  }
+}
+
 export function createPostgres(postgres, conn, password) {
   const options = postgresOptions(conn, password);
   const sql = postgres(options);
@@ -42,17 +51,31 @@ class PostgresSession {
   }
 
   async reserve() {
-    if (!this.reserved) this.reserved = await this.sql.reserve();
+    if (this.reserved) return this.reserved;
+    const seconds = Number(this.options?.connect_timeout) || 15;
+    const pending = this.sql.reserve();
+    let timer;
+    const expired = new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        pending.then((conn) => conn?.release?.(), () => {});
+        reject(new Error(`建立连接超时（${seconds}s），可能是驱动或网络问题`));
+      }, seconds * 1000);
+    });
+    try {
+      this.reserved = await Promise.race([pending, expired]);
+    } catch (error) {
+      this.reserved = null;
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
     return this.reserved;
   }
 
   async simple(text, params = [], signal) {
     const reserved = await this.reserve();
     const query = reserved.unsafe(text, params);
-    const stop = () => {
-      void query.cancel?.().catch(() => {});
-    };
-    const unlisten = listen(signal, stop);
+    const unlisten = listen(signal, () => cancelQuery(query));
     try {
       return await query;
     } finally {
@@ -69,10 +92,7 @@ class PostgresSession {
   async exec(text, signal) {
     const reserved = await this.reserve();
     const query = reserved.unsafe(text);
-    const stop = () => {
-      void query.cancel().catch(() => {});
-    };
-    const unlisten = listen(signal, stop);
+    const unlisten = listen(signal, () => cancelQuery(query));
     try {
       const result = await query;
       return Number(result?.count ?? 0);
@@ -84,12 +104,9 @@ class PostgresSession {
   async start(text, signal) {
     await this.finishCursor();
     const reserved = await this.reserve();
-    const query = reserved.unsafe(text).raw();
+    const query = reserved.unsafe(text).values();
     this.query = query;
-    const stop = () => {
-      void query.cancel().catch(() => {});
-    };
-    this.unlisten = listen(signal, stop);
+    this.unlisten = listen(signal, () => cancelQuery(query));
     this.signal = signal;
     this.iterator = query.cursor(CHUNK_ROWS)[Symbol.asyncIterator]();
     this.batch = [];
@@ -132,7 +149,7 @@ class PostgresSession {
   async cancel() {
     const query = this.query;
     try {
-      await query?.cancel();
+      await query?.cancel?.();
     } catch {
       // 取消请求本身失败时仍然关掉连接
     }

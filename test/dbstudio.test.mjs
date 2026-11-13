@@ -10,7 +10,7 @@ import { packValue, truncateUtf8 } from '../packages/enso.dbstudio/lib/format.mj
 import { selectStar } from '../packages/enso.dbstudio/lib/ident.mjs';
 import { PREVIEW_CHARS } from '../packages/enso.dbstudio/lib/limits.mjs';
 import { applyLimit, destructiveReason, splitStatements, statementAt, statementInfo, sqliteBlockedReason, statementsToRun } from '../packages/enso.dbstudio/lib/scan.mjs';
-import { isCancel } from '../packages/enso.dbstudio/lib/servers.mjs';
+import { createPostgres, isCancel } from '../packages/enso.dbstudio/lib/servers.mjs';
 import { resolveSettings } from '../packages/enso.dbstudio/lib/settings.mjs';
 import { publicConnection } from '../packages/enso.dbstudio/lib/store.mjs';
 import { SqliteSession } from '../packages/enso.dbstudio/lib/sqlite-session.mjs';
@@ -55,10 +55,10 @@ async function harness(options = {}) {
   return { root, project, dataDir, texts, config, enso, app, events };
 }
 
-test('清单只申请侧栏和项目读取，版本是 0.1.1，密码走 vault.json', () => {
+test('清单只申请侧栏和项目读取，版本是 0.1.2，密码走 vault.json', () => {
   assert.equal(manifest.schemaVersion, 1);
   assert.equal(manifest.id, 'enso.dbstudio');
-  assert.equal(manifest.version, '0.1.1');
+  assert.equal(manifest.version, '0.1.2');
   assert.deepEqual(manifest.permissions, ['ui.view', 'fs.read']);
   assert.deepEqual(manifest.fs.read, ['.']);
   assert.equal(manifest.fs.write, undefined);
@@ -392,6 +392,9 @@ test('假的 Postgres 驱动只连到保存的主机，取消会调用 CancelReq
         const query = {
           text,
           raw() {
+            return query;
+          },
+          values() {
             return query;
           },
           cursor() {
@@ -797,5 +800,114 @@ test('目录查询走已配置连接并响应取消', async () => {
   } finally {
     await app.dispose();
     await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('PostgreSQL 开启 fetch_types，避免 reserve 请求被驱动丢弃', () => {
+  const options = postgresOptions({ host: '127.0.0.1', port: 5432, user: 'u', database: 'd', sslmode: 'disable' }, '');
+  assert.equal(options.fetch_types, true);
+});
+
+test('PostgreSQL reserve 超时后报错并允许重试', async () => {
+  let calls = 0;
+  const conn = { release() {} };
+  const postgres = () => ({
+    reserve() {
+      calls += 1;
+      return calls === 1 ? new Promise(() => {}) : Promise.resolve(conn);
+    },
+    async end() {},
+  });
+  const session = createPostgres(postgres, { host: '127.0.0.1', port: 5432, user: 'u', database: 'd' }, '');
+  session.options.connect_timeout = 0.05;
+  await assert.rejects(session.reserve(), /建立连接超时/);
+  assert.equal(session.reserved, null);
+  assert.equal(await session.reserve(), conn);
+  assert.equal(calls, 2);
+  await session.end();
+});
+
+// 按 postgres.js 的语义模拟：raw() 每格是原始 Buffer，values() 按列类型解码。
+function valuesDriver(options) {
+  const columns = [
+    { name: 'year', type: 23, parse: Number },
+    { name: 'title', type: 25, parse: String },
+    { name: 'rate', type: 1700, parse: String },
+    { name: 'at', type: 1114, parse: options.types.timestamp.parse },
+  ];
+  const wire = ['2023', '农产品生产者价格指数', '102.3', '2024-01-15 08:00:00'];
+  const api = {
+    async reserve() {
+      return api;
+    },
+    unsafe() {
+      let mode = 'object';
+      const query = {
+        raw() {
+          mode = 'raw';
+          return query;
+        },
+        values() {
+          mode = 'values';
+          return query;
+        },
+        cursor() {
+          let sent = false;
+          return {
+            [Symbol.asyncIterator]: () => ({
+              async next() {
+                if (sent) return { done: true };
+                sent = true;
+                const row = wire.map((text, i) => (mode === 'raw' ? Buffer.from(text) : columns[i].parse(text)));
+                const batch = [row];
+                batch.columns = columns;
+                return { value: batch, done: false };
+              },
+              async return() {
+                return { done: true };
+              },
+            }),
+          };
+        },
+      };
+      return query;
+    },
+    async end() {},
+  };
+  return api;
+}
+
+test('PostgreSQL 结果单元格按类型解码，不会全变成 blob', async () => {
+  const session = createPostgres(valuesDriver, { host: '127.0.0.1', port: 5432, user: 'u', database: 'd' }, '');
+  await session.start('SELECT 1');
+  const { columns, rows } = await session.pull(10);
+  assert.deepEqual(columns.map((column) => column.name), ['year', 'title', 'rate', 'at']);
+  const cells = rows[0].map((value) => packValue(value));
+  assert.equal(cells.some((cell) => cell.t === 'blob'), false);
+  assert.deepEqual(cells, [
+    { t: 'int', v: '2023' },
+    { t: 'text', v: '农产品生产者价格指数' },
+    { t: 'dec', v: '102.3' },
+    { t: 'text', v: '2024-01-15 08:00:00' },
+  ]);
+  await session.end();
+});
+
+test('PostgreSQL 取消时 query.cancel 缺失或返回 null 都不抛错', async () => {
+  for (const cancel of [undefined, () => null, () => undefined, () => Promise.reject(new Error('x')), () => { throw new Error('y'); }]) {
+    const query = {
+      cancel,
+      values: () => query,
+      raw: () => query,
+      cursor: () => ({ [Symbol.asyncIterator]: () => ({ next: async () => ({ done: true }), return: async () => ({ done: true }) }) }),
+      then: (resolve) => resolve({ count: 0 }),
+    };
+    const api = { reserve: async () => api, unsafe: () => query, end: async () => {} };
+    const session = createPostgres(() => api, { host: '127.0.0.1', port: 5432, user: 'u', database: 'd' }, '');
+    const signal = AbortSignal.abort();
+    await session.start('SELECT 1', signal);
+    assert.equal(await session.exec('SELECT 1', signal), 0);
+    await session.simple('SELECT 1', [], signal);
+    await session.cancel();
   }
 });

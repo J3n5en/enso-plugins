@@ -84,7 +84,7 @@ export function postgresOptions(conn, password) {
     max: 2,
     idle_timeout: null,
     connect_timeout: 15,
-    fetch_types: false,
+    fetch_types: true,
     prepare: false,
     connection: { application_name: 'enso.dbstudio' },
     types: {
