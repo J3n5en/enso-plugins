@@ -231,7 +231,7 @@ const MAX_DEBOUNCE_SEC = 3600;
 const MAX_INTERVAL_SEC = 86_400;
 /** 「正在输入」大约 5 秒过期，所以每 4 秒刷新；单聊最多 5 分钟，防止定时器泄漏 */
 const TYPING_EVERY = 4_000;
-const TYPING_MAX = 5 * 60_000;
+const TYPING_MAX = 90_000;
 
 const clampSec = (v, lo, hi, fallback) => {
   const n = Number(v);
@@ -2007,7 +2007,7 @@ function createApp(enso, opts = {}) {
   const inboxWaiters = new Set();
   const watches = new Map();
   let iseq = 0;
-  // chatId -> 正在输入。每条聊天独立刷新；停掉的时机：该聊天发出消息、对应监听被替换或取消、满 5 分钟
+  // chatId -> 正在输入。每条聊天独立刷新；停掉的时机：该聊天发出消息、对应监听被替换或取消、会话回合结束、满 90 秒
   const typing = new Map();
   function stopTyping(id) {
     const key = String(id ?? '');
@@ -2019,6 +2019,17 @@ function createApp(enso, opts = {}) {
   function stopTypingSession(sid) {
     for (const [id, run] of [...typing]) if (run.sessionId === sid) stopTyping(id);
   }
+  // 旧宿主没有 onTurnEnd 或未授权时静默退化为 TYPING_MAX 上限
+  let offTurnEnd = null;
+  try {
+    const off = enso.session?.onTurnEnd?.((e) => stopTypingSession(e?.sessionId));
+    if (typeof off === 'function') offTurnEnd = off;
+    else off?.then?.((fn) => {
+      if (typeof fn !== 'function') return;
+      if (stopped) fn();
+      else offTurnEnd = fn;
+    }, () => {});
+  } catch {}
   async function pulseTyping(id) {
     const run = typing.get(id);
     if (!run) return;
@@ -2376,6 +2387,8 @@ function createApp(enso, opts = {}) {
       for (const w of watches.values()) clearTimer(w.timer);
       for (const id of [...typing.keys()]) stopTyping(id);
       stopped = true;
+      try { offTurnEnd?.(); } catch {}
+      offTurnEnd = null;
       clearTimeout(retryTimer);
       for (const w of waiters) w();
       await dropClient();

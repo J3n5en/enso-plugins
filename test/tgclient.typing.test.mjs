@@ -58,7 +58,7 @@ function incomingMessage(id, chatId, text) {
   return m;
 }
 
-async function setup({ typingError = false } = {}) {
+async function setup({ typingError = false, onTurnEnd } = {}) {
   const dataDir = await mkdtemp(join(tmpdir(), 'tgtype-'));
   const clk = clock();
   const calls = [];
@@ -103,7 +103,7 @@ async function setup({ typingError = false } = {}) {
     ui: { notify: async () => {}, openExternal: async () => {} },
     renderer: { handle: () => {} },
     tools: { register: (name, fn) => tools.set(name, fn) },
-    session: { inject: async (input) => injected.push(input) },
+    session: { inject: async (input) => injected.push(input), ...(onTurnEnd ? { onTurnEnd } : {}) },
   };
   await activate(enso, { client, now: clk.now, setTimer: clk.setTimer, clearTimer: clk.clearTimer });
   const typing = () => calls.filter((c) => c.className === 'messages.SetTyping');
@@ -204,18 +204,61 @@ describe('tg_watch 处理期间显示正在输入', { concurrency: false }, () =
     }
   });
 
-  test('同一聊天的正在输入最多持续 5 分钟', async () => {
+  test('同一聊天的正在输入最多持续 90 秒', async () => {
     const t = await setup();
     try {
       await t.watch({ chat: '42' });
       await t.deliver(42);
       const first = t.typing().length;
       assert.equal(first, 1);
-      await t.advance(5 * 60_000);
+      await t.advance(80_000);
+      assert.ok(t.typing().length > first);
+      await t.advance(10_000);
       const stopped = t.typing().length;
       assert.ok(stopped > first);
       await t.advance(20_000);
       assert.equal(t.typing().length, stopped);
+    } finally {
+      await deactivate();
+      await rm(t.dataDir, { recursive: true, force: true });
+    }
+  });
+
+  test('回合结束时立即停止该会话的正在输入，退出时取消订阅', async () => {
+    const listeners = [];
+    let unsubscribed = 0;
+    const onTurnEnd = (fn) => {
+      listeners.push(fn);
+      return () => { unsubscribed++; };
+    };
+    const t = await setup({ onTurnEnd });
+    try {
+      assert.equal(listeners.length, 1);
+      await t.watch({ chat: '42' }, 's1');
+      await t.watch({ chat: '43' }, 's2');
+      await t.deliver(42, 5);
+      await t.deliver(43, 6);
+      const before = t.typing().length;
+      listeners[0]({ sessionId: 's1' });
+      await t.advance(4000);
+      assert.deepEqual(t.typing().slice(before).map((c) => peerId(c.peer)), ['43']);
+      listeners[0]({ sessionId: 's2' });
+      const after = t.typing().length;
+      await t.advance(20_000);
+      assert.equal(t.typing().length, after);
+    } finally {
+      await deactivate();
+      await rm(t.dataDir, { recursive: true, force: true });
+    }
+    assert.equal(unsubscribed, 1);
+  });
+
+  test('宿主的 onTurnEnd 不可用时静默退化', async () => {
+    const t = await setup({ onTurnEnd: () => { throw new Error('PERMISSION_DENIED'); } });
+    try {
+      await t.watch({ chat: '42' });
+      await t.deliver(42);
+      assert.equal(t.typing().length, 1);
     } finally {
       await deactivate();
       await rm(t.dataDir, { recursive: true, force: true });
