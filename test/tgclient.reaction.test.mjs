@@ -46,16 +46,16 @@ function clock() {
 
 const person = (id, name) => new Api.User({ id: BigInt(id), accessHash: 1n, firstName: name });
 
-function incomingMessage(id, chatId, text) {
+function incomingMessage(id, chatId, text, out = false) {
   const uid = BigInt(chatId);
   const who = person(chatId, `U${chatId}`);
   const m = new Api.Message({
     id,
     peerId: new Api.PeerUser({ userId: uid }),
-    fromId: new Api.PeerUser({ userId: uid }),
+    fromId: new Api.PeerUser({ userId: out ? 1n : uid }),
     date: 1_700_000_000,
     message: text,
-    out: false,
+    out,
   });
   m._sender = who;
   m._chat = who;
@@ -71,6 +71,7 @@ async function setup({ reactError, status = 'idle' } = {}) {
   const handlers = [];
   const listeners = [];
   const tools = new Map();
+  let sendGate = null;
   const client = {
     session: { save: () => 'sess' },
     async connect() {},
@@ -84,6 +85,11 @@ async function setup({ reactError, status = 'idle' } = {}) {
       return person(n, `U${n}`);
     },
     async getInputEntity() { return null; },
+    async sendMessage(peer, { message }) {
+      await sendGate?.promise;
+      const m = incomingMessage(900, Number(peerId(peer)), message, true);
+      return m;
+    },
     async invoke(req) {
       if (req.className === 'messages.SendReaction') {
         const emoji = req.reaction.at(-1).emoticon;
@@ -111,7 +117,12 @@ async function setup({ reactError, status = 'idle' } = {}) {
   };
   await activate(enso, { client, now: clk.now, setTimer: clk.setTimer, clearTimer: clk.clearTimer });
   const watch = (args, sessionId = 's1') => tools.get('tg_watch')({ debounceSec: 1, ...args }, { sessionId });
-  const push = async (chatId, id) => handlers[0]({ message: incomingMessage(id, chatId, 'hi') });
+  const push = async (chatId, id, out = false) => handlers[0]({ message: incomingMessage(id, chatId, 'hi', out) });
+  const holdSend = () => {
+    let release;
+    sendGate = { promise: new Promise((r) => { release = r; }) };
+    return () => { release(); sendGate = null; };
+  };
   const deliver = async (chatId, id = 5) => {
     await push(chatId, id);
     await clk.advance(1000);
@@ -120,7 +131,7 @@ async function setup({ reactError, status = 'idle' } = {}) {
     listeners[0]({ sessionId });
     await tick();
   };
-  return { ...clk, order, reacts, injected, tools, dataDir, watch, push, deliver, turnEnd };
+  return { ...clk, order, reacts, injected, tools, dataDir, watch, push, deliver, turnEnd, holdSend };
 }
 
 async function run(opts, fn) {
@@ -225,5 +236,37 @@ describe('tg_watch 处理状态表情', { concurrency: false }, () => {
       await t.turnEnd('s2');
       await t.advance(0);
       assert.deepEqual(t.reacts.map((x) => [x.chat, x.emoji]), [['42', '⚡'], ['43', '⚡'], ['43', '✅']]);
+    }));
+
+  test('用户自己（手机）发的消息同样点 ⚡', () =>
+    run({}, async (t) => {
+      await t.watch({ chat: '42' });
+      await t.push(42, 5, true);
+      await t.advance(1000);
+      assert.equal(t.injected.length, 1);
+      assert.deepEqual(t.reacts.map((x) => [x.chat, x.msgId, x.emoji]), [['42', 5, '⚡']]);
+    }));
+
+  test('插件自己发出去的回声不点表情', () =>
+    run({}, async (t) => {
+      await t.watch({ chat: '42' });
+      await t.tools.get('tg_send_message')({ chat: '42', text: 'reply' }, { sessionId: 's1' });
+      await t.push(42, 900, true);
+      await t.advance(1000);
+      assert.equal(t.injected.length, 0);
+      assert.equal(t.reacts.length, 0);
+    }));
+
+  test('投递时本插件正在向该聊天发送，排队的 out 消息不点表情', () =>
+    run({}, async (t) => {
+      await t.watch({ chat: '42' });
+      await t.push(42, 5, true);
+      const release = t.holdSend();
+      const sent = t.tools.get('tg_send_message')({ chat: '42', text: 'reply' }, { sessionId: 's1' });
+      await t.advance(1000);
+      assert.equal(t.injected.length, 1);
+      assert.equal(t.reacts.length, 0);
+      release();
+      await sent;
     }));
 });

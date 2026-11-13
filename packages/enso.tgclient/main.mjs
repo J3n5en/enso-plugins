@@ -2136,7 +2136,7 @@ function createApp(enso, opts = {}) {
     const last = new Map();
     for (const m of batch) {
       const id = idOf(m.chatId);
-      if (id && m.id != null && !m.out) last.set(id, m);
+      if (id && m.id != null && !sentByPlugin(m)) last.set(id, m);
     }
     for (const [id, m] of last) {
       const cur = working.get(id);
