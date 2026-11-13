@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-13T08:27:07.392Z",
-  "sequence": 106,
+  "generatedAt": "2026-11-13T08:54:37.122Z",
+  "sequence": 107,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -486,11 +486,11 @@
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.dbstudio.svg",
       "category": "productivity",
       "readme": {
-        "path": "packages/enso.dbstudio/0.1.1.readme.md",
+        "path": "packages/enso.dbstudio/0.1.2.readme.md",
         "sha256": "45993243ae298d815e101424688c0eaa851440c087c65335cab0c77daf7e3cc8",
         "size": 10828
       },
-      "latest": "0.1.1",
+      "latest": "0.1.2",
       "versions": [
         {
           "version": "0.1.1",
@@ -505,6 +505,20 @@
           "sha256": "275c92badd46e8a48cd2c14463000a19221fda7814bf833c9e8691768d62af46",
           "size": 2294087,
           "publishedAt": "2026-11-12T08:06:08.187Z"
+        },
+        {
+          "version": "0.1.2",
+          "engines": {
+            "enso": ">=0.3.4"
+          },
+          "permissions": [
+            "ui.view",
+            "fs.read"
+          ],
+          "path": "packages/enso.dbstudio/0.1.2.zip",
+          "sha256": "00a994ad3ce59e5db5941b33c9146c8131c77f619446f4676b3e582324e1d333",
+          "size": 2294768,
+          "publishedAt": "2026-11-13T08:54:37.122Z"
         }
       ]
     },
