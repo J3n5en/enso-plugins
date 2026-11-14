@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-13T08:54:37.122Z",
-  "sequence": 107,
+  "generatedAt": "2026-11-14T05:17:22.048Z",
+  "sequence": 108,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -250,6 +250,45 @@
           "sha256": "70421c701b81b4f93352dfeece7c31237d2bd46663eb578ebc2dd274e909572c",
           "size": 98030,
           "publishedAt": "2026-11-12T05:55:24.620Z"
+        }
+      ]
+    },
+    {
+      "id": "enso.better",
+      "name": "Better Prompt",
+      "description": "移植自 pi-better：输入框一键用 Felix Rieseberg 的「Depth」提示改写草稿。只读代理先读你的代码、文件和对话，回答四个问题（高手会多做什么、最原始的材料、具体方法和工具、什么能证明结果正确），再写出更深入的提示词。侧栏实时显示它读了什么、进行到哪一步，结果替换输入框文字，由你确认后发送。",
+      "tier": "official",
+      "tags": [
+        "composer",
+        "prompt",
+        "subagent"
+      ],
+      "homepage": "https://github.com/nicobailon/pi-better",
+      "icon": "registry/icons/enso.better.svg",
+      "category": "writing",
+      "readme": {
+        "path": "packages/enso.better/0.1.0.readme.md",
+        "sha256": "8606f03c3193b3eec69466533bcdd6a0cc24b0caee9bc991bd5b08255e765c48",
+        "size": 2001
+      },
+      "latest": "0.1.0",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "engines": {
+            "enso": ">=0.3.8"
+          },
+          "permissions": [
+            "ui.slot",
+            "ui.view",
+            "ui.clipboard",
+            "composer.draft",
+            "agent.run"
+          ],
+          "path": "packages/enso.better/0.1.0.zip",
+          "sha256": "9c1d28bda1e154909e09e121f2b9085db72dc3e18a0ea19d548e6c5abe633528",
+          "size": 64356,
+          "publishedAt": "2026-11-14T05:17:22.048Z"
         }
       ]
     },
