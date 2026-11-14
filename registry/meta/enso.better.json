@@ -1,0 +1,7 @@
+{
+  "tier": "official",
+  "category": "writing",
+  "tags": ["composer", "prompt", "subagent"],
+  "homepage": "https://github.com/nicobailon/pi-better",
+  "icon": "registry/icons/enso.better.svg"
+}

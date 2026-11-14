@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>Better Prompt</title>
+  <link rel="stylesheet" href="enso-ui.css" />
+  <style>
+    body { padding: 12px; display: flex; flex-direction: column; gap: 10px; min-height: 100vh; font-size: 12.5px; }
+    .head { display: flex; align-items: center; gap: 8px; }
+    .head h1 { margin: 0; font-size: 13px; font-weight: 600; flex: 1; }
+    .meter { display: flex; gap: 3px; }
+    .cell { flex: 1; height: 5px; border-radius: 3px; background: var(--muted, rgba(127,127,127,.18)); }
+    .cell[data-on='true'] { background: #14b8a6; }
+    .cell[data-now='true'] { background: #14b8a6; animation: pulse 1.2s ease-in-out infinite; }
+    @keyframes pulse { 50% { opacity: .35; } }
+    @media (prefers-reduced-motion: reduce) { .cell[data-now='true'] { animation: none; } }
+    .step { display: flex; justify-content: space-between; gap: 8px; color: var(--muted-foreground); font-size: 11.5px; }
+    .step b { color: var(--foreground); font-weight: 500; }
+    .section { display: flex; flex-direction: column; gap: 6px; }
+    .section > .label { font-size: 11px; color: var(--muted-foreground); text-transform: none; }
+    .card { padding: 8px 10px; white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
+    .tools { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; max-height: 360px; overflow: auto; }
+    .tools li { display: flex; flex-direction: column; font-size: 11.5px; min-width: 0; }
+    .tools li[data-nested='true'] { margin-left: 16px; }
+    .row { display: flex; gap: 6px; align-items: baseline; min-width: 0; cursor: pointer; border-radius: 4px; padding: 1px 2px; }
+    .row:hover { background: var(--accent, rgba(127,127,127,.12)); }
+    .row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+    .row .chev { flex: none; color: var(--muted-foreground); width: 10px; }
+    .io { margin: 2px 0 6px 18px; display: flex; flex-direction: column; gap: 4px; }
+    .io .label { font-size: 10.5px; color: var(--muted-foreground); }
+    .io pre { margin: 0; padding: 6px 8px; max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-all; font-size: 11px; }
+    .mark { width: 12px; flex: none; text-align: center; }
+    .mark[data-s='ok'] { color: var(--success, #30a46c); }
+    .mark[data-s='error'] { color: var(--destructive, #e5484d); }
+    .mark[data-s='running'] { color: #14b8a6; }
+    .answers { max-height: 260px; overflow: auto; font-size: 11.5px; }
+    .prompt { max-height: 420px; overflow: auto; }
+    .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .error { color: var(--destructive, #e5484d); }
+    .history { display: flex; flex-direction: column; gap: 4px; }
+    .history button { text-align: left; justify-content: flex-start; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    details > summary { cursor: pointer; font-size: 11px; color: var(--muted-foreground); }
+  </style>
+</head>
+<body>
+  <div class="head">
+    <h1>Better Prompt</h1>
+    <span id="badge"></span>
+    <button id="cancel" class="ui-btn ui-btn--outline ui-btn--sm" hidden>取消</button>
+  </div>
+  <div id="main"></div>
+  <div id="history" class="section" hidden></div>
+  <script src="enso-ui.js"></script>
+  <script>
+    const STEPS = ['阅读代码和文件', '想清楚高手会多做什么', '找到最原始的材料', '选定方法和工具', '确定什么能证明结果正确', '写出改进后的提示词']
+    const STATUS = { running: ['运行中', 'brand'], done: ['完成', 'success'], error: ['失败', 'destructive'], cancelled: ['已取消', 'warning'] }
+    let sessionId = null
+    let runs = []
+    let selected = null
+    let notice = ''
+    const open = new Set()
+    const details = new Map()
+    let prevList = null
+    let autoClose = 0
+    let closeTimer = null
+    let closeAt = 0
+    const cancelClose = () => {
+      if (!closeTimer) return
+      clearTimeout(closeTimer)
+      closeTimer = null
+      render()
+    }
+    // 用户在看侧栏就不自动关
+    for (const type of ['pointerdown', 'wheel', 'keydown']) window.addEventListener(type, cancelClose, { capture: true })
+
+    const el = (tag, { dataset, ...props } = {}, ...children) => {
+      const node = Object.assign(document.createElement(tag), props)
+      if (dataset) Object.assign(node.dataset, dataset)
+      for (const child of children) if (child != null) node.append(child)
+      return node
+    }
+    const elapsed = (run) => {
+      const s = Math.max(0, Math.round(((run.endedAt ?? Date.now()) - run.startedAt) / 1000))
+      return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`
+    }
+    const current = () => runs.find((run) => run.id === selected) ?? runs[0]
+
+    function render() {
+      const run = current()
+      const main = document.getElementById('main')
+      const badge = document.getElementById('badge')
+      const cancel = document.getElementById('cancel')
+      // 先记下列表滚动位置：清空后旧节点脱离文档，读不到了
+      const stick = !prevList || prevList.scrollTop + prevList.clientHeight >= prevList.scrollHeight - 4
+      const keep = prevList?.scrollTop ?? 0
+      main.replaceChildren()
+      badge.replaceChildren()
+      cancel.hidden = !run || run.status !== 'running'
+      if (!run) {
+        main.append(el('div', { className: 'ui-empty' },
+          el('div', { textContent: '还没有改写记录' }),
+          el('div', { className: 'ui-muted', textContent: '在输入框写下想法后，点输入框左下角的按钮。空输入框会改写当前进行中的任务。' })))
+        renderHistory()
+        return
+      }
+      const [label, tone] = STATUS[run.status] ?? ['', 'brand']
+      badge.append(el('span', { className: `ui-badge ui-badge--${tone}`, textContent: label }))
+
+      const meter = el('div', { className: 'meter' })
+      STEPS.forEach((_, i) => meter.append(el('div', {
+        className: 'cell',
+        dataset: { on: String(i < run.step || run.status === 'done'), now: String(run.status === 'running' && i === run.step) },
+      })))
+      const step = el('div', { className: 'step' },
+        el('b', { textContent: run.status === 'running' ? STEPS[run.step] : run.status === 'done' ? '已写出改进后的提示词' : label }),
+        el('span', { textContent: `${elapsed(run)} · ${run.toolCount} 个工具${run.failedCount ? ` · ${run.failedCount} 失败` : ''}${run.model ? ` · ${run.model}` : ''}` }))
+      main.append(el('div', { className: 'section' }, meter, step))
+
+      main.append(el('div', { className: 'section' },
+        el('div', { className: 'label', textContent: '原始草稿' }),
+        el('div', { className: 'ui-card card ui-muted', textContent: run.draft || '（空：改写当前进行中的任务）' })))
+
+      if (run.tools.length) {
+        const list = el('ul', { className: 'tools' })
+        for (const tool of run.tools) {
+          const key = `${run.id}:${tool.id}`
+          const expanded = open.has(key)
+          const row = el('div', { className: 'row', title: tool.label },
+            el('span', { className: 'chev', textContent: expanded ? '▾' : '▸' }),
+            el('span', { className: 'mark ui-mono', dataset: { s: tool.status }, textContent: tool.status === 'ok' ? '✓' : tool.status === 'error' ? '✗' : '…' }),
+            el('span', { className: 'ui-mono name', textContent: tool.label }))
+          row.onclick = () => toggle(run.id, tool, key)
+          const item = el('li', { dataset: { nested: String(Boolean(tool.parentId)) } }, row)
+          if (expanded) item.append(renderIo(key, tool))
+          list.append(item)
+        }
+        main.append(el('div', { className: 'section' }, el('div', { className: 'label', textContent: '读过的材料' }), list))
+        list.scrollTop = stick ? list.scrollHeight : keep
+        prevList = list
+      } else {
+        prevList = null
+      }
+
+      if (run.text && !run.prompt) {
+        const answers = el('div', { className: 'ui-card card answers', textContent: run.text })
+        main.append(el('div', { className: 'section' }, el('div', { className: 'label', textContent: '四个问题' }), answers))
+        answers.scrollTop = answers.scrollHeight
+      } else if (run.text) {
+        const answers = run.text.slice(0, run.text.lastIndexOf('<improved-prompt>')).trim()
+        if (answers) main.append(el('details', {}, el('summary', { textContent: '四个问题的回答' }), el('div', { className: 'ui-card card answers', textContent: answers })))
+      }
+
+      if (run.prompt) {
+        const insert = el('button', { className: 'ui-btn ui-btn--primary ui-btn--sm', textContent: '插入输入框' })
+        const copy = el('button', { className: 'ui-btn ui-btn--outline ui-btn--sm', textContent: '复制' })
+        insert.onclick = () => act('insert', run.id, '已插入输入框')
+        copy.onclick = () => act('copy', run.id, '已复制')
+        main.append(el('div', { className: 'section' },
+          el('div', { className: 'label', textContent: '改进后的提示词' }),
+          el('div', { className: 'ui-card card prompt', textContent: run.prompt }),
+          el('div', { className: 'actions' }, insert, copy, notice ? el('span', { className: 'ui-muted', textContent: notice }) : null)))
+      }
+      if (run.error) main.append(el('div', { className: 'ui-card card error', textContent: run.error }))
+      if (closeTimer) {
+        const left = Math.max(0, Math.ceil((closeAt - Date.now()) / 1000))
+        main.append(el('div', { className: 'ui-muted', textContent: `${left} 秒后自动关闭侧栏，点击侧栏任意处保留` }))
+      }
+      renderHistory()
+    }
+
+    function renderIo(key, tool) {
+      const box = el('div', { className: 'io' })
+      const data = details.get(key)
+      if (!data) {
+        box.append(el('div', { className: 'ui-muted', textContent: '加载中…' }))
+        return box
+      }
+      box.append(el('div', { className: 'label', textContent: '输入' }), el('pre', { className: 'ui-card ui-mono', textContent: data.input || '（无）' }))
+      const output = tool.status === 'running' ? '（运行中）' : data.output ?? '（无）'
+      box.append(el('div', { className: 'label', textContent: '输出' }), el('pre', { className: 'ui-card ui-mono', textContent: output || '（空）' }))
+      return box
+    }
+
+    async function load(runId, tool, key) {
+      try {
+        const data = await enso.call('tool', { runId, id: tool.id })
+        details.set(key, data ?? { input: '', output: '（记录已清理）' })
+        if (data) details.get(key).status = tool.status
+      } catch (error) {
+        details.set(key, { input: '', output: error?.message || '读取失败' })
+      }
+      render()
+    }
+
+    function toggle(runId, tool, key) {
+      if (open.has(key)) open.delete(key)
+      else {
+        open.add(key)
+        if (!details.has(key) || details.get(key).status !== tool.status) void load(runId, tool, key)
+      }
+      render()
+    }
+
+    function renderHistory() {
+      const box = document.getElementById('history')
+      box.replaceChildren()
+      const run = current()
+      const others = runs.filter((item) => item !== run)
+      box.hidden = others.length === 0
+      if (box.hidden) return
+      box.append(el('div', { className: 'label', textContent: '更早的改写' }))
+      const list = el('div', { className: 'history' })
+      for (const item of others) {
+        const button = el('button', {
+          className: 'ui-btn ui-btn--outline ui-btn--sm',
+          textContent: `${STATUS[item.status]?.[0] ?? ''} · ${item.draft || '（进行中的任务）'}`,
+        })
+        button.onclick = () => { selected = item.id; notice = ''; render() }
+        list.append(button)
+      }
+      box.append(list)
+    }
+
+    async function act(method, runId, done) {
+      try {
+        await enso.call(method, { runId })
+        notice = done
+      } catch (error) {
+        notice = error?.message || '操作失败'
+      }
+      render()
+    }
+
+    document.getElementById('cancel').onclick = () => {
+      const run = current()
+      if (run) enso.call('cancel', { runId: run.id }).catch(() => {})
+    }
+
+    enso.on('run', (run) => {
+      if (!run || run.sessionId !== sessionId) return
+      const index = runs.findIndex((item) => item.id === run.id)
+      const was = index >= 0 ? runs[index].status : null
+      if (was === 'running' && run.status === 'done' && autoClose > 0) {
+        closeAt = Date.now() + autoClose * 1000
+        closeTimer = setTimeout(() => {
+          closeTimer = null
+          enso.call('closeView', {}).catch(() => {})
+        }, autoClose * 1000)
+      } else if (run.status === 'running') cancelClose()
+      // 展开着的工具从运行中变成结束时，重新取输出
+      for (const tool of run.tools) {
+        const key = `${run.id}:${tool.id}`
+        const cached = details.get(key)
+        if (open.has(key) && cached && cached.status !== tool.status) void load(run.id, tool, key)
+      }
+      if (index >= 0) runs[index] = run
+      else {
+        runs.unshift(run)
+        selected = run.id
+        notice = ''
+      }
+      render()
+    })
+
+    setInterval(() => { if (current()?.status === 'running' || closeTimer) render() }, 1000)
+
+    enso.call('snapshot', {}).then((snap) => {
+      sessionId = snap.sessionId
+      autoClose = snap.autoClose ?? 0
+      runs = snap.runs
+      render()
+    }, () => render())
+  </script>
+</body>
+</html>

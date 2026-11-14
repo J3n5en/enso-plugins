@@ -8,6 +8,7 @@ import { repoRoot } from './lib.mjs';
 export const UI_FILES = ['enso-ui.css', 'enso-ui.js'];
 export const UI_PACKAGES = [
   'enso.beads',
+  'enso.better',
   'enso.bridge',
   'enso.context',
   'enso.dbstudio',

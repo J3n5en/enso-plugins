@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "id": "enso.better",
+  "name": "Better Prompt",
+  "version": "0.1.0",
+  "description": "移植自 pi-better：输入框一键用 Felix Rieseberg 的「Depth」提示改写草稿。只读代理先读你的代码、文件和对话，回答四个问题（高手会多做什么、最原始的材料、具体方法和工具、什么能证明结果正确），再写出更深入的提示词。侧栏实时显示它读了什么、进行到哪一步，结果替换输入框文字，由你确认后发送。",
+  "icon": "icon.svg",
+  "engines": {
+    "enso": ">=0.3.8"
+  },
+  "main": "main.mjs",
+  "renderer": "ui.js",
+  "permissions": [
+    "ui.slot",
+    "ui.view",
+    "ui.clipboard",
+    "composer.draft",
+    "agent.run"
+  ],
+  "contributes": {
+    "views": [
+      {
+        "id": "runs",
+        "title": "Better",
+        "entry": "better.html"
+      }
+    ],
+    "methods": [
+      {
+        "name": "start",
+        "timeoutMs": 10000
+      },
+      {
+        "name": "wait",
+        "timeoutMs": 30000
+      },
+      {
+        "name": "cancel",
+        "timeoutMs": 5000
+      },
+      {
+        "name": "snapshot",
+        "timeoutMs": 5000
+      },
+      {
+        "name": "closeView",
+        "timeoutMs": 5000
+      },
+      {
+        "name": "tool",
+        "timeoutMs": 5000
+      },
+      {
+        "name": "insert",
+        "timeoutMs": 5000
+      },
+      {
+        "name": "copy",
+        "timeoutMs": 5000
+      }
+    ],
+    "configuration": [
+      {
+        "key": "context",
+        "type": "enum",
+        "title": "对话上下文",
+        "description": "conversation：从当前会话分叉，带上完整对话、用同一个模型，能复用会话的提示缓存；none：只看草稿和代码。输入框为空时总是带上对话。",
+        "options": [
+          "conversation",
+          "none"
+        ],
+        "default": "conversation"
+      },
+      {
+        "key": "autoClose",
+        "type": "number",
+        "title": "完成后自动关闭侧栏（秒）",
+        "description": "改写成功后过这么多秒关掉 Better 侧栏；期间在侧栏里点击、滚动或按键就不关。0 表示不自动关闭。",
+        "default": 5,
+        "min": 0,
+        "max": 600
+      }
+    ]
+  }
+}

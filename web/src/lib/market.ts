@@ -138,6 +138,7 @@ export const PERMISSION_LABELS: Record<string, string> = {
   'session.read': '读取会话内容',
   'session.focus': '切换当前会话',
   'session.create': '创建新会话',
+  'agent.run': '用会话的模型运行只读代理',
   'fs.read': '读取项目文件',
   'process.background': '运行后台进程',
 };
