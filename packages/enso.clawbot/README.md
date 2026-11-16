@@ -2,7 +2,7 @@
 
 把微信（WeChat）当作 EnsoCode 秘书的一个联系方式。扫码的那个人发来的文字和语音转写会交给秘书，秘书的回复再发回微信。
 
-需要 EnsoCode 0.3.8 及以上（这一版才有 `secretary.contact`）。
+需要 EnsoCode 0.3.9 及以上（这一版才有 `secretary.contact`）。
 
 ## 登录
 
