@@ -41,10 +41,10 @@ export function deactivate() {
   current = null;
   try {
     void Promise.resolve(prev.unregister?.()).catch((error) =>
-      console.error('[clawbot] 注销联系方式失败', error?.message ?? error),
+      console.error('[微信 Clawbot] 注销联系方式失败', error?.message ?? error),
     );
   } catch (error) {
-    console.error('[clawbot] 注销联系方式失败', error?.message ?? error);
+    console.error('[微信 Clawbot] 注销联系方式失败', error?.message ?? error);
   }
 }
 
@@ -149,7 +149,7 @@ export async function activate(enso, { loop = true } = {}) {
         try {
           await enso.contact.setStatus(CHANNEL, body);
         } catch (error) {
-          console.error('[clawbot] setStatus', error?.message ?? error);
+          console.error('[微信 Clawbot] setStatus', error?.message ?? error);
         }
       }
       const view = snapshot();
@@ -159,7 +159,7 @@ export async function activate(enso, { loop = true } = {}) {
         try {
           enso.ui.view.emit('status', view);
         } catch (error) {
-          console.error('[clawbot] 推送页面失败', error?.message ?? error);
+          console.error('[微信 Clawbot] 推送页面失败', error?.message ?? error);
         }
       }
       return view;
@@ -246,7 +246,7 @@ export async function activate(enso, { loop = true } = {}) {
         data = await get(url);
       } catch (error) {
         if (gen !== epoch || !login) return;
-        console.error('[clawbot] 扫码状态失败，按等待处理：', error?.message ?? error);
+        console.error('[微信 Clawbot] 扫码状态失败，按等待处理：', error?.message ?? error);
         if (phase !== 'error') await publish('pending', '等待扫码');
         return;
       }
@@ -350,7 +350,7 @@ export async function activate(enso, { loop = true } = {}) {
         try {
           await handleMessage(msg);
         } catch (error) {
-          console.error('[clawbot] 处理消息失败', error?.message ?? error);
+          console.error('[微信 Clawbot] 处理消息失败', error?.message ?? error);
         }
       }
     };
@@ -402,7 +402,7 @@ export async function activate(enso, { loop = true } = {}) {
           session.botToken,
         );
       } catch (error) {
-        console.error('[clawbot] typing', error?.message ?? error);
+        console.error('[微信 Clawbot] typing', error?.message ?? error);
       }
     }
 
@@ -437,7 +437,7 @@ export async function activate(enso, { loop = true } = {}) {
             }
           } catch (error) {
             if (self.stopped) break;
-            console.error('[clawbot] 轮询失败，', Math.round(backoff / 1000), '秒后重试：', error?.message ?? error);
+            console.error('[微信 Clawbot] 轮询失败，', Math.round(backoff / 1000), '秒后重试：', error?.message ?? error);
             await sleep(backoff);
             backoff = Math.min(backoff * 2, BACKOFF_MAX_MS);
           }
