@@ -455,11 +455,41 @@ describe('微信 Clawbot', { concurrency: false }, () => {
 
         await tick();
         assert.equal(inbounds.length, 1);
-        assert.equal(of(calls, '/sendmessage').at(-1).body.msg.item_list[0].text_item.text, '暂不支持图片和文件');
+        assert.equal(of(calls, '/sendmessage').at(-1).body.msg.item_list[0].text_item.text, '暂不支持图片、文件和视频');
 
         await assert.rejects(handlers.channel.sendText('U', { text: '再来' }), /ret=9/);
       },
     );
+  });
+
+  test('语音无转写、文字带附件、单独附件各回一句说明；正常文字和语音不打扰', async () => {
+    const from = (...items) => ({ from_user_id: 'U', message_type: 1, item_list: items });
+    const cases = [
+      { items: [{ type: 3, voice_item: {} }], inbound: null, hint: '这条语音没能转成文字，麻烦再发一次或者打字' },
+      { items: [{ type: 3, voice_item: { text: '' } }], inbound: null, hint: '这条语音没能转成文字，麻烦再发一次或者打字' },
+      {
+        items: [{ type: 1, text_item: { text: '看看这张' } }, { type: 2, image_item: {} }],
+        inbound: '看看这张',
+        hint: '暂不支持图片、文件和视频，只处理了文字',
+      },
+      { items: [{ type: 2, image_item: {} }], inbound: null, hint: '暂不支持图片、文件和视频' },
+      { items: [{ type: 4, file_item: { file_name: 'a.pdf' } }], inbound: null, hint: '暂不支持图片、文件和视频' },
+      { items: [{ type: 5, video_item: {} }], inbound: null, hint: '暂不支持图片、文件和视频' },
+      { items: [{ type: 1, text_item: { text: '在吗' } }], inbound: '在吗', hint: null },
+      { items: [{ type: 3, voice_item: { text: '语音转写' } }], inbound: '语音转写', hint: null },
+    ];
+    for (const { items, inbound, hint } of cases) {
+      await withBot(
+        { state: logged(), queues: { updates: [{ ret: 0, msgs: [from(...items)] }], send: [{ ret: 0 }] } },
+        async ({ tick, calls, inbounds }) => {
+          await tick();
+          const label = JSON.stringify(items);
+          assert.deepEqual(inbounds.map((x) => x.msg.text), inbound ? [inbound] : [], label);
+          const sent = of(calls, '/sendmessage').map((call) => call.body.msg.item_list[0].text_item.text);
+          assert.deepEqual(sent, hint ? [hint] : [], label);
+        },
+      );
+    }
   });
 
   test('ret=-14 进入重新扫码并停止轮询；其他 ret 不投递也不推进游标', async () => {

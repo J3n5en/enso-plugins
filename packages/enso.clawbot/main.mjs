@@ -26,7 +26,9 @@ const IDLE_MS = 5_000;
 const MIN_GAP_MS = 1_000;
 /** 失效刷新超过 3 次就停，让用户稍后再扫 */
 const MAX_QR_REFRESH = 3;
-const UNSUPPORTED = '暂不支持图片和文件';
+const UNSUPPORTED = '暂不支持图片、文件和视频';
+const UNSUPPORTED_WITH_TEXT = '暂不支持图片、文件和视频，只处理了文字';
+const VOICE_NO_TEXT = '这条语音没能转成文字，麻烦再发一次或者打字';
 
 let current = null;
 
@@ -317,9 +319,12 @@ export async function activate(enso, { loop = true } = {}) {
         const payload = { peerId: inbound.peerId, text: inbound.text };
         if (inbound.at != null) payload.at = inbound.at;
         await enso.contact.inbound(CHANNEL, payload);
+        if (inbound.unsupported) await sendText(inbound.peerId, { text: UNSUPPORTED_WITH_TEXT });
         return;
       }
-      if (inbound.unsupported) await sendText(inbound.peerId, { text: UNSUPPORTED });
+      const voice = Array.isArray(msg.item_list) && msg.item_list.some((item) => item?.type === 3);
+      if (voice) await sendText(inbound.peerId, { text: VOICE_NO_TEXT });
+      else if (inbound.unsupported) await sendText(inbound.peerId, { text: UNSUPPORTED });
     };
 
     const pollUpdatesOnce = async () => {
