@@ -6,7 +6,7 @@
   "icon": "icon.svg",
   "description": "微信联系方式：扫码登录后，把扫码人的微信消息交给 EnsoCode 秘书，并把秘书的回复发回微信。",
   "engines": {
-    "enso": ">=0.3.9"
+    "enso": ">=0.3.8"
   },
   "main": "main.mjs",
   "resident": true,
@@ -34,17 +34,20 @@
     ],
     "methods": [
       {
-        "name": "state"
+        "name": "state",
+        "timeoutMs": 5000
       },
       {
         "name": "login",
         "timeoutMs": 20000
       },
       {
-        "name": "verify"
+        "name": "verify",
+        "timeoutMs": 5000
       },
       {
-        "name": "logout"
+        "name": "logout",
+        "timeoutMs": 10000
       }
     ]
   }
