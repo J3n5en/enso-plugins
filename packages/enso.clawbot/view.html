@@ -1,0 +1,117 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="enso-ui.css" />
+    <style>
+      body { padding: 10px; font-size: 12px; }
+      #app { display: flex; flex-direction: column; gap: 8px; }
+      .card { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+      .row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+      .grow { flex: 1; }
+      .m { color: var(--muted-foreground); font-size: 11px; }
+      .err { color: var(--destructive); font-size: 11px; }
+      .qr { display: flex; justify-content: center; background: #fff; border-radius: var(--radius-md); padding: 8px; }
+      .qr svg { width: 196px; height: 196px; }
+      form.row { align-items: stretch; }
+      form.row .ui-input { flex: 1; min-width: 0; }
+      .ui-btn--block { width: 100%; height: 32px; }
+    </style>
+  </head>
+  <body>
+    <div id="app"><div class="ui-card card"><div class="ui-skeleton" style="height: 14px; width: 50%"></div></div></div>
+    <script src="enso-ui.js"></script>
+    <!-- Kazuhiko Arase, QR Code Generator, MIT. 页面没有网络，二维码在本地生成。 -->
+    <script src="lib/qrcode.js"></script>
+    <script>
+      const app = document.getElementById('app');
+      const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+      const LABEL = { unconfigured: '未登录', pending: '等待扫码', connected: '已连接', error: '出错' };
+      const BADGE = { pending: 'ui-badge--warning', connected: 'ui-badge--success', error: 'ui-badge--destructive' };
+      let view = null;
+      let error = '';
+      let last = '';
+
+      function qrSvg(text) {
+        if (!text || typeof qrcode !== 'function') return '';
+        try {
+          const qr = qrcode(0, 'M');
+          qr.addData(text);
+          qr.make();
+          return qr.createSvgTag({ cellSize: 4, margin: 8, scalable: true });
+        } catch {
+          return '';
+        }
+      }
+
+      function render() {
+        const key = JSON.stringify(view) + '\n' + error;
+        if (key === last) return;
+        last = key;
+        const v = view;
+        if (!v) {
+          app.innerHTML = error ? `<div class="ui-empty err">${esc(error)}</div>` : '<div class="ui-empty">加载中…</div>';
+          return;
+        }
+        const badge = `<span class="ui-badge ${BADGE[v.status] || ''}">${esc(LABEL[v.status] || v.status)}</span>`;
+        const svg = v.qrText ? qrSvg(v.qrText) : '';
+        const qr = svg ? `<div class="qr">${svg}</div>` : v.qrText ? '<div class="err">二维码生成失败</div>' : '';
+        const verify = v.needVerify
+          ? `<form data-verify class="row"><input class="ui-input" name="code" inputmode="numeric" autocomplete="one-time-code" placeholder="手机上的数字" /><button class="ui-btn ui-btn--primary" type="submit">提交</button></form>`
+          : '';
+        const login = v.status === 'unconfigured' || v.status === 'error'
+          ? '<button class="ui-btn ui-btn--primary ui-btn--block" type="button" data-login>扫码登录</button>'
+          : '';
+        const logout = v.status !== 'unconfigured'
+          ? '<button class="ui-btn ui-btn--outline ui-btn--block" type="button" data-logout>退出登录</button>'
+          : '';
+        const peer = v.status === 'connected' && v.peerId ? `<div class="m">已连接 ${esc(v.peerId)}</div>` : '';
+        app.innerHTML = `<div class="ui-card card ui-enter">
+          <div class="row"><b>微信</b><span class="grow"></span>${badge}</div>
+          ${v.detail ? `<div class="m">${esc(v.detail)}</div>` : ''}
+          ${peer}${qr}${verify}${login}${logout}
+          ${error ? `<div class="err">${esc(error)}</div>` : ''}
+        </div>`;
+      }
+
+      const typingCode = () => document.activeElement?.closest?.('form[data-verify]');
+
+      async function call(method, args) {
+        try {
+          view = await window.enso.call(method, args ?? {});
+          error = '';
+        } catch (e) {
+          error = e?.message ?? String(e);
+        }
+        render();
+      }
+
+      if (!window.enso?.call) {
+        app.innerHTML = '<div class="ui-empty">请在 EnsoCode 的联系方式设置里打开。</div>';
+      } else {
+        window.ensoUI?.tooltip?.();
+        window.enso.on?.('status', (data) => {
+          if (!data || typeof data !== 'object') return;
+          view = data;
+          error = '';
+          if (!typingCode()) render();
+        });
+        app.addEventListener('click', (e) => {
+          const t = e.target.closest('button');
+          if (!t) return;
+          if (t.hasAttribute('data-login')) call('login');
+          else if (t.hasAttribute('data-logout')) call('logout');
+        });
+        app.addEventListener('submit', (e) => {
+          const form = e.target.closest('form[data-verify]');
+          if (!form) return;
+          e.preventDefault();
+          call('verify', { code: new FormData(form).get('code') });
+        });
+        document.addEventListener('focusout', () => setTimeout(() => { if (!typingCode()) render(); }));
+        call('state');
+        setInterval(() => { if (!typingCode()) call('state'); }, 1500);
+      }
+    </script>
+  </body>
+</html>
