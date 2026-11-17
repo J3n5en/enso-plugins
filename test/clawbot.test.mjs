@@ -439,7 +439,13 @@ describe('微信 Clawbot', { concurrency: false }, () => {
         await tick();
         assert.equal(inbounds.length, 1);
         assert.equal(inbounds[0].id, 'wechat');
-        assert.deepEqual(inbounds[0].msg, { peerId: 'U', text: '你好\n语音转写', at: 1700000000000 });
+        assert.deepEqual(inbounds[0].msg, {
+          peerId: 'U',
+          senderId: 'U',
+          chatType: 'private',
+          text: '你好\n语音转写',
+          at: 1700000000000,
+        });
         assert.equal((await readState(dir)).contexts.U, 'CTX');
 
         const sent = await handlers.channel.sendText('U', { text: '回复' });
@@ -458,6 +464,43 @@ describe('微信 Clawbot', { concurrency: false }, () => {
         assert.equal(of(calls, '/sendmessage').at(-1).body.msg.item_list[0].text_item.text, '暂不支持图片、文件和视频');
 
         await assert.rejects(handlers.channel.sendText('U', { text: '再来' }), /ret=9/);
+      },
+    );
+  });
+
+  test('发送者 id 取协议的 from_user_id；会话 id 是回复目标 to_user_id；带 group_id 时不标私聊', async () => {
+    const owner = 'o9cq80abc@im.wechat';
+    const direct = {
+      from_user_id: owner,
+      to_user_id: 'bot@im.bot',
+      session_id: 'S1',
+      message_type: 1,
+      context_token: 'CTX',
+      item_list: [{ type: 1, text_item: { text: '在吗' } }],
+    };
+    const grouped = { ...direct, group_id: 'G1', item_list: [{ type: 1, text_item: { text: '群里' } }] };
+    await withBot(
+      {
+        state: logged({ ilinkUserId: owner }),
+        queues: { updates: [{ ret: 0, msgs: [direct, grouped] }], send: [{ ret: 0 }] },
+      },
+      async ({ tick, calls, inbounds, handlers }) => {
+        await tick();
+        assert.equal(inbounds.length, 2);
+        assert.deepEqual(inbounds[0].msg, {
+          peerId: direct.from_user_id,
+          senderId: direct.from_user_id,
+          chatType: 'private',
+          text: '在吗',
+        });
+        // 协议里 group_id 只是类型面，sendmessage 没有群目标：不猜成群，也不标私聊
+        assert.deepEqual(inbounds[1].msg, {
+          peerId: grouped.from_user_id,
+          senderId: grouped.from_user_id,
+          text: '群里',
+        });
+        await handlers.channel.sendText(inbounds[0].msg.peerId, { text: '回' });
+        assert.equal(of(calls, '/sendmessage').at(-1).body.msg.to_user_id, owner);
       },
     );
   });

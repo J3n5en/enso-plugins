@@ -130,6 +130,8 @@ export function sendMessageBody({ peerId, text, contextToken, clientId }) {
 /**
  * 只认扫码人自己的用户消息（message_type === 1）。
  * 文字（type 1）和语音转写（type 3）收进来；图片、文件、视频记为不支持。
+ * 发送者 id 是协议的 from_user_id；回复也发回它（sendmessage 只有 to_user_id）。
+ * group_id 在协议里只是类型面、没有群发目标：带了就不标私聊，也不猜成群。
  * 不是扫码人则返回 null。
  */
 export function readInbound(msg, ownerId) {
@@ -144,8 +146,12 @@ export function readInbound(msg, ownerId) {
     else if (item.type === 3 && typeof item.voice_item?.text === 'string' && item.voice_item.text) texts.push(item.voice_item.text);
     else if (item.type === 2 || item.type === 4 || item.type === 5) unsupported = true;
   }
+  const senderId = String(msg.from_user_id);
+  const grouped = typeof msg.group_id === 'string' && msg.group_id !== '';
   return {
-    peerId: String(msg.from_user_id),
+    peerId: senderId,
+    senderId,
+    ...(grouped ? {} : { chatType: 'private' }),
     text: texts.join('\n').trim(),
     unsupported,
     contextToken: typeof msg.context_token === 'string' ? msg.context_token : '',

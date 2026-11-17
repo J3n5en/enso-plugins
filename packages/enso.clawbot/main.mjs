@@ -316,7 +316,9 @@ export async function activate(enso, { loop = true } = {}) {
         await save();
       }
       if (inbound.text) {
-        const payload = { peerId: inbound.peerId, text: inbound.text };
+        const payload = { peerId: inbound.peerId, senderId: inbound.senderId };
+        if (inbound.chatType) payload.chatType = inbound.chatType;
+        payload.text = inbound.text;
         if (inbound.at != null) payload.at = inbound.at;
         await enso.contact.inbound(CHANNEL, payload);
         if (inbound.unsupported) await sendText(inbound.peerId, { text: UNSUPPORTED_WITH_TEXT });
