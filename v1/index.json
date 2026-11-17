@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-16T12:21:16.420Z",
-  "sequence": 111,
+  "generatedAt": "2026-11-17T02:44:38.956Z",
+  "sequence": 112,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -448,7 +448,7 @@
     {
       "id": "enso.clawbot",
       "name": "微信 Clawbot",
-      "description": "微信（WeChat）联系方式：扫码登录后，把扫码人的微信消息交给 EnsoCode 秘书，并把秘书的回复发回微信。",
+      "description": "微信（WeChat）联系方式：扫码登录后，把扫码人的微信消息交给 EnsoCode 秘书，并把秘书的回复、图片和文件发回微信。",
       "tier": "official",
       "tags": [
         "contact",
@@ -458,11 +458,11 @@
       ],
       "category": "integrations",
       "readme": {
-        "path": "packages/enso.clawbot/0.1.1.readme.md",
-        "sha256": "6053e145c1d6a9b1d79297ea0f460b3918e7d97653e3ef8a6289d7ce062d96b5",
-        "size": 1548
+        "path": "packages/enso.clawbot/0.2.0.readme.md",
+        "sha256": "886c77f183512aeaca26046bf1b008ea78f2f3f514985dcbad2ad46f6c0cbf3a",
+        "size": 2321
       },
-      "latest": "0.1.1",
+      "latest": "0.2.0",
       "versions": [
         {
           "version": "0.1.0",
@@ -495,6 +495,22 @@
           "sha256": "30c1eb28ccf67e11e832e4eabff85a3f56e21a4bab6fecd8d99dfbb71459e640",
           "size": 112545,
           "publishedAt": "2026-11-16T12:21:16.420Z"
+        },
+        {
+          "version": "0.2.0",
+          "engines": {
+            "enso": ">=0.3.9"
+          },
+          "permissions": [
+            "secretary.contact",
+            "net.fetch",
+            "process.background",
+            "ui.view"
+          ],
+          "path": "packages/enso.clawbot/0.2.0.zip",
+          "sha256": "57d759584859150c1e1f6eccaedb34a4d297f9a7700adb9279f0719270a6888d",
+          "size": 120386,
+          "publishedAt": "2026-11-17T02:44:38.956Z"
         }
       ]
     },
