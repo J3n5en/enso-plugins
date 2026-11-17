@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
@@ -7,14 +7,21 @@ import {
   apiUrl,
   appHeaders,
   baseInfo,
+  cdnUploadUrl,
   chunkText,
+  encryptAesEcb,
+  fileItem,
+  imageItem,
   isRelogin,
+  mediaMessageBody,
   nextCursor,
   postHeaders,
   qrStatusUrl,
   readInbound,
   rejectedHost,
   sendMessageBody,
+  UPLOAD_MEDIA_TYPE,
+  uploadUrlBody,
 } from './lib/ilink.mjs';
 
 const CHANNEL = 'wechat';
@@ -29,6 +36,8 @@ const MAX_QR_REFRESH = 3;
 const UNSUPPORTED = '暂不支持图片、文件和视频';
 const UNSUPPORTED_WITH_TEXT = '暂不支持图片、文件和视频，只处理了文字';
 const VOICE_NO_TEXT = '这条语音没能转成文字，麻烦再发一次或者打字';
+/** CDN 上传：5xx 与网络错误重试，4xx 直接失败 */
+const CDN_MAX_ATTEMPTS = 3;
 
 let current = null;
 
@@ -386,6 +395,93 @@ export async function activate(enso, { loop = true } = {}) {
       return { messageId: ref };
     }
 
+    /**
+     * 媒体出站（iLink 协议）：getuploadurl 拿上传地址 → AES-128-ECB 加密后 POST 到 CDN，
+     * 从响应头 x-encrypted-param 拿下载参数 → sendmessage 带 image_item / file_item。
+     * 说明文字按协议先单独发一条 TEXT。
+     */
+    async function uploadToCdn(peerId, plaintext, mediaType) {
+      const filekey = randomBytes(16).toString('hex');
+      const aeskey = randomBytes(16);
+      const aeskeyHex = aeskey.toString('hex');
+      const res = await post(
+        session.baseUrl,
+        '/ilink/bot/getuploadurl',
+        uploadUrlBody({ filekey, mediaType, toUserId: peerId, plaintext, aeskeyHex }),
+        session.botToken,
+      );
+      if (typeof res?.ret === 'number' && res.ret !== 0) {
+        throw new Error(`getuploadurl ret=${res.ret} ${res.errmsg ?? ''}`.trim());
+      }
+      const full = typeof res?.upload_full_url === 'string' ? res.upload_full_url.trim() : '';
+      const param = typeof res?.upload_param === 'string' ? res.upload_param : '';
+      if (!full && !param) throw new Error('getuploadurl 没有返回上传地址');
+      const url = full || cdnUploadUrl(param, filekey);
+      const ciphertext = encryptAesEcb(plaintext, aeskey);
+      let lastError;
+      for (let attempt = 1; attempt <= CDN_MAX_ATTEMPTS; attempt += 1) {
+        let out;
+        try {
+          out = await enso.net.fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/octet-stream' },
+            body: ciphertext.toString('base64'),
+            bodyEncoding: 'base64',
+          });
+        } catch (error) {
+          lastError = error;
+          continue;
+        }
+        const status = out?.status;
+        const headers = out?.headers ?? {};
+        if (status >= 400 && status < 500) {
+          throw new Error(`CDN 上传被拒 HTTP ${status} ${headers['x-error-message'] ?? ''}`.trim());
+        }
+        if (status !== 200) {
+          lastError = new Error(`CDN 上传失败 HTTP ${status} ${headers['x-error-message'] ?? ''}`.trim());
+          continue;
+        }
+        const downloadParam = headers['x-encrypted-param'];
+        if (typeof downloadParam !== 'string' || !downloadParam) {
+          lastError = new Error('CDN 响应缺少 x-encrypted-param');
+          continue;
+        }
+        return { downloadParam, aeskeyHex, rawSize: plaintext.length, cipherSize: ciphertext.length };
+      }
+      throw lastError ?? new Error('CDN 上传失败');
+    }
+
+    async function sendMedia(kind, peerId, media) {
+      if (!loggedIn()) throw new Error('微信未登录');
+      const id = String(peerId ?? '');
+      const data = media?.data;
+      if (!id || !data?.length) throw new Error('没有要发送的内容');
+      const gen = epoch;
+      const plaintext = Buffer.from(data);
+      const fileName = String(media?.fileName || 'file');
+      const caption = typeof media?.caption === 'string' ? media.caption.trim() : '';
+      if (caption) await sendText(id, { text: caption });
+      const uploaded = await uploadToCdn(
+        id,
+        plaintext,
+        kind === 'image' ? UPLOAD_MEDIA_TYPE.IMAGE : UPLOAD_MEDIA_TYPE.FILE,
+      );
+      if (gen !== epoch) throw new Error('微信登录状态已变，消息未发送');
+      const clientId = randomUUID();
+      const body = mediaMessageBody({
+        peerId: id,
+        item: kind === 'image' ? imageItem(uploaded) : fileItem(uploaded, fileName),
+        contextToken: session.contexts[id] || '',
+        clientId,
+      });
+      const res = await post(session.baseUrl, '/ilink/bot/sendmessage', body, session.botToken);
+      if (gen !== epoch) throw new Error('微信登录状态已变，消息未发送');
+      if (typeof res?.ret === 'number' && res.ret !== 0) {
+        throw new Error(`sendmessage ret=${res.ret} ${res.errmsg ?? ''}`.trim());
+      }
+      return { messageId: clientId };
+    }
+
     async function typing(peerId, input) {
       try {
         if (!loggedIn()) return;
@@ -503,9 +599,13 @@ export async function activate(enso, { loop = true } = {}) {
         format: 'plain',
         maxChars: 2000,
         commandMenu: false,
+        images: true,
+        files: true,
       },
       sendText,
       typing,
+      sendImage: (peerId, media) => sendMedia('image', peerId, media),
+      sendFile: (peerId, media) => sendMedia('file', peerId, media),
     });
     if (self.stopped) {
       const unregister = self.unregister;

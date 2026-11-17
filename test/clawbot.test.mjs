@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test, { describe } from 'node:test';
 import vm from 'node:vm';
+import { createDecipheriv, createHash } from 'node:crypto';
 import { acceptedWeixinBase } from '../packages/enso.clawbot/lib/ilink.mjs';
 import { activate, deactivate } from '../packages/enso.clawbot/main.mjs';
 
@@ -56,11 +57,19 @@ async function setup({ dataDir, state, queues } = {}) {
     config: [...(queues?.config ?? [])],
     send: [...(queues?.send ?? [])],
     typing: [...(queues?.typing ?? [])],
+    upload: [...(queues?.upload ?? [])],
+    cdn: [...(queues?.cdn ?? [])],
   };
   const enso = {
     dataDir: dir,
     net: {
       fetch: async (url, init = {}) => {
+        if (init.bodyEncoding === 'base64') {
+          calls.push({ url, method: init.method, headers: init.headers ?? {}, raw: Buffer.from(init.body, 'base64') });
+          const res = shift(q.cdn, url);
+          if (res instanceof Error) throw res;
+          return { body: '', ...res };
+        }
         const body = init.body ? JSON.parse(init.body) : undefined;
         calls.push({ url, method: init.method, headers: init.headers ?? {}, body });
         let data;
@@ -70,6 +79,7 @@ async function setup({ dataDir, state, queues } = {}) {
         else if (url.includes('/sendmessage')) data = shift(q.send, url);
         else if (url.includes('/getconfig')) data = shift(q.config, url);
         else if (url.includes('/sendtyping')) data = shift(q.typing, url);
+        else if (url.includes('/getuploadurl')) data = shift(q.upload, url);
         else throw new Error(`未预期的请求 ${url}`);
         return { status: 200, headers: {}, body: JSON.stringify(data) };
       },
@@ -166,7 +176,11 @@ describe('微信 Clawbot', { concurrency: false }, () => {
           format: 'plain',
           maxChars: 2000,
           commandMenu: false,
+          images: true,
+          files: true,
         });
+        assert.equal(typeof handlers.channel.sendImage, 'function');
+        assert.equal(typeof handlers.channel.sendFile, 'function');
         const view = await handlers.login();
         assert.equal(view.status, 'pending');
         assert.equal(view.qrText, 'img-1');
@@ -615,4 +629,168 @@ describe('微信 Clawbot', { concurrency: false }, () => {
       },
     );
   });
+
+  const decrypt = (cipher, keyHex) => {
+    const d = createDecipheriv('aes-128-ecb', Buffer.from(keyHex, 'hex'), null);
+    return Buffer.concat([d.update(cipher), d.final()]);
+  };
+
+  test('发图片：getuploadurl → AES-128-ECB 加密 POST 到 CDN → sendmessage 带 image_item；说明先单独发', async () => {
+    const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4, 5]);
+    await withBot(
+      {
+        state: logged({ contexts: { U: 'CTX' } }),
+        queues: {
+          upload: [{ ret: 0, upload_full_url: 'https://novac2c.cdn.weixin.qq.com/c2c/upload?full=1' }],
+          cdn: [{ status: 200, headers: { 'x-encrypted-param': 'DL-PARAM' } }],
+          send: [{ ret: 0 }, { ret: 0 }],
+        },
+      },
+      async ({ calls, handlers }) => {
+        const sent = await handlers.channel.sendImage('U', {
+          data: png,
+          fileName: 'shot.png',
+          mimeType: 'image/png',
+          caption: '今天的截图',
+        });
+        assert.equal(typeof sent.messageId, 'string');
+
+        const up = of(calls, '/getuploadurl')[0];
+        assert.equal(up.url, 'https://ilinkai.weixin.qq.com/ilink/bot/getuploadurl');
+        assert.equal(up.headers.Authorization, 'Bearer TOK');
+        assert.equal(up.body.media_type, 1);
+        assert.equal(up.body.to_user_id, 'U');
+        assert.equal(up.body.rawsize, png.length);
+        assert.equal(up.body.rawfilemd5, createHash('md5').update(png).digest('hex'));
+        assert.equal(up.body.filesize, 16);
+        assert.equal(up.body.no_need_thumb, true);
+        assert.match(up.body.filekey, /^[0-9a-f]{32}$/);
+        assert.match(up.body.aeskey, /^[0-9a-f]{32}$/);
+        assert.deepEqual(up.body.base_info, { channel_version: '3.0.0/enso-clawbot-0.1.0', bot_agent: 'EnsoCode' });
+
+        const cdn = calls.find((call) => call.raw);
+        assert.equal(cdn.url, 'https://novac2c.cdn.weixin.qq.com/c2c/upload?full=1');
+        assert.equal(cdn.method, 'POST');
+        assert.equal(cdn.headers['Content-Type'], 'application/octet-stream');
+        assert.equal(cdn.raw.length, 16);
+        assert.deepEqual(decrypt(cdn.raw, up.body.aeskey), png);
+
+        const sends = of(calls, '/sendmessage');
+        assert.equal(sends.length, 2);
+        assert.deepEqual(sends[0].body.msg.item_list, [{ type: 1, text_item: { text: '今天的截图' } }]);
+        const msg = sends[1].body.msg;
+        assert.equal(msg.to_user_id, 'U');
+        assert.equal(msg.message_type, 2);
+        assert.equal(msg.message_state, 2);
+        assert.equal(msg.context_token, 'CTX');
+        assert.deepEqual(msg.item_list, [
+          {
+            type: 2,
+            image_item: {
+              media: {
+                encrypt_query_param: 'DL-PARAM',
+                aes_key: Buffer.from(up.body.aeskey).toString('base64'),
+                encrypt_type: 1,
+              },
+              mid_size: 16,
+            },
+          },
+        ]);
+      },
+    );
+  });
+
+  test('发文件：没有 upload_full_url 时按 upload_param + filekey 拼 CDN 地址，sendmessage 带 file_item', async () => {
+    const pdf = Buffer.from('%PDF-1.4 report body that is longer than one block');
+    await withBot(
+      {
+        state: logged(),
+        queues: {
+          upload: [{ ret: 0, upload_param: 'UP/PARAM=' }],
+          cdn: [{ status: 200, headers: { 'x-encrypted-param': 'DL2' } }],
+          send: [{ ret: 0 }],
+        },
+      },
+      async ({ calls, handlers }) => {
+        await handlers.channel.sendFile('U', { data: pdf, fileName: 'report.pdf' });
+        const up = of(calls, '/getuploadurl')[0];
+        assert.equal(up.body.media_type, 3);
+        assert.equal(up.body.filesize, Math.ceil((pdf.length + 1) / 16) * 16);
+        const cdn = calls.find((call) => call.raw);
+        assert.equal(
+          cdn.url,
+          `https://novac2c.cdn.weixin.qq.com/c2c/upload?encrypted_query_param=${encodeURIComponent('UP/PARAM=')}&filekey=${up.body.filekey}`,
+        );
+        assert.deepEqual(decrypt(cdn.raw, up.body.aeskey), pdf);
+        const sends = of(calls, '/sendmessage');
+        assert.equal(sends.length, 1);
+        assert.deepEqual(sends[0].body.msg.item_list, [
+          {
+            type: 4,
+            file_item: {
+              media: {
+                encrypt_query_param: 'DL2',
+                aes_key: Buffer.from(up.body.aeskey).toString('base64'),
+                encrypt_type: 1,
+              },
+              file_name: 'report.pdf',
+              len: String(pdf.length),
+            },
+          },
+        ]);
+      },
+    );
+  });
+
+  test('CDN 5xx 重试后成功；4xx 不重试直接失败；缺 x-encrypted-param 算失败', async () => {
+    const data = Buffer.from('hello');
+    await withBot(
+      {
+        state: logged(),
+        queues: {
+          upload: [{ upload_param: 'P' }, { upload_param: 'P' }, { upload_param: 'P' }],
+          cdn: [
+            { status: 500, headers: { 'x-error-message': 'busy' } },
+            { status: 200, headers: { 'x-encrypted-param': 'OK' } },
+            { status: 403, headers: { 'x-error-message': 'denied' } },
+            { status: 200, headers: {} },
+            { status: 200, headers: {} },
+            { status: 200, headers: {} },
+          ],
+          send: [{ ret: 0 }],
+        },
+      },
+      async ({ calls, handlers }) => {
+        await handlers.channel.sendFile('U', { data, fileName: 'a.txt' });
+        assert.equal(calls.filter((call) => call.raw).length, 2);
+        await assert.rejects(handlers.channel.sendFile('U', { data, fileName: 'a.txt' }), /HTTP 403 denied/);
+        assert.equal(calls.filter((call) => call.raw).length, 3);
+        await assert.rejects(handlers.channel.sendImage('U', { data, fileName: 'a.png' }), /x-encrypted-param/);
+        assert.equal(calls.filter((call) => call.raw).length, 6);
+        assert.equal(of(calls, '/sendmessage').length, 1);
+      },
+    );
+  });
+
+  test('getuploadurl 没给地址、sendmessage ret 非 0、未登录都抛错', async () => {
+    const data = Buffer.from('x');
+    await withBot(
+      {
+        state: logged(),
+        queues: {
+          upload: [{ ret: 0 }, { upload_full_url: 'https://novac2c.cdn.weixin.qq.com/c2c/upload?f=1' }],
+          cdn: [{ status: 200, headers: { 'x-encrypted-param': 'D' } }],
+          send: [{ ret: -2, errmsg: 'bad' }],
+        },
+      },
+      async ({ handlers }) => {
+        await assert.rejects(handlers.channel.sendImage('U', { data, fileName: 'a.png' }), /没有返回上传地址/);
+        await assert.rejects(handlers.channel.sendImage('U', { data, fileName: 'a.png' }), /ret=-2/);
+      },
+    );
+    await withBot({}, async ({ handlers }) => {
+      await assert.rejects(handlers.channel.sendFile('U', { data, fileName: 'a.txt' }), /未登录/);
+    });
+  });
 });
+

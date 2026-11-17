@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createCipheriv, createHash, randomBytes } from 'node:crypto';
 
 /** 默认 iLink 根；redirect_host / baseurl 不合法时继续用它 */
 export const DEFAULT_BASE = 'https://ilinkai.weixin.qq.com';
@@ -115,16 +115,77 @@ export function chunkText(text, max = MAX_CHARS) {
 }
 
 export function sendMessageBody({ peerId, text, contextToken, clientId }) {
+  return mediaMessageBody({ peerId, item: { type: 1, text_item: { text: String(text) } }, contextToken, clientId });
+}
+
+/** sendmessage 一条只带一个 item：文字、图片、文件都走这里 */
+export function mediaMessageBody({ peerId, item, contextToken, clientId }) {
   const msg = {
     from_user_id: '',
     to_user_id: String(peerId),
     client_id: clientId,
     message_type: 2,
     message_state: 2,
-    item_list: [{ type: 1, text_item: { text: String(text) } }],
+    item_list: [item],
   };
   if (contextToken) msg.context_token = contextToken;
   return { msg, base_info: baseInfo() };
+}
+
+/** 媒体上传走的 CDN；upload_full_url 缺省时按 upload_param 拼地址 */
+export const CDN_BASE = 'https://novac2c.cdn.weixin.qq.com/c2c';
+/** getuploadurl 的 media_type */
+export const UPLOAD_MEDIA_TYPE = { IMAGE: 1, VIDEO: 2, FILE: 3, VOICE: 4 };
+/** sendmessage item 的 type */
+export const ITEM_TYPE = { TEXT: 1, IMAGE: 2, VOICE: 3, FILE: 4, VIDEO: 5 };
+
+/** AES-128-ECB + PKCS7 的密文长度 */
+export function aesEcbPaddedSize(size) {
+  return Math.ceil((size + 1) / 16) * 16;
+}
+
+export function encryptAesEcb(plaintext, key) {
+  const cipher = createCipheriv('aes-128-ecb', key, null);
+  return Buffer.concat([cipher.update(plaintext), cipher.final()]);
+}
+
+export function cdnUploadUrl(uploadParam, filekey, base = CDN_BASE) {
+  return `${base}/upload?encrypted_query_param=${encodeURIComponent(uploadParam)}&filekey=${encodeURIComponent(filekey)}`;
+}
+
+/** getuploadurl 请求体：aeskey 传 hex；不要缩略图 */
+export function uploadUrlBody({ filekey, mediaType, toUserId, plaintext, aeskeyHex }) {
+  return {
+    filekey,
+    media_type: mediaType,
+    to_user_id: String(toUserId),
+    rawsize: plaintext.length,
+    rawfilemd5: createHash('md5').update(plaintext).digest('hex'),
+    filesize: aesEcbPaddedSize(plaintext.length),
+    no_need_thumb: true,
+    aeskey: aeskeyHex,
+    base_info: baseInfo(),
+  };
+}
+
+/** 下载侧要的 media：aes_key 是 hex 字符串本身再 base64（协议如此，不是原始 16 字节） */
+function cdnMedia(uploaded) {
+  return {
+    encrypt_query_param: uploaded.downloadParam,
+    aes_key: Buffer.from(uploaded.aeskeyHex).toString('base64'),
+    encrypt_type: 1,
+  };
+}
+
+export function imageItem(uploaded) {
+  return { type: ITEM_TYPE.IMAGE, image_item: { media: cdnMedia(uploaded), mid_size: uploaded.cipherSize } };
+}
+
+export function fileItem(uploaded, fileName) {
+  return {
+    type: ITEM_TYPE.FILE,
+    file_item: { media: cdnMedia(uploaded), file_name: String(fileName), len: String(uploaded.rawSize) },
+  };
 }
 
 /**

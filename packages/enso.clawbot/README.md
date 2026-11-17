@@ -14,6 +14,8 @@
 
 交给秘书时带上发送者 id（iLink 协议的 `from_user_id`），会话 id 也是它，回复发回同一个 `to_user_id`。协议里的 `group_id` 只是类型字段，`sendmessage` 没有群目标，所以不当成群处理：带 `group_id` 的消息不标私聊，也不标群。
 
+秘书可以给你发图片和文件：按微信 iLink 协议先用 `getuploadurl` 拿上传地址，把内容用随机密钥做 AES-128-ECB 加密后上传到微信 CDN（`novac2c.cdn.weixin.qq.com`），再用 `sendmessage` 发出图片或文件消息；带说明时先单独发一条文字。单个不超过 10MB，由 EnsoCode 限制。发送失败时 EnsoCode 会另回一句说明和电脑上的路径。
+
 「退出登录」会清掉本机保存的登录状态并停止收消息。登录失效时页面会要求重新扫码。
 
 二维码在页面里本地生成，不访问外网。生成器是 Kazuhiko Arase 的 QR Code Generator（MIT），见 `lib/qrcode.js`。
@@ -23,6 +25,6 @@
 | 权限 | 用途 |
 | --- | --- |
 | `secretary.contact` | 注册「微信」联系方式，把消息交给秘书并发送回复 |
-| `net.fetch` | 访问微信 iLink（`ilinkai.weixin.qq.com`，以及扫码后跳到的 `*.weixin.qq.com`） |
+| `net.fetch` | 访问微信 iLink（`ilinkai.weixin.qq.com`，以及扫码后跳到的 `*.weixin.qq.com`），上传图片和文件到微信 CDN（`novac2c.cdn.weixin.qq.com`） |
 | `process.background` | 常驻长轮询新消息 |
 | `ui.view` | 扫码登录页 |
