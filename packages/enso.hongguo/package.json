@@ -1,0 +1,8 @@
+{
+  "name": "enso-plugin-hongguo",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "openhongguo": "0.4.0"
+  }
+}

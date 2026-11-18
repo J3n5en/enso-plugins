@@ -4,7 +4,6 @@ import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, open, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
-import { createClient } from './vendor/openhongguo/index.js';
 import { Remuxer } from './remux.mjs';
 
 // base64 of 46KB stays under the 64KB UI payload cap
@@ -15,7 +14,9 @@ const QUALITIES = ['360p', '480p', '540p', '720p', '1080p'];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export function activate(enso) {
+const loadClient = (options) => import('openhongguo').then((m) => m.createClient(options));
+
+export function activate(enso, { createClient = loadClient } = {}) {
   const videoDir = join(enso.dataDir, 'video');
   const coverDir = join(enso.dataDir, 'covers');
   const jobs = new Map();
@@ -47,14 +48,18 @@ export function activate(enso) {
       RATE_LIMITED: '请求太频繁，稍后再试',
       TRANSPORT: '网络请求失败',
       CONTENT_UNAVAILABLE: '内容已下架或不可访问',
-      ANONYMOUS_LIMITED: '匿名设备被限制，稍后再试',
+      ANONYMOUS_LIMITED: '匿名设备被服务端限制，已换新设备仍取不到内容',
+      DEVICE_REJECTED: '匿名设备被服务端拒绝，已换新设备仍不可用',
       AUTHENTICATION_REQUIRED: '该内容需要登录',
       CHALLENGE_REQUIRED: '服务端要求验证，匿名无法继续',
     };
     return Object.assign(new Error(map[e?.code] ?? e?.message ?? String(e)), { code: e?.code });
   };
 
-  // 设备受限时换新设备并退避重试；并发失败只重置一次
+  const sdk = (fn) => client().then(fn).catch((e) => Promise.reject(friendly(e)));
+
+  // 设备被拒、播放空结果由 SDK 自动换设备（deviceResets 默认 2）。
+  // 推荐和选集返回空结果时 SDK 不换设备，但这两处不会真的为空，由这里补上；并发失败只重置一次
   let gen = 0;
   let resetting;
   const reset = (c, seen) => {
@@ -62,15 +67,18 @@ export function activate(enso) {
     gen++;
     return (resetting = c.resetDevice().finally(() => (resetting = undefined)));
   };
-  const sdk = async (fn) => {
+  const fresh = async (fn) => {
     const c = await client();
     for (let i = 0; ; i++) {
       const seen = gen;
       try {
         return await fn(c);
       } catch (e) {
-        if (!['ANONYMOUS_LIMITED', 'DEVICE_REJECTED'].includes(e?.code) || i >= 3) throw friendly(e);
-        await reset(c, seen).catch((err) => console.warn('resetDevice failed', err?.message));
+        if (e?.code !== 'ANONYMOUS_LIMITED' || i >= 2) throw friendly(e);
+        await reset(c, seen).catch((err) => {
+          console.warn('resetDevice failed', err?.message);
+          throw friendly(e);
+        });
         await sleep(500 * 2 ** i);
       }
     }
@@ -88,12 +96,11 @@ export function activate(enso) {
     cursor: p.cursor,
     hasMore: Boolean(p.has_more),
   });
-  const empty = (e) => e?.code === 'ANONYMOUS_LIMITED' || e?.code === 'END_OF_LIST';
-  // 推荐不会真的为空：受限时换设备重试；搜索为空可能只是没结果
+  // 推荐不会真的为空：换设备仍为空就报错；搜索为空可能只是没结果
   const list = (fn, retry) =>
-    (retry ? sdk(fn) : client().then(fn)).then(page, (e) => {
-      if (empty(e)) return { items: [], hasMore: false };
-      throw friendly(e);
+    (retry ? fresh(fn) : sdk(fn)).then(page, (e) => {
+      if (e.code === 'END_OF_LIST' || (!retry && e.code === 'ANONYMOUS_LIMITED')) return { items: [], hasMore: false };
+      throw e;
     });
 
   enso.renderer.handle('discover', (a) => list((c) => c.discover({ cursor: a?.cursor || undefined }), true));
@@ -137,7 +144,7 @@ export function activate(enso) {
 
   // compact tuples [id, number, playable, title?] keep 1000+ episode series under 64KB
   enso.renderer.handle('episodes', (a) =>
-    sdk((c) => c.listEpisodes(String(a?.seriesId ?? ''))).then((p) =>
+    fresh((c) => c.listEpisodes(String(a?.seriesId ?? ''))).then((p) =>
       (p.items ?? []).map((e) => {
         const row = [e.id, e.number, e.playable !== false ? 1 : 0];
         if (e.title && e.title !== `第${e.number}集`) row.push(e.title.slice(0, 40));
