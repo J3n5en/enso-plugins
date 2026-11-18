@@ -1,0 +1,7 @@
+{
+  "tier": "community",
+  "category": "agent",
+  "tags": ["preset", "prompt", "agents", "gpt"],
+  "homepage": "https://github.com/MrDgbot/enso-gpt-with-taste",
+  "icon": "https://cdn.jsdelivr.net/gh/MrDgbot/enso-gpt-with-taste@da73084eb506df8f19e13627c950c7cbce487394/icon.svg"
+}
