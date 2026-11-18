@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-17T02:44:38.956Z",
-  "sequence": 112,
+  "generatedAt": "2026-11-18T02:19:42.979Z",
+  "sequence": 113,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -2428,6 +2428,37 @@
           "sha256": "ef758a982d7055178f3883b4879027b859cf8dae1731fe1134678b2c0396f1ae",
           "size": 656867,
           "publishedAt": "2026-11-06T08:50:16.583Z"
+        }
+      ]
+    },
+    {
+      "id": "mrdgbot.gpttaste",
+      "name": "GPT with Taste",
+      "description": "把 NB-Corp/gpt-with-taste 的行为配方做成 EnsoCode 预设：少确认、少防御性措辞、把子代理结果消化成行动。主会话追加 Main 与 Steer，子代理可选 taste:sub / taste:independent。每天自动同步上游。",
+      "tier": "community",
+      "tags": [
+        "preset",
+        "prompt",
+        "agents",
+        "gpt"
+      ],
+      "homepage": "https://github.com/MrDgbot/enso-gpt-with-taste",
+      "icon": "https://cdn.jsdelivr.net/gh/MrDgbot/enso-gpt-with-taste@da73084eb506df8f19e13627c950c7cbce487394/icon.svg",
+      "category": "agent",
+      "readme": {
+        "path": "packages/mrdgbot.gpttaste/0.1.0.readme.md",
+        "sha256": "cbc0e18b7fb1ca925d50fb45875d2730ce52f6c71d681c908b3b4b35c5012626",
+        "size": 4262
+      },
+      "latest": "0.1.0",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "permissions": [],
+          "path": "packages/mrdgbot.gpttaste/0.1.0.zip",
+          "sha256": "e9a62028b955e737beab9f4eaf67e51ae372e30c44a398d6f7d4b76c056de1c7",
+          "size": 72653,
+          "publishedAt": "2026-11-18T02:19:42.979Z"
         }
       ]
     },
