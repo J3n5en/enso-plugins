@@ -47,8 +47,8 @@ The `subagent` tool schema lists the valid `model` values. Each is `<provider>/<
 Follow its steps with these changes:
 
 - Detect. The detected models are the `model` values the `subagent` tool schema lists, each with an effort from the `thinking` values. Write a real model as `<model> <effort>`, such as `Max/claude-opus-5-5 xhigh`. The effort is the last token, so the budget step works as written.
-- Defaults. Map each default slug with the rows above, so `claude-opus-5-5-xhigh` becomes the matching listed value with `xhigh`, and `grok-4.7-xhigh-fast` likewise. A default with no listed match becomes `inherit-parent`.
-- Write. Write `~/.agents/pstack-models.md` with no frontmatter, then the comment lines, the `# budget` line, and one line per role from step 5. Overwrite the whole file. Never put the role lines in `AGENTS.md`.
+- Defaults. Map each default slug with the rows above, so `claude-opus-5-5-xhigh-fast` becomes the matching listed value with `xhigh`, and `gemini-4-neon-high` likewise. A default with no listed match becomes `inherit-parent`.
+- Write. Write `~/.agents/pstack-models.md` with no frontmatter, then the comment lines, the `# defaults: 3` line, the `# budget` line, and one line per role from step 5. Overwrite the whole file. Never put the role lines in `AGENTS.md`.
 - Confirm. Say the file applies to new sessions, which read it on demand.
 
 ## Paths
