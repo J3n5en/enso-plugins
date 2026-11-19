@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-18T07:50:53.474Z",
-  "sequence": 114,
+  "generatedAt": "2026-11-19T10:51:44.767Z",
+  "sequence": 115,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -1474,7 +1474,7 @@
     {
       "id": "enso.pstack",
       "name": "pstack",
-      "description": "Lauren Tan 的 pstack 0.15.36（MIT）：poteto-mode 按任务挑选 playbook，配套 arena、interrogate、architect 等 58 个 skill 和工程原则，先深挖再并行。只在输入框选了「pstack」预设的会话里加载。在输入框按钮里为某个会话打开后，该会话的每条消息自动展开 poteto-mode。",
+      "description": "Lauren Tan 的 pstack 0.15.44（MIT）：poteto-mode 按任务挑选 playbook，配套 arena、interrogate、architect 等 58 个 skill 和工程原则，先深挖再并行。只在输入框选了「pstack」预设的会话里加载。在输入框按钮里为某个会话打开后，该会话的每条消息自动展开 poteto-mode。",
       "tier": "official",
       "tags": [
         "skills",
@@ -1486,11 +1486,11 @@
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.pstack.svg",
       "category": "agent",
       "readme": {
-        "path": "packages/enso.pstack/0.3.3.readme.md",
-        "sha256": "44b87b4a992de68cb9325aa0cfd749bcef62c3ba2f16dc5c180e9f83554153a5",
-        "size": 28586
+        "path": "packages/enso.pstack/0.3.4.readme.md",
+        "sha256": "aba77e36976eed17a2e4176fa31a6c99a4abfd0c3861572e443aea18abcd0fe7",
+        "size": 28729
       },
-      "latest": "0.3.3",
+      "latest": "0.3.4",
       "versions": [
         {
           "version": "0.1.0",
@@ -1577,6 +1577,20 @@
           "sha256": "90800a7a2b99952e2eb956dae26454bec58f505d52a4f412ceee8bbbdb23e1fe",
           "size": 817984,
           "publishedAt": "2026-11-06T04:22:11.082Z"
+        },
+        {
+          "version": "0.3.4",
+          "engines": {
+            "enso": ">=0.2.15"
+          },
+          "permissions": [
+            "agent.intercept",
+            "ui.slot"
+          ],
+          "path": "packages/enso.pstack/0.3.4.zip",
+          "sha256": "54ce3ce4b6393bc1a7219a696f2a59f40844c695c56828a4f05c9a8ac1980e06",
+          "size": 661940,
+          "publishedAt": "2026-11-19T10:51:44.767Z"
         }
       ]
     },
