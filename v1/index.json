@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-19T12:45:55.743Z",
-  "sequence": 116,
+  "generatedAt": "2026-11-19T12:49:36.134Z",
+  "sequence": 117,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -381,13 +381,14 @@
         "browser",
         "browse"
       ],
+      "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.browse.svg",
       "category": "integrations",
       "readme": {
-        "path": "packages/enso.browse/0.1.0.readme.md",
-        "sha256": "a23e9320eb9287a6f4e2a470c6687f4f5110a9cde05ee50b8165f920e8c2ff25",
-        "size": 2859
+        "path": "packages/enso.browse/0.1.1.readme.md",
+        "sha256": "644d530cc4fe9b390c9320879071b1afb0126c002ec8d9500f8232f190e207d4",
+        "size": 2908
       },
-      "latest": "0.1.0",
+      "latest": "0.1.1",
       "versions": [
         {
           "version": "0.1.0",
@@ -405,6 +406,23 @@
           "sha256": "290bbd132e143cf5ebb3268aa6225bd0f35c171f327d4c35bf62ad2dce4a8645",
           "size": 52976,
           "publishedAt": "2026-11-19T12:45:55.743Z"
+        },
+        {
+          "version": "0.1.1",
+          "engines": {
+            "enso": ">=0.2.14"
+          },
+          "permissions": [
+            "ui.view",
+            "ui.clipboard",
+            "ui.openExternal",
+            "process.background",
+            "mcp.server"
+          ],
+          "path": "packages/enso.browse/0.1.1.zip",
+          "sha256": "28d99bd5cd27d3789cbbd1b54d0e12f995a90604bfd65c237754519062bf1322",
+          "size": 53025,
+          "publishedAt": "2026-11-19T12:49:36.134Z"
         }
       ]
     },
