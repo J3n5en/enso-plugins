@@ -37,6 +37,7 @@ EnsoCode 官方插件市场的源仓库 · [浏览插件](https://enso-plugins.j
 | Beads | `enso.beads` | 0.1.0 | 官方 | 在侧栏查看当前项目的 Beads 任务：就绪、进行中、阻塞和已关闭，支持表格、依赖、评论、认领、关闭，以及把任务交给新会话。数据来自本地 bd 或 .beads，不需要云服务。 |
 | [Better Prompt](https://github.com/nicobailon/pi-better) | `enso.better` | 0.1.0 | 官方 | 移植自 pi-better：输入框一键用 Felix Rieseberg 的「Depth」提示改写草稿。只读代理先读你的代码、文件和对话，回答四个问题（高手会多做什么、最原始的材料、具体方法和工具、什么能证明结果正确），再写出更深入的提示词。侧栏实时显示它读了什么、进行到哪一步，结果替换输入框文字，由你确认后发送。 |
 | Session Bridge | `enso.bridge` | 1.0.2 | 官方 | 跨会话桥：同项目的多个会话可在侧栏群聊室中互相提问、委托与回传结论。 |
+| Browse | `enso.browse` | 0.1.0 | 官方 | 接入 OpenCode Browse：官方扩展和官方中继，没装时插件可以自己下载一份，不改其它 agent。代理在后台标签里读页面、点击、输入、截图、录屏和抓包；登录、两步验证和付款交还给你。 |
 | Bugbot Review | `enso.bugbot` | 0.1.0 | 官方 | 移植自 Cursor review-bugbot 与 Agent Review：本地 Git diff 组装（自动识别默认基准分支、剔除 linguist-generated 文件、合并 .cursor/BUGBOT.md 规则与最小改动行数门禁）、只读 bugbot 审查子代理、/review-bugbot 技能以及侧栏 Findings 面板与一键 Fix in Chat。 |
 | Chat Board | `enso.chatboard` | 0.1.0 | 官方 | 跨项目会话看板：每张卡片就是一个会话（状态含 coworker），可分列、标未读、写备注，点卡片切换到该会话。 |
 | 微信 Clawbot | `enso.clawbot` | 0.2.0 | 官方 | 微信（WeChat）联系方式：扫码登录后，把扫码人的微信消息交给 EnsoCode 秘书，并把秘书的回复、图片和文件发回微信。 |
