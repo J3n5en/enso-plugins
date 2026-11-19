@@ -17,7 +17,7 @@ test('清单只接原版 browse 的 MCP，不再自带代理工具', async () =>
   const manifest = JSON.parse(await readFile(`${PKG}/enso-plugin.json`, 'utf8'));
   assert.equal(manifest.id, 'enso.browse');
   assert.equal(manifest.name, 'Browse');
-  assert.equal(manifest.version, '0.1.0');
+  assert.equal(manifest.version, '0.1.1');
   assert.equal(manifest.resident, true);
   assert.deepEqual(manifest.permissions.sort(), ['mcp.server', 'process.background', 'ui.clipboard', 'ui.openExternal', 'ui.view']);
   assert.equal(manifest.contributes.agentTools, undefined);
