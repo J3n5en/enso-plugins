@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-19T10:51:44.767Z",
-  "sequence": 115,
+  "generatedAt": "2026-11-19T12:45:55.743Z",
+  "sequence": 116,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -369,6 +369,42 @@
           "sha256": "f06c7efaea33439e894bc7df6463fa63ab0483ffbd6b0f1e943df2a393ab3bb8",
           "size": 76809,
           "publishedAt": "2026-11-12T02:14:49.675Z"
+        }
+      ]
+    },
+    {
+      "id": "enso.browse",
+      "name": "Browse",
+      "description": "接入 OpenCode Browse：官方扩展和官方中继，没装时插件可以自己下载一份，不改其它 agent。代理在后台标签里读页面、点击、输入、截图、录屏和抓包；登录、两步验证和付款交还给你。",
+      "tier": "official",
+      "tags": [
+        "browser",
+        "browse"
+      ],
+      "category": "integrations",
+      "readme": {
+        "path": "packages/enso.browse/0.1.0.readme.md",
+        "sha256": "a23e9320eb9287a6f4e2a470c6687f4f5110a9cde05ee50b8165f920e8c2ff25",
+        "size": 2859
+      },
+      "latest": "0.1.0",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "engines": {
+            "enso": ">=0.2.14"
+          },
+          "permissions": [
+            "ui.view",
+            "ui.clipboard",
+            "ui.openExternal",
+            "process.background",
+            "mcp.server"
+          ],
+          "path": "packages/enso.browse/0.1.0.zip",
+          "sha256": "290bbd132e143cf5ebb3268aa6225bd0f35c171f327d4c35bf62ad2dce4a8645",
+          "size": 52976,
+          "publishedAt": "2026-11-19T12:45:55.743Z"
         }
       ]
     },
