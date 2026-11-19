@@ -68,6 +68,19 @@ test('zip 排序且两次字节相同', () => {
   assert.equal(first.subarray(30, 35).toString(), 'a.txt');
 });
 
+test('zip 记录可执行位，其它文件仍是 0644', () => {
+  const zip = zipFiles([
+    { name: 'bin/run', data: Buffer.from('#!/bin/sh\n'), executable: true },
+    { name: 'main.mjs', data: Buffer.from('') },
+  ]);
+  const modes = [];
+  for (let at = zip.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02])); at >= 0; at = zip.indexOf(Buffer.from([0x50, 0x4b, 0x01, 0x02]), at + 4)) {
+    const name = zip.subarray(at + 46, at + 46 + zip.readUInt16LE(at + 28)).toString();
+    modes.push([name, (zip.readUInt32LE(at + 38) >>> 16) & 0o777]);
+  }
+  assert.deepEqual(modes, [['bin/run', 0o755], ['main.mjs', 0o644]]);
+});
+
 test('体积与文件数上限', () => {
   assert.deepEqual(checkPackageLimits(5000, 200 * 1024 * 1024), []);
   assert.equal(checkPackageLimits(5001, 1).length, 1);

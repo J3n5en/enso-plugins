@@ -299,7 +299,7 @@ async function inspectDir(dir) {
       if (ent.name.toLowerCase().endsWith('.node')) errors.push(`禁止 .node 文件 ${name}`);
       const stat = await lstat(child);
       bytes += stat.size;
-      files.push({ name, abs: child, size: stat.size });
+      files.push({ name, abs: child, size: stat.size, executable: (stat.mode & 0o111) !== 0 });
     }
   }
   await walk('');
@@ -656,10 +656,19 @@ export async function buildRepo(root, env = process.env) {
   const staged = [];
   for (const plugin of packages) {
     const files = [];
-    for (const file of plugin.files) files.push({ name: file.name, data: await readFile(file.abs) });
-    const zip = zipFiles(files);
-    const sha256 = createHash('sha256').update(zip).digest('hex');
+    for (const file of plugin.files) {
+      files.push({ name: file.name, data: await readFile(file.abs), executable: file.executable });
+    }
     const version = plugin.manifest.version;
+    const oldVersions = (previousPlugins.get(plugin.id)?.versions ?? []).map(normalizeVersion);
+    const existing = oldVersions.find((item) => item.version === version);
+    let zip = zipFiles(files);
+    // 可执行位之前一律打成 0644；已发布的版本按旧格式重打，不算内容变化
+    if (existing && files.some((file) => file.executable)) {
+      const legacy = zipFiles(files.map((file) => ({ ...file, executable: false })));
+      if (createHash('sha256').update(legacy).digest('hex') === existing.sha256) zip = legacy;
+    }
+    const sha256 = createHash('sha256').update(zip).digest('hex');
     const path = `packages/${plugin.id}/${version}.zip`;
     if (!PATH_RE.test(path) || path.split('/').includes('..')) throw new Error(`${plugin.id}: 包路径不合法`);
     const readmeData = files.find((file) => file.name === 'README.md')?.data;
@@ -671,8 +680,6 @@ export async function buildRepo(root, env = process.env) {
           data: readmeData,
         }
       : undefined;
-    const oldVersions = (previousPlugins.get(plugin.id)?.versions ?? []).map(normalizeVersion);
-    const existing = oldVersions.find((item) => item.version === version);
     if (existing && (existing.sha256 !== sha256 || existing.size !== zip.length || existing.path !== path)) {
       throw new Error(`${plugin.id}@${version} 已发布且内容不同，不能覆盖`);
     }

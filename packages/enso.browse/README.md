@@ -1,6 +1,6 @@
 # Browse
 
-直接用你已经安装的 [OpenCode Browse](https://github.com/anomalyco/browse)：官方 Chrome 扩展，官方中继。插件不自带浏览器程序，也不再复制一份扩展。
+接入 [OpenCode Browse](https://github.com/anomalyco/browse)：官方 Chrome 扩展，官方中继。本机装过 browse 就直接用；没装的话，在侧栏一键下载官方发布的那份，不改 PATH，也不碰其它 agent。
 
 代理用你自己的 Chrome，带着你的登录和你装的扩展。它在后台开标签，读页面、点击、输入、截图、录屏、抓包。轮到你的时候（登录、两步验证、付款），页面上出现卡片，你做完点 **Continue**。
 

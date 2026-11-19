@@ -2,6 +2,7 @@ import { crc32 } from 'node:zlib';
 
 const DOS_DATE = 33;
 
+/** entries: { name, data, executable? }；executable 写成 0755，Enso 解压时据此保留可执行位 */
 export function zipFiles(entries) {
   const files = [...entries].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   const parts = [];
@@ -39,7 +40,7 @@ export function zipFiles(entries) {
     central.writeUInt16LE(0, 32);
     central.writeUInt16LE(0, 34);
     central.writeUInt16LE(0, 36);
-    central.writeUInt32LE((0o100644 << 16) >>> 0, 38);
+    central.writeUInt32LE(((file.executable ? 0o100755 : 0o100644) << 16) >>> 0, 38);
     central.writeUInt32LE(offset, 42);
     parts.push(local, name, data);
     centrals.push(central, name);
