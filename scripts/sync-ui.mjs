@@ -10,6 +10,7 @@ export const UI_PACKAGES = [
   'enso.beads',
   'enso.better',
   'enso.bridge',
+  'enso.browse',
   'enso.context',
   'enso.dbstudio',
   'enso.bugbot',

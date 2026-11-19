@@ -1,0 +1,10 @@
+#!/bin/sh
+# Browse 插件的 MCP 入口：找到原版 browse 交给它。顺序与 main.mjs 的 browseBinary() 一致。
+# 插件下载的那份在 Enso 的插件数据目录：<root>/packages/enso.browse/<安装目录>/ 对应 <root>/data/enso.browse/。
+root=$(cd "$(dirname "$0")/.." && pwd)
+for b in "${ENSO_BROWSE:-}" "${XDG_BIN_HOME:+$XDG_BIN_HOME/browse}" "$HOME/.local/bin/browse" \
+  "$(command -v browse 2>/dev/null)" "$root/../../../data/enso.browse/bin/browse"; do
+  if [ -n "$b" ] && [ -f "$b" ] && [ -x "$b" ]; then exec "$b" "$@"; fi
+done
+echo "browse: 没有找到原版 browse。在 Enso 侧栏的 Browse 页点「下载 browse」，然后开一个新会话。" >&2
+exit 127

@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="enso-ui.css" />
+    <style>
+      body { padding: 10px; font-size: 12px; }
+      #app { display: flex; flex-direction: column; gap: 8px; }
+      .card { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+      .row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+      .grow { flex: 1; min-width: 0; }
+      .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .m { color: var(--muted-foreground); font-size: 11px; }
+      .err { color: var(--destructive); font-size: 11px; word-break: break-word; }
+      .code { font-size: 20px; font-weight: 600; letter-spacing: 3px; text-align: center; padding: 8px 0; border-radius: var(--radius-md); background: var(--muted); user-select: all; }
+      h2 { margin: 0; font-size: 13px; font-weight: 600; }
+      ol { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; line-height: 1.55; }
+      code { font: 11px/1.5 var(--font-mono); padding: 1px 4px; border-radius: 4px; background: var(--muted); }
+      .path { font: 11px/1.5 var(--font-mono); word-break: break-all; user-select: all; }
+      .actions { display: flex; flex-wrap: wrap; gap: 6px; }
+      .tab { padding: 4px 0; border-top: 1px solid var(--border); }
+      .tab:first-child { border-top: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="app"><div class="ui-card card"><div class="ui-skeleton" style="height: 14px; width: 60%"></div></div></div>
+    <script src="enso-ui.js"></script>
+    <script>
+      // 宿主把 window.enso 定义成不可配置的全局属性，顶层不能再声明同名变量。
+      const host = window.enso;
+      const app = document.getElementById('app');
+      let view = null;
+      let error = '';
+      let busy = false;
+
+      const h = (tag, props, ...children) => {
+        const el = document.createElement(tag);
+        for (const [key, value] of Object.entries(props ?? {})) {
+          if (key.startsWith('on')) el.addEventListener(key.slice(2), value);
+          else if (key === 'class') el.className = value;
+          else el.setAttribute(key, value);
+        }
+        el.append(...children.flat().filter((c) => c !== null && c !== undefined && c !== false));
+        return el;
+      };
+      const button = (label, onclick, kind = 'outline') =>
+        h('button', { class: `ui-btn ui-btn--sm ui-btn--${kind}`, onclick, ...(busy ? { disabled: '' } : {}) }, label);
+      const badge = (text, tone) => h('span', { class: `ui-badge${tone ? ` ui-badge--${tone}` : ''}` }, text);
+      const ago = (ms) => {
+        if (!ms) return '从未';
+        const minutes = Math.floor((Date.now() - ms) / 60000);
+        if (minutes < 1) return '刚刚';
+        if (minutes < 60) return `${minutes} 分钟前`;
+        if (minutes < 2880) return `${Math.floor(minutes / 60)} 小时前`;
+        return `${Math.floor(minutes / 1440)} 天前`;
+      };
+
+      async function call(method, args) {
+        busy = true;
+        render();
+        try {
+          const next = await host.call(method, args ?? {});
+          if (next && typeof next === 'object' && 'port' in next) view = next;
+          error = '';
+        } catch (e) {
+          error = e?.message || String(e);
+        } finally {
+          busy = false;
+          render();
+        }
+      }
+
+      const STATES = {
+        incompatible: ['版本不匹配', '扩展和中继版本对不上：在 chrome://extensions 里重新加载 browse 扩展。'],
+        refused: ['配对被拒绝', '中继拒绝了这次配对。换一个配对码再试。'],
+        unpaired: ['等待配对', '扩展已经连上中继，还没配对。'],
+        'paired-offline': ['浏览器离线', '已配对的 Chrome 现在没连上：打开那个 Chrome，确认 browse 扩展开着，它会自己重连。'],
+        'not-seen': ['等待扩展', '还没有浏览器连上来。安装商店里的 browse 扩展，再填下面的配对码。'],
+      };
+
+      function status() {
+        if (view.connected) return [badge('已连接', 'success'), view.version ? `扩展 ${view.version}` : ''];
+        if (!view.relay) return [badge('中继未运行'), '代理用到浏览器时会自动启动；等待配对时插件会让它一直开着。'];
+        const [label, detail] = STATES[view.pairingState] ?? ['未连接', ''];
+        return [badge(label, 'warning'), detail];
+      }
+
+      function setup() {
+        if (!view.binary) {
+          return h('div', { class: 'ui-card card' },
+            h('h2', null, '先装好 browse'),
+            h('div', { class: 'm' }, '插件从官方发布服务下载 browse，核对校验和后放进插件自己的目录。不改 PATH，也不碰其它 agent 的配置；卸载插件时一起删掉。'),
+            h('div', { class: 'actions' }, button(busy ? '正在下载…' : '下载 browse', () => call('install'), 'primary')),
+            h('div', { class: 'm' }, '想让其它 agent 也能用，就自己运行官方安装命令。它会把 browse 加进 PATH，并写入各个 agent 的配置：'),
+            h('div', { class: 'path' }, view.install),
+            button('复制安装命令', () => call('copy', { what: 'install' })));
+        }
+        return h('div', { class: 'ui-card card' },
+          h('h2', null, '连接浏览器'),
+          h('ol', null,
+            h('li', null, '安装 Chrome 网上应用店里的 browse 扩展。',
+              h('div', { class: 'actions' },
+                button('打开商店', () => call('reveal')),
+                button('复制链接', () => call('copy', { what: 'store' })))),
+            h('li', null, '点扩展菜单里的 browse → Options，展开 advanced（或 Pair with a code），填入下面的码，点 Connect。不用填端口。')),
+          view.code
+            ? [h('div', { class: 'code' }, view.code.code),
+               h('div', { class: 'm' }, '一次性码，10 分钟内有效。'),
+               button('复制配对码', () => call('copy', { what: 'code' }))]
+            : null,
+          h('div', { class: 'actions' }, button('换一个配对码', () => call('pair'))));
+      }
+
+      function browsers() {
+        if (!view.paired.length) return null;
+        const live = new Set(view.browsers.map((b) => b.id));
+        return h('div', { class: 'ui-card card' },
+          h('h2', null, '已配对的浏览器'),
+          view.paired.map((b) =>
+            h('div', { class: 'row' },
+              h('div', { class: 'grow' },
+                h('div', { class: 'ellipsis' }, b.name || b.id || '还没连上过', ' ', live.has(b.id) ? badge('在线', 'success') : null),
+                h('div', { class: 'm' }, `配对于 ${ago(b.pairedAt)} · 最近 ${ago(b.lastSeen)}`)),
+              button('取消配对', () => call('revoke', { key: b.key }), 'destructive'))));
+      }
+
+      function tabs() {
+        if (!view.tabs.length) return null;
+        return h('div', { class: 'ui-card card' },
+          h('h2', null, '代理在用的标签'),
+          view.tabs.map((t) =>
+            h('div', { class: 'tab' },
+              h('div', { class: 'row' },
+                h('span', { class: 'grow ellipsis' }, t.title || t.url || String(t.tab)),
+                t.lent ? badge('借出') : null,
+                t.busy ? badge('运行中', 'brand') : null),
+              h('div', { class: 'm ellipsis' }, [t.tab, t.id, t.group, t.url].filter(Boolean).join(' · ')))));
+      }
+
+      function render() {
+        if (!view) return;
+        const [tag, detail] = status();
+        app.replaceChildren(...[
+          h('div', { class: 'ui-card card' },
+            h('div', { class: 'row' }, h('h2', { class: 'grow' }, 'Browse'), tag),
+            detail ? h('div', { class: 'm' }, detail) : null,
+            error ? h('div', { class: 'err' }, error) : null,
+            view.connected
+              ? h('div', { class: 'm' }, '在 Chrome 工具栏点 browse 按钮，可以把当前标签借给代理；再点一次收回。')
+              : null),
+          view.connected ? null : setup(),
+          browsers(),
+          tabs(),
+          h('div', { class: 'm' }, '命令行：', h('span', { class: 'path' }, view.binary || '未安装'),
+            view.own ? '（插件下载的，卸载插件时一起删掉）' : null),
+          view.own ? h('div', { class: 'actions' }, button(busy ? '正在下载…' : '更新到最新版', () => call('install'))) : null,
+        ].filter(Boolean));
+      }
+
+      async function refresh() {
+        if (busy) return;
+        try {
+          view = await host.call('state');
+          error = '';
+        } catch (e) {
+          error = e?.message || String(e);
+        }
+        render();
+      }
+
+      if (!host || typeof host.call !== 'function') {
+        app.textContent = '请在 EnsoCode 侧栏中打开。';
+      } else {
+        refresh();
+        setInterval(refresh, 2000);
+      }
+    </script>
+  </body>
+</html>

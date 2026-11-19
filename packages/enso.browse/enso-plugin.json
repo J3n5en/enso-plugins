@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "enso.browse",
+  "name": "Browse",
+  "version": "0.1.0",
+  "icon": "icon.svg",
+  "description": "接入 OpenCode Browse：官方扩展和官方中继，没装时插件可以自己下载一份，不改其它 agent。代理在后台标签里读页面、点击、输入、截图、录屏和抓包；登录、两步验证和付款交还给你。",
+  "engines": { "enso": ">=0.2.14" },
+  "main": "main.mjs",
+  "resident": true,
+  "permissions": ["ui.view", "ui.clipboard", "ui.openExternal", "process.background", "mcp.server"],
+  "contributes": {
+    "views": [{ "id": "browse", "title": "Browse", "entry": "view.html" }],
+    "methods": [
+      { "name": "state", "timeoutMs": 10000 },
+      { "name": "pair", "timeoutMs": 60000 },
+      { "name": "revoke", "timeoutMs": 60000 },
+      { "name": "install", "timeoutMs": 120000 },
+      { "name": "reveal", "timeoutMs": 10000 },
+      { "name": "copy", "timeoutMs": 10000 }
+    ],
+    "mcpServers": [{ "name": "browse", "command": "${ENSO_PLUGIN_ROOT}/bin/run", "args": ["mcp"] }],
+    "skills": ["skills/browse"]
+  }
+}
