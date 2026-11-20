@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-20T07:24:23.363Z",
-  "sequence": 118,
+  "generatedAt": "2026-11-20T18:22:49.418Z",
+  "sequence": 119,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -1035,11 +1035,11 @@
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.hongguo.svg",
       "category": "fun",
       "readme": {
-        "path": "packages/enso.hongguo/0.2.16.readme.md",
-        "sha256": "260c39c1e78835a4963fbd3f78316e75b6a17fcf87f928d6f3ce36c11d42ef50",
-        "size": 7484
+        "path": "packages/enso.hongguo/0.2.18.readme.md",
+        "sha256": "79210b6ca7f151a09a0b87121ce16bffa9ea13552822bb7a9d3c349f89465ed7",
+        "size": 7783
       },
-      "latest": "0.2.16",
+      "latest": "0.2.18",
       "versions": [
         {
           "version": "0.2.4",
@@ -1170,6 +1170,16 @@
           "sha256": "735569d374fac47ae1b58ae77d7c444890af53e7818f7887071ae88c41ee7f22",
           "size": 8072865,
           "publishedAt": "2026-11-20T07:24:23.363Z"
+        },
+        {
+          "version": "0.2.18",
+          "permissions": [
+            "ui.view"
+          ],
+          "path": "packages/enso.hongguo/0.2.18.zip",
+          "sha256": "473f2861a936f68efb7f0571d89e805553ef36f44f3f10bc24acdd364b3fffc1",
+          "size": 8121337,
+          "publishedAt": "2026-11-20T18:22:49.418Z"
         }
       ]
     },
