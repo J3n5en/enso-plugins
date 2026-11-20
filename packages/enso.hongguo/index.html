@@ -70,6 +70,11 @@
       .toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted-foreground); cursor: pointer; user-select: none; }
       .desc { margin: 10px 0 4px; font-size: 12px; line-height: 1.6; color: var(--muted-foreground); }
       .desc:empty { display: none; }
+      /* 首页瀑布流的卡片多一行剧情摘要 */
+      .card .d {
+        font-size: 11px; line-height: 1.4; color: var(--muted-foreground); margin-top: 2px;
+        display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+      }
 
       /* 详情页占满一屏，选集区单独滚动，播放器始终可见 */
       #detail:not([hidden]) { display: flex; flex-direction: column; height: calc(100dvh - 24px); }
@@ -105,6 +110,7 @@
     <nav class="nav" id="nav">
       <div class="ui-seg" id="tabs" role="tablist">
         <button id="reset" type="button" aria-pressed="true">推荐</button>
+        <button id="homeFeed" type="button" aria-pressed="false">首页</button>
         <button id="openHistory" type="button" aria-pressed="false">历史</button>
       </div>
     </nav>
@@ -242,6 +248,13 @@
         t.className = 't';
         t.textContent = s.title;
         el.append(img, t);
+        // 首页瀑布流的卡片带一段剧情摘要，商城卡片没有
+        if (s.vid && s.description) {
+          const d = document.createElement('div');
+          d.className = 'd';
+          d.textContent = s.description;
+          el.append(d);
+        }
         el.onclick = () => openSeries(s);
         return el;
       }
@@ -254,13 +267,14 @@
         const drop = new Set(ids);
         store.set('shown', [...ids].reverse().concat(loadShown().filter((id) => !drop.has(id))).slice(0, SHOWN_MAX));
       }
-      let feed = { method: 'discover', q: '', cursor: '', seen: new Set(), blocked: new Set(), token: 0 };
+      let feed = { method: 'discover', channel: '', q: '', cursor: '', seen: new Set(), blocked: new Set(), token: 0 };
       async function loadFeed(reset) {
         if (reset) {
-          const blocked = feed.method === 'discover'
+          // 首页瀑布流每次重新给一批，不按已看过过滤，否则 12 条很快就空了
+          const blocked = feed.method === 'discover' && !feed.channel
             ? new Set(loadShown().concat(loadHistory().map((r) => r.id)))
             : new Set();
-          feed = { method: feed.method, q: feed.q, cursor: '', seen: new Set(), blocked, token: feed.token + 1 };
+          feed = { method: feed.method, channel: feed.channel, q: feed.q, cursor: '', seen: new Set(), blocked, token: feed.token + 1 };
           $('grid').replaceChildren();
         }
         const token = feed.token;
@@ -275,16 +289,16 @@
           let added = 0;
           const discover = feed.method === 'discover';
           for (let pulls = 0; pulls < (discover ? 5 : 1); pulls++) {
-            const page = await call(feed.method, { q: feed.q, cursor: feed.cursor || undefined });
+            const page = await call(feed.method, { q: feed.q, cursor: feed.cursor || undefined, channel: feed.channel || undefined });
             if (token !== feed.token) return;
             const ids = [];
             for (const s of page.items) {
               if (feed.seen.has(s.id) || feed.blocked.has(s.id)) continue;
               feed.seen.add(s.id);
               ids.push(s.id);
-              $('grid').append(card(s, s.count ? `${s.count}集` : ''));
+              $('grid').append(card(s, s.rec || (s.count ? `${s.count}集` : '')));
             }
-            if (discover) noteShown(ids);
+            if (discover && !feed.channel) noteShown(ids);
             added += ids.length;
             feed.cursor = page.cursor;
             hasMore = !!page.hasMore;
@@ -319,7 +333,7 @@
         $('recent').hidden = !recent.length;
         $('recentGrid').replaceChildren(...recent.slice(0, 6).map((r) => card(r, `第${r.number}集`)));
         ensoUI.stagger($('recentGrid'));
-        $('listTitle').textContent = feed.q ? `搜索：${feed.q}` : '推荐';
+        $('listTitle').textContent = feed.q ? `搜索：${feed.q}` : feed.channel ? '首页推荐' : '推荐';
       }
 
       // ---------- history ----------
@@ -392,7 +406,8 @@
       }
       function syncNav() {
         $('nav').hidden = !$('detail').hidden;
-        $('reset').setAttribute('aria-pressed', String(!$('home').hidden));
+        $('reset').setAttribute('aria-pressed', String(!$('home').hidden && !feed.channel));
+        $('homeFeed').setAttribute('aria-pressed', String(!$('home').hidden && Boolean(feed.channel)));
         $('openHistory').setAttribute('aria-pressed', String(!$('history').hidden));
         ensoUI.seg($('tabs'));
       }
@@ -455,6 +470,7 @@
       const showFeed = () => {
         $('q').value = '';
         feed.method = 'discover';
+        feed.channel = '';
         feed.q = '';
         renderRecent();
         loadFeed(true);
@@ -463,7 +479,20 @@
         if (!$('history').hidden) return show(false);
         showFeed();
       };
-      $('refresh').onclick = showFeed;
+      // 首页瀑布流：服务端按 bottom_tab_type=0 的首页 tab 下发卡片，每张自带可播的 vid
+      const showHome = () => {
+        $('q').value = '';
+        feed.method = 'discover';
+        feed.channel = '首页真人剧';
+        feed.q = '';
+        renderRecent();
+        loadFeed(true);
+      };
+      $('homeFeed').onclick = () => {
+        if (!$('history').hidden) return show(false);
+        showHome();
+      };
+      $('refresh').onclick = () => (feed.channel ? showHome() : showFeed());
       $('more').onclick = () => loadFeed(false);
 
       // ---------- detail / player ----------

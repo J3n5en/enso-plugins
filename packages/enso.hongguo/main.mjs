@@ -86,13 +86,22 @@ export function activate(enso, { createClient = loadClient } = {}) {
     }
   };
 
-  const summary = (s) => ({
-    id: s.id,
-    title: s.title,
-    description: s.description?.slice(0, 300),
-    cover: s.cover_url,
-    count: s.episode_count,
-  });
+  const summary = (s) => {
+    const row = {
+      id: s.id,
+      title: s.title,
+      description: s.description?.slice(0, 300),
+      cover: s.cover_url,
+      count: s.episode_count,
+    };
+    // 首页瀑布流的卡片直接带可播视频、热度角标和整部剧总时长；商城卡片没有这些
+    if (s.vid) row.vid = s.vid;
+    if (s.play_count) row.play = s.play_count;
+    if (s.rec_text) row.rec = s.rec_text;
+    if (s.duration_seconds) row.duration = s.duration_seconds;
+    if (s.vertical !== undefined) row.vertical = s.vertical;
+    return row;
+  };
   const page = (p) => ({
     items: (p.items ?? []).map(summary),
     cursor: p.cursor,
@@ -105,7 +114,10 @@ export function activate(enso, { createClient = loadClient } = {}) {
       throw e;
     });
 
-  enso.renderer.handle('discover', (a) => list((c) => c.discover({ cursor: a?.cursor || undefined }), true));
+  // channel 为空时是商城的推荐；首页瀑布流用 "首页真人剧" / "首页漫剧"
+  enso.renderer.handle('discover', (a) =>
+    list((c) => c.discover({ cursor: a?.cursor || undefined, channel: a?.channel || undefined }), true)
+  );
 
   // 侧栏按会话各开一个页面实例：记住唯一在播的实例和进度，其余实例据此接力
   let now = null;
