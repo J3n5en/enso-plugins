@@ -15,7 +15,7 @@ const QUALITIES = ['360p', '480p', '540p', '720p', '1080p'];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // openhongguo 以源码形式放在 vendor/ 里：npm 上的 0.4.0 仍请求已下线的 V5 播放路径
-// （/novel/player/multi_video_model/player/v1 返回空 200），这里的 wasm 带路径修复。
+// （旧路径回空 200）。这里的 wasm 带 #17 路径修复，以及 #16 的 video_tab 回退。
 const loadClient = (options) => import('./vendor/openhongguo/index.js').then((m) => m.createClient(options));
 
 export function activate(enso, { createClient = loadClient } = {}) {
@@ -50,7 +50,7 @@ export function activate(enso, { createClient = loadClient } = {}) {
       RATE_LIMITED: '请求太频繁，稍后再试',
       TRANSPORT: '网络请求失败',
       CONTENT_UNAVAILABLE: '内容已下架或不可访问',
-      ANONYMOUS_LIMITED: '匿名设备被服务端限制，已换新设备仍取不到内容',
+      ANONYMOUS_LIMITED: '服务端暂时限制了匿名访问，等一两分钟再试',
       DEVICE_REJECTED: '匿名设备被服务端拒绝，已换新设备仍不可用',
       AUTHENTICATION_REQUIRED: '该内容需要登录',
       CHALLENGE_REQUIRED: '服务端要求验证，匿名无法继续',
@@ -76,12 +76,13 @@ export function activate(enso, { createClient = loadClient } = {}) {
       try {
         return await fn(c);
       } catch (e) {
-        if (e?.code !== 'ANONYMOUS_LIMITED' || i >= 2) throw friendly(e);
+        // 换设备只在第一次有用；服务端是按 IP 限的，连续换设备只会更快触发风控
+        if (e?.code !== 'ANONYMOUS_LIMITED' || i >= 1) throw friendly(e);
         await reset(c, seen).catch((err) => {
           console.warn('resetDevice failed', err?.message);
           throw friendly(e);
         });
-        await sleep(500 * 2 ** i);
+        await sleep(2000);
       }
     }
   };
@@ -157,15 +158,23 @@ export function activate(enso, { createClient = loadClient } = {}) {
   });
 
   // compact tuples [id, number, playable, title?] keep 1000+ episode series under 64KB
-  enso.renderer.handle('episodes', (a) =>
-    fresh((c) => c.listEpisodes(String(a?.seriesId ?? ''))).then((p) =>
-      (p.items ?? []).map((e) => {
+  // 同一部剧的分集列表是稳定的，缓存 10 分钟：匿名接口有配额，首页高光流切换很快
+  const epsCache = new Map();
+  enso.renderer.handle('episodes', (a) => {
+    const sid = String(a?.seriesId ?? '');
+    const hit = epsCache.get(sid);
+    if (hit && Date.now() - hit.at < 600000) return hit.rows;
+    return fresh((c) => c.listEpisodes(sid)).then((p) => {
+      const rows = (p.items ?? []).map((e) => {
         const row = [e.id, e.number, e.playable !== false ? 1 : 0];
         if (e.title && e.title !== `第${e.number}集`) row.push(e.title.slice(0, 40));
         return row;
-      })
-    )
-  );
+      });
+      epsCache.set(sid, { at: Date.now(), rows });
+      if (epsCache.size > 60) epsCache.delete(epsCache.keys().next().value);
+      return rows;
+    });
+  });
 
   const run = (bin, args, signal) =>
     new Promise((resolve, reject) => {
@@ -232,11 +241,23 @@ export function activate(enso, { createClient = loadClient } = {}) {
 
   const resolve = (episodeId) => sdk((c) => c.resolvePlayback(episodeId));
 
-  const pick = (streams, quality) => {
+  // Chrome MSE 认 avc1/hvc1，不认字节的 bvc2（device_level 高时会下发）。
+  const mseVideo = (codec) => /^(avc1|avc3|hvc1|hev1)$/i.test(codec || '');
+  const apiBvc2 = (codec) => /bytevc2|^bvc2$/i.test(codec || '');
+  const apiH264 = (codec) => /h264|avc1|avc3/i.test(codec || '');
+
+  const listStreams = (streams, quality) => {
     const rank = (s) => QUALITIES.indexOf(s.definition);
-    const sorted = [...streams].filter((s) => s.url).sort((x, y) => rank(x) - rank(y) || x.bitrate - y.bitrate);
     const want = QUALITIES.indexOf(quality);
-    return sorted.filter((s) => rank(s) <= want).pop() ?? sorted[0];
+    const usable = [...streams].filter((s) => s.url);
+    const pool = usable.filter((s) => !apiBvc2(s.codec));
+    const src = pool.length ? pool : usable;
+    const score = (s) => {
+      const r = rank(s);
+      const q = r < 0 ? -1000 : want < 0 || r <= want ? r : want - r;
+      return (apiH264(s.codec) ? 100 : 0) + q;
+    };
+    return src.sort((a, b) => score(b) - score(a) || (b.bitrate || 0) - (a.bitrate || 0));
   };
 
   const finalPath = (episodeId, definition) => join(videoDir, `${episodeId.replace(/\W/g, '')}-${definition}.mp4`);
@@ -312,6 +333,7 @@ export function activate(enso, { createClient = loadClient } = {}) {
       try {
         const st = await prepare(job, url, key);
         job.info.codec = st.rx.video.format;
+        if (!mseVideo(st.rx.video.format)) throw new Error(`不支持的视频编码 ${st.rx.video.format}`);
         job.ready();
         await pump(job, url, st);
         await writeFile(`${job.final}.json`, JSON.stringify(job.info));
@@ -338,27 +360,38 @@ export function activate(enso, { createClient = loadClient } = {}) {
     for (const j of jobs.values()) {
       if (j.episodeId !== episodeId || j.quality !== quality || j.error) continue;
       await j.readyP;
-      if (!j.error) return j.info;
+      if (!j.error && mseVideo(j.info?.codec)) return j.info;
     }
     const { playback, contentKey, contentKeyError } = await resolve(episodeId);
     if (playback.protected && !contentKey) throw new Error(contentKeyError?.message ?? '无法取得内容密钥');
-    const stream = pick(playback.streams ?? [], quality);
-    if (!stream) throw new Error('没有可用的播放地址');
-    const final = finalPath(episodeId, stream.definition);
-    const cached = await readFile(`${final}.json`, 'utf8').then(JSON.parse, () => null);
-    if (cached && existsSync(final)) {
-      jobs.set(final, { episodeId, quality, info: cached, final, done: true });
-      return cached;
-    }
-    const info = { episodeId, definition: stream.definition, codec: '', duration: playback.duration_seconds };
-    const job = { episodeId, quality, info, final, part: `${final}.part`, done: false, abort: new AbortController() };
-    job.readyP = new Promise((r) => (job.ready = r));
-    jobs.set(final, job);
+    const streams = listStreams(playback.streams ?? [], quality);
+    if (!streams.length) throw new Error('没有可用的播放地址');
     await mkdir(videoDir, { recursive: true });
-    download(job, [stream.url, stream.backup_url].filter(Boolean), contentKey?.key);
-    await job.readyP;
-    if (job.error) throw new Error(job.error);
-    return info;
+    let last = '没有可用的播放地址';
+    for (const stream of streams) {
+      const final = finalPath(episodeId, stream.definition);
+      const cached = await readFile(`${final}.json`, 'utf8').then(JSON.parse, () => null);
+      if (cached && existsSync(final) && mseVideo(cached.codec)) {
+        jobs.set(final, { episodeId, quality, info: cached, final, done: true });
+        return cached;
+      }
+      const existing = jobs.get(final);
+      if (existing && !existing.error) {
+        await existing.readyP;
+        if (!existing.error && mseVideo(existing.info?.codec)) return existing.info;
+        continue;
+      }
+      const info = { episodeId, definition: stream.definition, codec: '', duration: playback.duration_seconds };
+      const job = { episodeId, quality, info, final, part: `${final}.part`, done: false, abort: new AbortController() };
+      job.readyP = new Promise((r) => (job.ready = r));
+      jobs.set(final, job);
+      download(job, [stream.url, stream.backup_url].filter(Boolean), contentKey?.key);
+      await job.readyP;
+      if (!job.error && mseVideo(job.info.codec)) return job.info;
+      last = job.error || `不支持的视频编码 ${job.info.codec || stream.codec || ''}`;
+      jobs.delete(final);
+    }
+    throw new Error(String(last).includes('编码') ? '这部剧的编码浏览器播不了，换低清晰度或换一集' : last);
   });
 
   const usageOf = async (dir) => {

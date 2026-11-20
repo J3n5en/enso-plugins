@@ -11,14 +11,35 @@
       :root[data-theme='dark'] {
         --hg: oklch(0.704 0.191 22.216);
       }
-      body { padding: 12px; }
+      /* 自己给底色，不靠宿主透出：浅色白底深字、深色黑底白字都自洽 */
+      body { padding: 12px 12px 64px; background: var(--background); }
       section:not([hidden]) {
         animation: ui-rise var(--dur-3) var(--ease-out) both, ui-fade-in var(--dur-2) var(--ease-out) both;
       }
       svg.i { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
-      .nav { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
-      .nav .ui-seg { flex: none; }
+      .tabbar {
+        position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+        display: flex; height: 52px; padding-bottom: env(safe-area-inset-bottom, 0);
+        background: var(--background); border-top: 1px solid var(--border);
+      }
+      .tabbar button {
+        flex: 1; border: 0; background: none; cursor: pointer;
+        color: var(--muted-foreground); font: 500 12px/1 ui-sans-serif, system-ui;
+      }
+      .tabbar button[aria-pressed='true'] { color: var(--foreground); font-weight: 700; }
+      body:has(#reel:not([hidden])) { padding: 0 0 52px; background: #000; }
+      body:has(#reel:not([hidden])) .tabbar {
+        background: #111; border-top-color: rgb(255 255 255 / 0.08);
+      }
+      body:has(#reel:not([hidden])) .tabbar button { color: rgb(255 255 255 / 0.42); }
+      body:has(#reel:not([hidden])) .tabbar button[aria-pressed='true'] { color: #fff; }
+      /* 推荐播放页只看高光，列表那套控件一律不露头 */
+      body:has(#reel:not([hidden])) #grid,
+      body:has(#reel:not([hidden])) #more,
+      body:has(#reel:not([hidden])) #recent,
+      body:has(#reel:not([hidden])) #homeError { display: none !important; }
+      body:has(#detail:not([hidden])) { padding-bottom: 12px; }
       .bar { display: flex; gap: 6px; margin-bottom: 12px; align-items: center; }
       .search { position: relative; flex: 1; min-width: 0; }
       .search svg { position: absolute; left: 9px; top: 50%; translate: 0 -50%; color: var(--muted-foreground); pointer-events: none; }
@@ -75,11 +96,116 @@
         font-size: 11px; line-height: 1.4; color: var(--muted-foreground); margin-top: 2px;
         display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
       }
+      /* 推荐高光：对齐 App「推荐」全屏播放 */
+      #reel {
+        position: relative; overflow: hidden; color: #fff;
+        margin: 0; background: #000; height: calc(100dvh - 52px); min-height: 360px;
+      }
+      #reelVideo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; display: block; cursor: pointer; }
+      .reel-tabs {
+        position: absolute; top: 0; left: 0; right: 0; z-index: 3;
+        display: flex; align-items: center; padding: 6px 4px 0;
+      }
+      .reel-tabs-ch { flex: 1; display: flex; justify-content: center; gap: 22px; }
+      .reel-tabs-ch button {
+        border: 0; background: none; color: rgb(255 255 255 / 0.5); cursor: pointer;
+        font: 600 16px/1.2 ui-sans-serif, system-ui; padding: 10px 2px;
+      }
+      .reel-tabs-ch button.on { color: #fff; box-shadow: inset 0 -2px 0 #fff; }
+      .reel-search {
+        flex: none; width: 40px; height: 40px; border: 0; border-radius: 50%;
+        background: none; color: #fff; display: grid; place-items: center; cursor: pointer;
+      }
+      .reel-search .i { width: 20px; height: 20px; }
+      .reel-play {
+        position: absolute; left: 50%; top: 42%; z-index: 2; width: 64px; height: 64px;
+        margin: -32px 0 0 -32px; border: 0; border-radius: 50%; cursor: pointer;
+        background: rgb(255 255 255 / 0.92); display: grid; place-items: center;
+      }
+      .reel-play svg { width: 28px; height: 28px; fill: #111; margin-left: 3px; }
+      .reel-meta {
+        position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; padding: 48px 14px 16px;
+        background: linear-gradient(to top, #000 12%, transparent); pointer-events: none;
+      }
+      .reel-meta > * { pointer-events: auto; }
+      .reel-rec { font-size: 12px; color: rgb(255 255 255 / 0.72); }
+      .reel-title { font-size: 18px; font-weight: 700; margin-top: 6px; letter-spacing: 0.2px; }
+      .reel-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+      .reel-tags:empty { display: none; }
+      .reel-tags span { font-size: 11px; padding: 2px 8px; border-radius: 6px; background: rgb(255 255 255 / 0.12); }
+      .reel-desc {
+        margin-top: 8px; font-size: 12px; line-height: 1.5; color: rgb(255 255 255 / 0.7);
+        display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer;
+      }
+      .reel-desc.open { -webkit-line-clamp: 8; }
+      .reel-desc:empty { display: none; }
+      .reel-row { display: flex; gap: 8px; margin-top: 12px; }
+      .reel-watch {
+        flex: 1; min-width: 0; margin: 0; border: 0; border-radius: 10px; cursor: pointer;
+        padding: 11px 12px; text-align: left; font-size: 13px; font-weight: 600;
+        color: #fff; background: rgb(28 28 28 / 0.96);
+      }
+      .reel-skip {
+        flex: none; border: 0; border-radius: 10px; cursor: pointer;
+        padding: 11px 16px; font-size: 13px; font-weight: 600;
+        color: #fff; background: rgb(255 255 255 / 0.16);
+      }
+      .reel-side {
+        position: absolute; right: 10px; bottom: 178px; z-index: 2;
+        display: flex; flex-direction: column; align-items: center; gap: 12px;
+      }
+      .reel-stat { text-align: center; font-size: 11px; color: #fff; }
+      .reel-stat:empty { display: none; }
+      .reel-stat svg { width: 26px; height: 26px; stroke: #fff; fill: none; display: block; margin: 0 auto 4px; stroke-width: 1.8; }
+      .reel-mute {
+        width: 34px; height: 34px; border: 0; border-radius: 50%; cursor: pointer;
+        background: rgb(20 20 20 / 0.6); color: #fff; display: grid; place-items: center;
+      }
+      .reel-mute svg { width: 18px; height: 18px; stroke: #fff; fill: none; stroke-width: 1.8; }
+      .reel-mute[data-muted='1'] { color: rgb(255 255 255 / 0.55); }
+      /* 播放进度：贴着播放器底边，点/拖都能 seek */
+      .reel-prog {
+        position: absolute; left: 0; right: 0; bottom: 0; z-index: 4; height: 14px;
+        display: flex; align-items: flex-end; cursor: pointer; touch-action: none;
+      }
+      .reel-prog::before {
+        content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 3px;
+        background: rgb(255 255 255 / 0.24);
+      }
+      .reel-prog .fill {
+        position: relative; height: 3px; width: 0; background: var(--hg);
+        transition: width 0.12s linear;
+      }
+      .reel-prog.dragging .fill { transition: none; }
+      .reel-prog.big { height: 20px; }
+      .reel-prog.big::before, .reel-prog.big .fill { height: 4px; }
+      .reel-hint {
+        position: absolute; inset: 0; z-index: 1; display: grid; place-items: center; padding: 20px; text-align: center;
+        color: rgb(255 255 255 / 0.92); font-size: 15px; font-weight: 600; pointer-events: none;
+        text-shadow: 0 1px 8px rgb(0 0 0 / 0.6);
+      }
+      .reel-hint:empty { display: none; }
 
-      /* 详情页占满一屏，选集区单独滚动，播放器始终可见 */
-      #detail:not([hidden]) { display: flex; flex-direction: column; height: calc(100dvh - 24px); }
+      /* 详情页占满一屏：播放器吃掉剩余空间，选集区自己滚，整页不滚 */
+      #detail:not([hidden]) {
+        display: flex; flex-direction: column; height: calc(100dvh - 24px); overflow: hidden;
+      }
       #detail > * { flex: none; }
-      #detail > .eps { flex: 1 1 0; min-height: 96px; overflow-y: auto; overscroll-behavior: contain; align-content: start; }
+      #detail > .bar, #detail > .meta, #detail > .desc, #detail > .error { flex: none; min-height: 0; }
+      /* 画面按容器伸缩，别再用 9:16 + 65vh 撑破窄面板 */
+      #detail > #player { flex: 1 1 auto; min-height: 140px; }
+      #detail > #player video { width: 100%; height: 100%; max-height: 100%; aspect-ratio: auto; object-fit: contain; }
+      #detail > .desc {
+        display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+      }
+      #detail > .eps {
+        flex: 0 0 auto; max-height: 42%; min-height: 96px;
+        overflow-y: auto; overscroll-behavior: contain; align-content: start;
+      }
+      /* 集号跟正文同色：详情页底色可能是播放器的黑，别再用会给成近黑的 --foreground */
+      #detail > .eps button { color: inherit; }
+      #detail > .eps button.seen:not(.on) { color: color-mix(in oklch, currentColor 60%, transparent); }
+      #detail > .eps button:disabled { color: inherit; opacity: 0.35; }
       .eps { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); grid-auto-rows: 30px; gap: 4px; margin-top: 12px; }
       .eps button {
         height: 30px; padding: 0; border: 0; border-radius: var(--radius-md);
@@ -107,16 +233,9 @@
     </style>
   </head>
   <body>
-    <nav class="nav" id="nav">
-      <div class="ui-seg" id="tabs" role="tablist">
-        <button id="reset" type="button" aria-pressed="true">推荐</button>
-        <button id="homeFeed" type="button" aria-pressed="false">首页</button>
-        <button id="openHistory" type="button" aria-pressed="false">历史</button>
-      </div>
-    </nav>
 
     <section id="home">
-      <div class="bar">
+      <div class="bar" id="bar">
         <label class="search">
           <svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
           <input id="q" class="ui-input" type="search" placeholder="搜索短剧，回车" />
@@ -124,6 +243,41 @@
         <button id="refresh" class="ui-btn ui-btn--icon" type="button" data-tip="换一批" aria-label="换一批">
           <svg class="i" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-9 9 9.7 9.7 0 0 1-6.7-2.7L3 16" /><path d="M3 21v-5h5" /><path d="M3 12a9 9 0 0 1 9-9 9.7 9.7 0 0 1 6.7 2.7L21 8" /><path d="M16 3h5v5" /></svg>
         </button>
+      </div>
+      <!-- 推荐高光：漫剧 / 真人剧 / 推荐，一条一屏 -->
+      <div id="reel" hidden>
+        <video id="reelVideo" playsinline></video>
+        <div class="reel-tabs" id="reelTabs">
+          <div class="reel-tabs-ch">
+            <button type="button" data-ch="漫剧">漫剧</button>
+            <button type="button" data-ch="真人剧">真人剧</button>
+            <button type="button" data-ch="推荐" class="on">推荐</button>
+          </div>
+          <button id="openSearch" class="reel-search" type="button" aria-label="搜索">
+            <svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+          </button>
+        </div>
+        <button id="reelPlayBtn" class="reel-play" type="button" hidden aria-label="播放">
+          <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+        </button>
+        <div class="reel-hint" id="reelHint"></div>
+        <div class="reel-side">
+          <div class="reel-stat" id="reelHeat"></div>
+          <button id="reelMute" class="reel-mute" type="button" data-muted="0" aria-label="静音切换">
+            <svg viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4z" /><path d="M16 9a4 4 0 0 1 0 6" /></svg>
+          </button>
+        </div>
+        <div class="reel-meta">
+          <div class="reel-rec" id="reelRec"></div>
+          <div class="reel-title" id="reelTitle"></div>
+          <div class="reel-tags" id="reelTags"></div>
+          <div class="reel-desc" id="reelDesc"></div>
+          <div class="reel-row">
+            <button id="reelOpen" class="reel-watch" type="button">观看完整剧</button>
+            <button id="reelSkip" class="reel-skip" type="button">下一个</button>
+          </div>
+        </div>
+        <div class="reel-prog" id="reelProg" role="slider" aria-label="播放进度"><div class="fill" id="reelProgFill"></div></div>
       </div>
       <div id="recent" hidden>
         <div class="head">
@@ -169,12 +323,38 @@
       <div class="desc" id="desc"></div>
       <div class="eps" id="eps"></div>
     </section>
+    <nav class="tabbar" id="nav">
+      <button id="reset" type="button" aria-pressed="false">首页</button>
+      <button id="homeFeed" type="button" aria-pressed="true">推荐</button>
+      <button id="openHistory" type="button" aria-pressed="false">历史</button>
+    </nav>
 
     <script src="enso-ui.js"></script>
     <script src="player.js"></script>
     <script>
       const $ = (id) => document.getElementById(id);
+      // 插件这边没人设 data-theme：系统深色时 body 透出黑底，
+      // 而文字还在用浅色主题的近黑色，选集、描述几乎看不见。
+      const darkMQ = matchMedia('(prefers-color-scheme: dark)');
+      const applyTheme = () => { document.documentElement.dataset.theme = darkMQ.matches ? 'dark' : 'light'; };
+      applyTheme();
+      darkMQ.addEventListener('change', applyTheme);
       const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      // video.load() / 切集 会把 SourceBuffer 从 MediaSource 卸掉；后续 appendBuffer 会抛 InvalidStateError。
+      const mseIdle = (sb) => new Promise((r) => {
+        try {
+          if (!sb.updating) return r();
+          const done = () => { try { sb.removeEventListener('updateend', done); sb.removeEventListener('error', done); } catch {} r(); };
+          sb.addEventListener('updateend', done, { once: true });
+          sb.addEventListener('error', done, { once: true });
+        } catch { r(); }
+      });
+      const mseDead = (e) =>
+        e?.name === 'InvalidStateError' || /removed from the parent media source/i.test(String(e?.message || ''));
+      const tryPlay = (v, ms = 200) => Promise.race([
+        v.play().then(() => true, () => false),
+        sleep(ms).then(() => false),
+      ]);
       const store = {
         get: (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
         set: (k, v) => localStorage.setItem(k, JSON.stringify(v)),
@@ -227,18 +407,44 @@
         }
       }
 
+      // 商城的「推荐」里有些条目没带 episode_count，卡片角标就空着。
+      // 补一次分集数，按剧 id 缓存，别每次刷新都重问。
+      const countCache = new Map();
+      async function fillCardCount(s, put) {
+        if (countCache.has(s.id)) {
+          const n = countCache.get(s.id);
+          if (n) put(`${n}集`);
+          return;
+        }
+        const saved = store.get(`epc:${s.id}`, 0);
+        if (saved) {
+          countCache.set(s.id, saved);
+          put(`${saved}集`);
+          return;
+        }
+        try {
+          const rows = await call('episodes', { seriesId: s.id });
+          const n = rows.length;
+          if (!n) return;
+          countCache.set(s.id, n);
+          store.set(`epc:${s.id}`, n);
+          put(`${n}集`);
+        } catch {}
+      }
       function card(s, badge) {
         const el = document.createElement('div');
         el.className = 'card';
         el.title = s.description || s.title;
         const img = document.createElement('div');
         img.className = 'img';
-        if (badge) {
+        const putBadge = (text) => {
           const b = document.createElement('span');
           b.className = 'badge';
-          b.textContent = badge;
+          b.textContent = text;
           img.append(b);
-        }
+        };
+        if (badge) putBadge(badge);
+        else if (!s.count) fillCardCount(s, putBadge);
         if (s.cover) {
           img.dataset.cover = s.cover;
           if (covers.has(s.cover)) img.style.backgroundImage = `url("${covers.get(s.cover)}")`;
@@ -268,13 +474,17 @@
         store.set('shown', [...ids].reverse().concat(loadShown().filter((id) => !drop.has(id))).slice(0, SHOWN_MAX));
       }
       let feed = { method: 'discover', channel: '', q: '', cursor: '', seen: new Set(), blocked: new Set(), token: 0 };
+      // 和推荐流一样：服务端只认游标往后走。每次都从空游标拉，拿到的永远是
+      // 最前面那一小批，靠「最近展示过」去过滤，翻几轮就只剩「这一批都看过了」。
+      const feedCursorKey = (f) => (f.method === 'discover' ? `feedCursor:${f.channel || '-'}` : '');
       async function loadFeed(reset) {
         if (reset) {
           // 首页瀑布流每次重新给一批，不按已看过过滤，否则 12 条很快就空了
           const blocked = feed.method === 'discover' && !feed.channel
             ? new Set(loadShown().concat(loadHistory().map((r) => r.id)))
             : new Set();
-          feed = { method: feed.method, channel: feed.channel, q: feed.q, cursor: '', seen: new Set(), blocked, token: feed.token + 1 };
+          const key = feedCursorKey(feed);
+          feed = { method: feed.method, channel: feed.channel, q: feed.q, cursor: key ? store.get(key, '') : '', seen: new Set(), blocked, token: feed.token + 1 };
           $('grid').replaceChildren();
         }
         const token = feed.token;
@@ -300,18 +510,29 @@
             }
             if (discover && !feed.channel) noteShown(ids);
             added += ids.length;
-            feed.cursor = page.cursor;
+            feed.cursor = page.cursor ?? '';
             hasMore = !!page.hasMore;
             if (!hasMore || added >= 9) break;
           }
+          // 到头了清掉游标，下次从新一轮开始；否则记住位置，下次接在后面
+          const key = feedCursorKey(feed);
+          if (key) store.set(key, hasMore && feed.cursor ? feed.cursor : '');
           if (token !== feed.token) return;
           [...$('grid').children].slice(start).forEach((el, i) => el.style.setProperty('--i', i));
-          $('more').hidden = !hasMore;
+          // 首页列表的异步收尾可能晚于切进推荐播放页，别把「加载更多」漏在播放页上
+          $('more').hidden = !hasMore || !$('reel').hidden;
           if (!$('grid').children.length) {
             $('homeError').textContent = feed.method === 'discover' ? '这一批都看过了，点右上角换一批' : '没有搜到结果';
           }
         } catch (e) {
-          if (token === feed.token) { $('homeError').className = 'error'; $('homeError').textContent = e.message; $('more').hidden = false; }
+          if (token === feed.token) {
+            // 存下来的游标可能过期，清掉让下次从头拉
+            const key = feedCursorKey(feed);
+            if (key) store.set(key, '');
+            $('homeError').className = 'error';
+            $('homeError').textContent = e.message;
+            $('more').hidden = !$('reel').hidden;
+          }
         } finally {
           status.remove();
         }
@@ -409,9 +630,9 @@
         $('reset').setAttribute('aria-pressed', String(!$('home').hidden && !feed.channel));
         $('homeFeed').setAttribute('aria-pressed', String(!$('home').hidden && Boolean(feed.channel)));
         $('openHistory').setAttribute('aria-pressed', String(!$('history').hidden));
-        ensoUI.seg($('tabs'));
       }
       function showHistory() {
+        setReelMode(false);
         $('home').hidden = true;
         $('history').hidden = false;
         syncNav();
@@ -472,6 +693,8 @@
         feed.method = 'discover';
         feed.channel = '';
         feed.q = '';
+        syncNav();
+        setReelMode(false);
         renderRecent();
         loadFeed(true);
       };
@@ -479,20 +702,424 @@
         if (!$('history').hidden) return show(false);
         showFeed();
       };
-      // 首页瀑布流：服务端按 bottom_tab_type=0 的首页 tab 下发卡片，每张自带可播的 vid
-      const showHome = () => {
+
+      // ---------- 首页高光流 ----------
+      // 一条一屏，播的是该剧第 1 集（红果 App 首页的「高光」就是这个）。
+      // 播完自动进详情接着看；也可以点「看全集」提前进，或点「下一个」跳过。
+      let reels = { items: [], i: 0, token: 0, series: null, ms: null, channel: '推荐' };
+      const reelV = () => $('reelVideo');
+      const reelSyncMute = () => {
+        const v = reelV();
+        $('reelMute').dataset.muted = v.muted ? '1' : '0';
+        $('reelMute').setAttribute('aria-pressed', v.muted ? 'true' : 'false');
+      };
+      // 浏览器策略会拦「带声音的自动播放」：先要声音，被拒就退回静音，并提示点一下开声音
+      async function reelStart(v) {
+        // 和详情页播放器共用 hp-volume，一处静音两处一致
+        const vol = store.get('hp-volume', { v: 1, m: false });
+        v.volume = typeof vol.v === 'number' ? vol.v : 1;
+        const want = !vol.m && v.volume > 0;
+        if (want) {
+          // 先静音起播：这一步不会被策略拦，画面立刻能出。
+          v.muted = true;
+          if (await tryPlay(v, 1500)) {
+            // 起播后试一次开声音。宿主 iframe 没给 autoplay 授权时，
+            // Chrome 会当场把播放暂停，那就退回静音继续放，别把画面停在那儿。
+            v.muted = false;
+            await sleep(300);
+            if (!v.paused) { reelSyncMute(); return 'ok'; }
+            v.muted = true;
+            await tryPlay(v, 1500);
+            reelSyncMute();
+            return 'muted';
+          }
+          v.muted = false;
+          if (await tryPlay(v)) { reelSyncMute(); return 'ok'; }
+          return 'blocked';
+        }
+        v.muted = true;
+        const ok = await tryPlay(v);
+        reelSyncMute();
+        return ok ? 'muted' : 'blocked';
+      }
+      const reelDur = () => {
+        const v = reelV();
+        if (Number.isFinite(v.duration) && v.duration > 0) return v.duration;
+        const s = v.seekable;
+        return s.length ? s.end(s.length - 1) : 0;
+      };
+      function reelProgress() {
+        const v = reelV();
+        const d = reelDur();
+        if (!d) return;
+        $('reelProgFill').style.width = `${Math.min(100, Math.max(0, (v.currentTime / d) * 100))}%`;
+      }
+      const reelSeek = (e) => {
+        const v = reelV();
+        const d = reelDur();
+        if (!d) return;
+        const r = $('reelProg').getBoundingClientRect();
+        const p = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+        v.currentTime = Math.min(d - 0.05, p * d);
+        $('reelProgFill').style.width = `${p * 100}%`;
+      };
+      {
+        const v = $('reelVideo');
+        for (const ev of ['loadedmetadata', 'durationchange', 'progress', 'timeupdate', 'seeked']) v.addEventListener(ev, reelProgress);
+        const bar = $('reelProg');
+        let dragging = false;
+        bar.addEventListener('pointerdown', (e) => {
+          dragging = true;
+          bar.classList.add('dragging', 'big');
+          bar.setPointerCapture(e.pointerId);
+          reelSeek(e);
+        });
+        bar.addEventListener('pointermove', (e) => { if (dragging) reelSeek(e); });
+        const stopDrag = () => { dragging = false; bar.classList.remove('dragging', 'big'); };
+        bar.addEventListener('pointerup', stopDrag);
+        bar.addEventListener('pointercancel', stopDrag);
+      }
+      const reelAhead = () => {
+        const b = reelV().buffered;
+        return b.length ? b.end(b.length - 1) - reelV().currentTime : 0;
+      };
+      async function reelAppend(sb, bytes, token) {
+        for (;;) {
+          if (token !== reels.token) return;
+          await mseIdle(sb);
+          if (token !== reels.token) return;
+          try {
+            sb.appendBuffer(bytes);
+            await mseIdle(sb);
+            return;
+          } catch (e) {
+            if (token !== reels.token || mseDead(e)) return;
+            if (e.name !== 'QuotaExceededError') throw e;
+          }
+          try {
+            const behind = reelV().currentTime - 10;
+            if (sb.buffered.length && behind > sb.buffered.start(0)) { sb.remove(0, behind); await mseIdle(sb); }
+          } catch {
+            return;
+          }
+          await sleep(1000);
+          if (token !== reels.token) return;
+        }
+      }
+      function reelStop() {
+        reels.token++;
+        reels.ms = null;
+        $('reelProgFill').style.width = '0%';
+        const v = reelV();
+        v.pause();
+        v.removeAttribute('src');
+        v.srcObject = null;
+        v.load();
+      }
+      function setReelMode(on) {
+        $('reel').hidden = !on;
+        $('bar').hidden = on;
+        $('grid').hidden = on;
+        $('more').hidden = true;
+        $('homeError').hidden = on;
+        if (on) {
+          $('recent').hidden = true;
+        } else {
+          reelStop();
+          renderRecent();
+        }
+      }
+      async function enterReels() {
         $('q').value = '';
         feed.method = 'discover';
-        feed.channel = '首页真人剧';
+        feed.channel = reels.channel || '推荐';
         feed.q = '';
-        renderRecent();
-        loadFeed(true);
+        syncNav();
+        setReelMode(true);
+        $('reelTitle').textContent = '';
+        $('reelDesc').textContent = '';
+        $('reelHint').textContent = '加载中…';
+        reels.items = [];
+        reels.i = 0;
+        reels.token++;
+        const ch = reels.channel || '推荐';
+        // 首页流一次要 3~4 秒。这里先用上次的首屏抢跑，界面立刻就有得播，
+        // 新的一页在后台接上来；否则每次冷启动都要干等两轮 discover。
+        const stale = () => ch !== (reels.channel || '推荐') || $('reel').hidden;
+        const cacheKey = `reelCache:${ch}`;
+        const cached = store.get(cacheKey, []);
+        if (cached.length) {
+          reels.items = cached;
+          reelPlay(0);
+        }
+        try {
+          const items = await fillReels(stale);
+          if (stale()) return;
+          if (!items.length) {
+            if (!reels.items.length) $('reelHint').textContent = '首页暂时没有推荐';
+            return;
+          }
+          if (!reels.items.length) {
+            reels.items = items;
+            reelPlay(0);
+            return;
+          }
+          // 已经在播缓存里的那条了：新列表只接到后面，别打断当前播放
+          const have = new Set(reels.items.map((s) => s.id));
+          const extra = items.filter((s) => !have.has(s.id));
+          if (extra.length) reels.items = reels.items.concat(extra);
+        } catch (e) {
+          if (!stale() && !reels.items.length) $('reelHint').textContent = e.message;
+        }
+      }
+      // 每一页 discover 要 3~4 秒，所以只在真需要时翻页：拿够一页就走，
+      // 一页太少（大多被看过）才再翻一页。
+      const REEL_SEEN_MAX = 80;
+      async function fillReels(stale, target = 9) {
+        const seenKey = 'reelSeen';
+        const channel = reels.channel || '推荐';
+        // 推荐流是「一条游标只能往后走」的：每次都从空游标拉，服务端永远
+        // 只给最前面那一小批（实测首屏 6 条换台设备也还是这 6 条，而同一台
+        // 设备连翻 12 页能拿到 53 条全不重复）。所以把游标存下来续着翻。
+        const cursorKey = `reelCursor:${channel}`;
+        const loadSeen = () => store.get(seenKey, []);
+        // 历史里看过的是硬排除；reelSeen 只是「最近推荐过」，
+        // 一页里大部分都落在它上面时允许重复，否则列表只剩一两条，点一下就到底。
+        const history = new Set(loadHistory().map((r) => r.id));
+        const seenBefore = new Set(loadSeen());
+        const out = [];
+        const soft = [];
+        const seen = new Set();
+        const maxPages = channel === '推荐' ? 4 : 3;
+        let cursor = store.get(cursorKey, '');
+        let more = true;
+        for (let n = 0; n < maxPages && out.length < target; n++) {
+          if (!more) break;
+          let page;
+          try {
+            page = await call('discover', { channel, cursor: cursor || undefined });
+          } catch (e) {
+            // 存下来的游标过期/失效：清掉，这一轮从头拉
+            if (!cursor) throw e;
+            store.set(cursorKey, '');
+            cursor = '';
+            continue;
+          }
+          if (stale()) return [];
+          for (const s of page.items ?? []) {
+            if (seen.has(s.id) || history.has(s.id)) continue;
+            seen.add(s.id);
+            if (seenBefore.has(s.id)) soft.push(s);
+            else out.push(s);
+          }
+          cursor = page.cursor ?? '';
+          more = Boolean(page.hasMore);
+        }
+        // 到头了就重置，下次从新的一轮开始；否则记住位置接着往后翻
+        store.set(cursorKey, more && cursor ? cursor : '');
+        // 看过的只用来垫底，而且最多占三分之一：
+        // 否则滑两下就是同一批剧（实测相邻两轮能重 16 条）。
+        const softQuota = Math.max(0, Math.min(soft.length, target - out.length, Math.max(3, Math.ceil(target / 3))));
+        for (const s of soft.slice(0, softQuota)) {
+          if (out.length >= target) break;
+          out.push(s);
+        }
+        // 池子被翻干（连垫底都不够）就清掉记录重新来一遍，别让用户对着同一个列表
+        if (out.length < 4 && loadSeen().length >= 20) {
+          store.set(seenKey, []);
+          return fillReels(stale, target);
+        }
+        if (!out.length && loadSeen().length) {
+          store.set(seenKey, []);
+          return fillReels(stale, target);
+        }
+        for (let i = out.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [out[i], out[j]] = [out[j], out[i]];
+        }
+        const ids = out.map((s) => s.id);
+        if (ids.length) {
+          const drop = new Set(ids);
+          store.set(seenKey, ids.reverse().concat(loadSeen().filter((id) => !drop.has(id))).slice(0, REEL_SEEN_MAX));
+          // 记住这次的首屏，下次冷启动直接拿来抢跑
+          store.set(`reelCache:${channel}`, out.slice(0, 12));
+        }
+        return out;
+      }
+      async function reelPlay(i) {
+        const s = reels.items[i];
+        if (!s) return;
+        const token = ++reels.token;
+        reels.i = i;
+        reels.series = s;
+        const v = reelV();
+        v.pause();
+        v.removeAttribute('src');
+        v.srcObject = null;
+        v.load();
+        const wan = (n) => !n ? '' : n >= 10000 ? `${(n / 10000).toFixed(n >= 100000 ? 1 : 1)}万` : String(n);
+        $('reelTitle').textContent = s.title ? `${s.title} ›` : '';
+        $('reelRec').textContent = s.rec || (s.play ? `${wan(s.play)}人在追` : '');
+        $('reelHint').textContent = '加载中…';
+        $('reelPlayBtn').hidden = true;
+        const tags = String(s.category || '').split(/[·,，\s]+/).filter(Boolean).slice(0, 4);
+        $('reelTags').replaceChildren(...tags.map((t) => { const el = document.createElement('span'); el.textContent = t; return el; }));
+        $('reelDesc').textContent = s.description ? `第1集 | ${s.description}` : '';
+        $('reelDesc').classList.remove('open');
+        $('reelOpen').textContent = s.count ? `观看完整剧 · 全${s.count}集` : '观看完整剧';
+        $('reelHeat').innerHTML = s.play
+          ? `<svg viewBox="0 0 24 24"><path d="M12 21a9 9 0 0 0 9-9c0-4-3-8-9-11C6 4 3 8 3 12a9 9 0 0 0 9 9z" /></svg>${wan(s.play)}`
+          : '';
+        try {
+          // 首页卡片自带的 vid 就是第 1 集的 episodeId（实测一致），直接播，省掉一次分集请求
+          let epId = s.vid ? String(s.vid) : '';
+          if (!epId) {
+            const rows = await call('episodes', { seriesId: s.id });
+            if (token !== reels.token) return;
+            const eps = rows.map(([id, number, playable, title]) => ({ id, number, playable: Boolean(playable), title }));
+            epId = eps.find((e) => e.playable)?.id ?? '';
+          }
+          if (!epId) { $('reelHint').textContent = '这部剧暂时没有可播放的分集'; return; }
+          const info = await call('open', { episodeId: epId, quality }, 0);
+          if (token !== reels.token) return;
+          const mime = mimeOf(info.codec);
+          if (!mime) { $('reelHint').textContent = '这部剧的编码浏览器播不了，换低清晰度或划走'; return; }
+          const MS = window.ManagedMediaSource || window.MediaSource;
+          let sb = null;
+          let ms = null;
+          const parts = [];
+          if (MS && MS.isTypeSupported(mime)) {
+            ms = new MS();
+            reels.ms = ms;
+            if (window.ManagedMediaSource && ms instanceof ManagedMediaSource) v.disableRemotePlayback = true;
+            try { v.srcObject = ms; } catch { v.src = URL.createObjectURL(ms); }
+            await new Promise((r) => ms.addEventListener('sourceopen', r, { once: true }));
+            if (token !== reels.token) return;
+            sb = ms.addSourceBuffer(mime);
+          }
+          let offset = 0;
+          let kicked = false;
+          const kick = async () => {
+            if (kicked || token !== reels.token) return;
+            kicked = true;
+            const r = await reelStart(v);
+            if (token !== reels.token) return;
+            if (r === 'ok') {
+              $('reelHint').textContent = '';
+              $('reelPlayBtn').hidden = true;
+            } else if (r === 'muted') {
+              $('reelPlayBtn').hidden = true;
+              // 只提示一次：每条都弹一遍太吵，喇叭图标本身就能看出状态
+              if (!store.get('reelMuteHinted', false)) {
+                store.set('reelMuteHinted', true);
+                $('reelHint').textContent = '静音播放中 · 点喇叭开启声音';
+                setTimeout(() => {
+                  if ($('reelHint').textContent.startsWith('静音播放中')) $('reelHint').textContent = '';
+                }, 4000);
+              }
+            } else {
+              $('reelHint').textContent = '点击播放';
+              $('reelPlayBtn').hidden = false;
+            }
+          };
+          for (;;) {
+            if (token !== reels.token) return;
+            if (sb && reelAhead() > 60) { await sleep(800); continue; }
+            const r = await call('chunk', { episodeId: info.episodeId, definition: info.definition, offset }, 0);
+            if (token !== reels.token) return;
+            if (r.data) {
+              const bytes = b64(r.data);
+              if (sb) await reelAppend(sb, bytes, token);
+              else parts.push(bytes);
+              offset = r.next;
+              if (sb) kick();
+            }
+            if (r.done) break;
+          }
+          if (token !== reels.token) return;
+          if (sb) {
+            await mseIdle(sb);
+            if (token !== reels.token) return;
+            try { if (ms.readyState === 'open') ms.endOfStream(); } catch {}
+          } else {
+            v.src = URL.createObjectURL(new Blob(parts, { type: 'video/mp4' }));
+          }
+          await kick();
+        } catch (e) {
+          if (token === reels.token) $('reelHint').textContent = e.message;
+        }
+      }
+      $('reelVideo').addEventListener('playing', () => {
+        const t = $('reelHint').textContent;
+        if (t === '加载中…' || t === '点击播放') $('reelHint').textContent = '';
+        $('reelPlayBtn').hidden = true;
+      });
+      $('reelVideo').addEventListener('pause', () => {
+        if (!$('reel').hidden) $('reelPlayBtn').hidden = false;
+      });
+      $('reelVideo').onclick = () => {
+        const v = reelV();
+        if (v.muted) {
+          v.muted = false;
+          reelSyncMute();
+          store.set('hp-volume', { v: v.volume, m: false });
+          if ($('reelHint').textContent.startsWith('静音播放中')) $('reelHint').textContent = '';
+          if (v.paused) v.play().catch(() => {});
+          return;
+        }
+        if (v.paused) v.play().catch(() => {}); else v.pause();
       };
+      $('reelMute').onclick = (e) => {
+        e.stopPropagation();
+        const v = reelV();
+        v.muted = !v.muted;
+        if (!v.muted) v.play().catch(() => {});
+        reelSyncMute();
+        store.set('hp-volume', { v: v.volume, m: v.muted });
+        if (v.muted) $('reelHint').textContent = '已静音';
+        else if ($('reelHint').textContent.startsWith('静音播放中')) $('reelHint').textContent = '';
+      };
+      $('reelPlayBtn').onclick = (e) => { e.stopPropagation(); reelV().play().catch(() => {}); };
+      $('reelOpen').onclick = () => {
+        const s = reels.series;
+        if (!s) return;
+        openSeries(s);
+      };
+      $('reelDesc').onclick = () => $('reelDesc').classList.toggle('open');
+      $('openSearch').onclick = () => {
+        showFeed();
+        $('q').focus();
+      };
+      $('reelTabs').onclick = (e) => {
+        const b = e.target.closest('button[data-ch]');
+        if (!b || b.dataset.ch === reels.channel) return;
+        reels.channel = b.dataset.ch;
+        for (const x of document.querySelectorAll('.reel-tabs-ch button')) x.classList.toggle('on', x === b);
+        enterReels();
+      };
+      const reelNext = () => {
+        if ($('reel').hidden) return;
+        if (reels.i + 1 < reels.items.length) reelPlay(reels.i + 1);
+        else enterReels();
+      };
+      $('reelSkip').onclick = () => reelNext();
+      $('reel').addEventListener('wheel', (e) => {
+        if (Math.abs(e.deltaY) < 40) return;
+        e.preventDefault();
+        if (e.deltaY > 0) reelNext();
+        else if (reels.i > 0) reelPlay(reels.i - 1);
+      }, { passive: false });
+      $('reelVideo').addEventListener('ended', () => {
+        if ($('reel').hidden) return;
+        reelNext();
+      });
+
       $('homeFeed').onclick = () => {
-        if (!$('history').hidden) return show(false);
-        showHome();
+        // 从历史页点过来要真的切回列表并重新拉首页流，否则只是把旧列表露出来
+        if (!$('history').hidden) show(false);
+        enterReels();
       };
-      $('refresh').onclick = () => (feed.channel ? showHome() : showFeed());
+      $('refresh').onclick = () => showFeed();
       $('more').onclick = () => loadFeed(false);
 
       // ---------- detail / player ----------
@@ -545,14 +1172,33 @@
         duration: () => dur,
       });
 
+      // 详情页期间先把高光层收起来：否则 body 的 :has(#reel) 规则
+      // 会把整页当成播放页套上黑底，浅色主题的文字就看不见了。
+      let reelParked = false;
       function show(detail) {
         $('home').hidden = detail;
         $('history').hidden = true;
         $('detail').hidden = !detail;
+        if (detail) {
+          reelStop();
+          if (!$('reel').hidden) {
+            reelParked = true;
+            $('reel').hidden = true;
+            $('bar').hidden = false;
+            $('grid').hidden = false;
+            $('more').hidden = true;
+            $('homeError').hidden = false;
+          }
+        }
         syncNav();
         if (!detail) {
           stop();
-          renderRecent();
+          if (reelParked) {
+            reelParked = false;
+            setReelMode(true);
+            if (reels.items.length) reelPlay(reels.i);
+          } else if (!$('reel').hidden && reels.items.length) reelPlay(reels.i);
+          else renderRecent();
         }
         window.scrollTo(0, 0);
       }
@@ -677,18 +1323,30 @@
         video.load();
       }
 
-      const mimeOf = (codec) =>
-        `video/mp4; codecs="${/^(hvc1|hev1)$/.test(codec) ? `${codec}.1.6.L120.90` : 'avc1.64001f'},mp4a.40.2"`;
+      const mimeOf = (codec) => {
+        const c = String(codec || '');
+        const v = /^(hvc1|hev1)$/i.test(c) ? `${c}.1.6.L120.90` : /^(avc1|avc3)$/i.test(c) ? 'avc1.64001f' : '';
+        return v ? `video/mp4; codecs="${v},mp4a.40.2"` : '';
+      };
       const b64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
-      const appended = (sb) => new Promise((r) => (sb.updating ? sb.addEventListener('updateend', r, { once: true }) : r()));
       async function append(sb, bytes, token) {
         for (;;) {
-          await appended(sb);
-          try { sb.appendBuffer(bytes); return appended(sb); } catch (e) {
-            if (e.name !== 'QuotaExceededError' || token !== playToken) throw e;
+          if (token !== playToken) return;
+          await mseIdle(sb);
+          if (token !== playToken) return;
+          try {
+            sb.appendBuffer(bytes);
+            return mseIdle(sb);
+          } catch (e) {
+            if (token !== playToken || mseDead(e)) return;
+            if (e.name !== 'QuotaExceededError') throw e;
           }
-          const behind = video.currentTime - 10;
-          if (sb.buffered.length && behind > sb.buffered.start(0)) { sb.remove(0, behind); await appended(sb); }
+          try {
+            const behind = video.currentTime - 10;
+            if (sb.buffered.length && behind > sb.buffered.start(0)) { sb.remove(0, behind); await mseIdle(sb); }
+          } catch {
+            return;
+          }
           await sleep(1000);
           if (token !== playToken) return;
         }
@@ -729,6 +1387,12 @@
         if (info.duration) dur = info.duration;
         const label = `第${ep.number}集 · ${info.definition}`;
         const mime = mimeOf(info.codec);
+        if (!mime) {
+          $('playError').textContent = '这部剧的编码浏览器播不了，换低清晰度或换一集';
+          $('status').textContent = '';
+          player.loading(false);
+          return;
+        }
         const MS = window.ManagedMediaSource || window.MediaSource;
         const useMse = MS && MS.isTypeSupported(mime);
         let sb = null;
@@ -745,6 +1409,13 @@
           if (startAt) video.currentTime = startAt;
         }
         let offset = 0;
+        let kicked = false;
+        const kick = async () => {
+          if (kicked || token !== playToken) return;
+          kicked = true;
+          if (!wantPlay) { player.loading(false); return; }
+          if (!(await tryPlay(video))) player.loading(false);
+        };
         try {
           for (;;) {
             if (token !== playToken) return;
@@ -757,18 +1428,21 @@
               else parts.push(bytes);
               offset = r.next;
               $('status').textContent = `${label} · 已缓冲 ${(offset / 1048576).toFixed(1)}MB`;
+              if (sb) kick();
             }
             if (r.done) break;
           }
           if (sb) {
-            await appended(sb);
-            if (ms.readyState === 'open') ms.endOfStream();
+            await mseIdle(sb);
+            if (token !== playToken) return;
+            try { if (ms.readyState === 'open') ms.endOfStream(); } catch {}
           } else {
             video.srcObject = null;
             video.src = URL.createObjectURL(new Blob(parts, { type: 'video/mp4' }));
             if (startAt) video.currentTime = startAt;
           }
           $('status').textContent = label;
+          await kick();
           prefetch(ep);
         } catch (e) {
           if (token === playToken) $('playError').textContent = e.message;
@@ -832,7 +1506,7 @@
       ensoUI.fill($('historyList'));
       syncNav();
       renderRecent();
-      loadFeed(true);
+      enterReels();
       adopt();
     </script>
   </body>
