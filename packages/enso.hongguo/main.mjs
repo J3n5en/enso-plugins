@@ -14,7 +14,9 @@ const QUALITIES = ['360p', '480p', '540p', '720p', '1080p'];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const loadClient = (options) => import('openhongguo').then((m) => m.createClient(options));
+// openhongguo 以源码形式放在 vendor/ 里：npm 上的 0.4.0 仍请求已下线的 V5 播放路径
+// （/novel/player/multi_video_model/player/v1 返回空 200），这里的 wasm 带路径修复。
+const loadClient = (options) => import('./vendor/openhongguo/index.js').then((m) => m.createClient(options));
 
 export function activate(enso, { createClient = loadClient } = {}) {
   const videoDir = join(enso.dataDir, 'video');

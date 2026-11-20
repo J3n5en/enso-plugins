@@ -81,7 +81,7 @@ git clone https://github.com/J3n5en/enso-hongguo.git
 
 然后在 **设置 → 插件 → Enso plugins** 里点 **Install from folder**，选中克隆下来的目录，确认并启用。
 
-仓库里已经带了 `node_modules`，不需要再执行 `npm install`：EnsoCode 安装插件时会原样复制目录，不会帮你装依赖。
+仓库里已经带了 `vendor/openhongguo`，不需要再执行 `npm install`：EnsoCode 安装插件时会原样复制目录，不会帮你装依赖。
 
 ### 打开播放器
 
@@ -112,6 +112,9 @@ git clone https://github.com/J3n5en/enso-hongguo.git
 ## 实现说明
 
 - 数据来自 [openhongguo](https://github.com/beilunyang/openhongguo)（Apache-2.0），以匿名设备身份访问。
+- 这里用的是 `vendor/openhongguo` 里自己编译的 wasm：npm 上的 0.4.0 还在请求已下线的
+  `/novel/player/multi_video_model/player/v1`（服务端 2026-11-20 起只认
+  `/novel/player/multi_video_model/v1/`，旧路径回 HTTP 200 空 body），上游发布新版后可以改回 npm 依赖。
 - 侧栏页面跑在沙盒 iframe 里，不能直接访问外网，也不能用 `http(s)` 地址播放媒体。所以视频由插件后台进程下载，在本机转成分段 MP4，再分块传给页面里的 MediaSource 播放。
 - 视频流本身是加密的（cenc-aes-ctr），`remux.mjs` 在本机用 Node 自带的 `crypto` 解密并重新封装，不依赖 ffmpeg。
 
