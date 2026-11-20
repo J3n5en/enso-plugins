@@ -24,6 +24,9 @@
 ## 功能
 
 - 推荐列表、搜索、分页加载
+- 首页高光流：一条一屏自动播放第 1 集，播完自动滑到下一部，也可一键进详情看全集；
+  带进度条（可拖动）和声音开关
+- 首页瀑布流：服务端首页下发的卡片流，每张带剧情摘要、热度角标和集数，点一下进详情
 - 剧集详情与分集选择，看过的集数会标灰
 - 侧栏内播放，边下边播，360p 到 1080p 可切换清晰度，播完自动下一集
 - 观看历史：记住每部剧看到第几集、第几秒，点一下接着看
@@ -113,8 +116,9 @@ git clone https://github.com/J3n5en/enso-hongguo.git
 
 - 数据来自 [openhongguo](https://github.com/beilunyang/openhongguo)（Apache-2.0），以匿名设备身份访问。
 - 这里用的是 `vendor/openhongguo` 里自己编译的 wasm：npm 上的 0.4.0 还在请求已下线的
-  `/novel/player/multi_video_model/player/v1`（服务端 2026-11-20 起只认
-  `/novel/player/multi_video_model/v1/`，旧路径回 HTTP 200 空 body），上游发布新版后可以改回 npm 依赖。
+  `/novel/player/multi_video_model/player/v1`。本地 wasm 带 V5 新路径
+  （`/novel/player/multi_video_model/v1/`）以及空响应时的 `video_tab` 回退，
+  上游发布新版后可以改回 npm 依赖。
 - 侧栏页面跑在沙盒 iframe 里，不能直接访问外网，也不能用 `http(s)` 地址播放媒体。所以视频由插件后台进程下载，在本机转成分段 MP4，再分块传给页面里的 MediaSource 播放。
 - 视频流本身是加密的（cenc-aes-ctr），`remux.mjs` 在本机用 Node 自带的 `crypto` 解密并重新封装，不依赖 ffmpeg。
 
