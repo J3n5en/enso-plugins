@@ -1,8 +1,8 @@
 # WhatsApp
 
-把 WhatsApp 当作 EnsoCode 秘书的一个联系方式。扫码登录后，主人发来的文字交给秘书，秘书的回复、图片和文件再发回 WhatsApp。
+把 WhatsApp 当作 EnsoCode 秘书的一个联系方式。扫码登录后，主人发来的文字和图片交给秘书，秘书的回复、图片和文件再发回 WhatsApp。
 
-需要 EnsoCode 0.3.9 及以上（这一版才有 `secretary.contact`）。
+需要 EnsoCode 0.3.9 及以上（这一版才有 `secretary.contact`）。收图片还要 EnsoCode 带上联系方式入站图片的版本；更旧的版本只收到图片的说明文字，只发图片的消息交不过去。
 
 > ⚠️ 这里用的是 WhatsApp Web 多设备协议的非官方实现（[Baileys](https://github.com/WhiskeySockets/Baileys)），可能违反 WhatsApp 条款并导致封号。建议用副号。
 
@@ -35,7 +35,8 @@
 
 - 文字收发。秘书的 markdown 转成 WhatsApp 格式（`*粗体*` `_斜体_` `~删除线~` `` `代码` `` 和 ```` ``` ```` 代码块），超过 4000 字分条发送，代码块被切开时会补齐。
 - 秘书可以发图片和文件（单个不超过 10MB，由 EnsoCode 限制）。上传走 `enso.net.fetch`，只发到清单里的媒体域名。发送失败时 EnsoCode 会另回一句说明和电脑上的路径。
-- 收到的图片、文件、视频和语音还交不给秘书（EnsoCode 的联系方式入站只有文字）：带说明的图片照常处理说明文字，再回一句「暂不支持图片、文件和视频，只处理了文字」；纯媒体回一句提示；群里不回提示。
+- 收图片：只有通过上面过滤的消息（主人私聊、「给自己发消息」、已绑定群里 @ 或回复秘书）才下载，其余一律不下载。下载走 `enso.net.fetch`，只到清单里的媒体域名，30 秒超时，在插件里解密后交给 EnsoCode；格式、10MB 上限和保存由 EnsoCode 处理。图片说明当作文字；相册在 WhatsApp 里是一张一条，逐条交给秘书。以 png / jpeg / webp / gif 文件形式发的图片也会下载。
+- 视频、语音、贴纸、其他文件，以及没下载下来的图片（超时、失败、超过 `enso.net.fetch` 的 5MB 响应上限），由 EnsoCode 统一回对方一句收不下，插件自己不回。群里收不下的附件不交给 EnsoCode，也不回提示；只有附件没有文字时整条忽略。
 - 秘书处理时显示「正在输入」。
 - 断线自动重连，2 秒起指数退避，最长 1 分钟；在手机上移除了这台设备时显示「需要重新扫码」，不再重连。
 
@@ -50,7 +51,7 @@
 | 权限 | 用途 |
 | --- | --- |
 | `secretary.contact` | 注册「WhatsApp」联系方式，把消息交给秘书并发送回复 |
-| `net.fetch` | 上传图片和文件到 WhatsApp 媒体服务器（`mmg.whatsapp.net`、`*.cdn.whatsapp.net`） |
+| `net.fetch` | 在 WhatsApp 媒体服务器（`mmg.whatsapp.net`、`*.cdn.whatsapp.net`）上传要发的图片和文件、下载收到的图片 |
 | `process.background` | 常驻保持 WebSocket 连接 |
 | `ui.view` | 扫码登录和设置页 |
 

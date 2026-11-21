@@ -1,4 +1,6 @@
-/** WhatsApp 协议无关的纯逻辑：jid、消息内容、入站过滤、markdown 转换、分条、退避 */
+/** WhatsApp 协议无关的纯逻辑：jid、消息内容、入站过滤、媒体解密、markdown 转换、分条、退避 */
+
+import { createDecipheriv, createHmac, hkdfSync, timingSafeEqual } from 'node:crypto';
 
 export const MAX_CHARS = 4000;
 export const BIND_CODE_TTL_MS = 10 * 60 * 1000;
@@ -101,20 +103,39 @@ const MEDIA = {
   ptvMessage: 'video',
 };
 
+/** 会下载的附件：图片消息，以及宿主收得下的那几种图片格式发成的文件 */
+const FILE_IMAGE_RE = /^image\/(?:png|jpeg|webp|gif)\b/i;
+const KEY_INFO = { image: 'WhatsApp Image Keys', document: 'WhatsApp Document Keys' };
+
+const toNumber = (v) => (typeof v?.toNumber === 'function' ? v.toNumber() : Number(v));
+
+function mediaFile(key, part) {
+  if (key !== 'imageMessage' && !(key === 'documentMessage' && FILE_IMAGE_RE.test(part.mimetype ?? ''))) return null;
+  if (!part.mediaKey || (!part.directPath && !part.url)) return null;
+  const size = toNumber(part.fileLength);
+  return {
+    keyType: key === 'imageMessage' ? 'image' : 'document',
+    mediaKey: part.mediaKey,
+    url: typeof part.url === 'string' ? part.url : '',
+    directPath: typeof part.directPath === 'string' ? part.directPath : '',
+    size: Number.isFinite(size) && size > 0 ? size : 0,
+  };
+}
+
 /** 只认文字和常见媒体；回应、撤回、编辑、投票更新之类的协议消息返回 null */
 export function readContent(message) {
   const m = unwrapMessage(message);
   if (!m) return null;
-  if (typeof m.conversation === 'string' && m.conversation) return { text: m.conversation, media: null, context: null };
+  if (typeof m.conversation === 'string' && m.conversation) return { text: m.conversation, media: null, file: null, context: null };
   if (m.extendedTextMessage) {
     const text = typeof m.extendedTextMessage.text === 'string' ? m.extendedTextMessage.text : '';
-    return { text, media: null, context: m.extendedTextMessage.contextInfo ?? null };
+    return { text, media: null, file: null, context: m.extendedTextMessage.contextInfo ?? null };
   }
   for (const [key, media] of Object.entries(MEDIA)) {
     const part = m[key];
     if (!part) continue;
     const text = typeof part.caption === 'string' ? part.caption : '';
-    return { text, media, context: part.contextInfo ?? null };
+    return { text, media, file: mediaFile(key, part), context: part.contextInfo ?? null };
   }
   return null;
 }
@@ -139,6 +160,7 @@ const clip = (s, n) => (typeof s === 'string' ? s.trim().slice(0, n) : '');
  * 入站过滤：决定一条 messages.upsert 里的消息交不交给秘书。
  * 副号模式：只认主人的私聊（还没主人时只认私聊里的 6 位绑定码）；自己号码模式：只认「给自己发消息」。
  * 离线消息（append）照常处理；秘书自己发的靠发送前记下的 id 认出来。
+ * 结果里的 file 是要下载的图片，只有放行的消息才带；群里收不下的附件不带出去。
  * 两种模式下群都要先在设置页绑定，且只认 @ 这个号或回复秘书发过的消息。秘书自己发的一律跳过。
  */
 export function classifyInbound({ msg, type, mode, me, owner, groups, sentIds, bindActive, now = Date.now() }) {
@@ -166,7 +188,7 @@ export function classifyInbound({ msg, type, mode, me, owner, groups, sentIds, b
     const addressed = mentionsMe(content.context, me) || (quoted && sentIds.has(quoted));
     if (!addressed) return ignore('group-not-addressed');
     const text = clip(stripMentions(content.text, me), MAX_TEXT) || clip(content.text, MAX_TEXT);
-    if (!text) return ignore('group-no-text');
+    if (!text && !content.file) return ignore('group-no-text');
     const sender = key.participant || '';
     const isOwner = mode === 'self' ? fromMe : anySame(ownerIds(owner), [sender, key.participantAlt].filter(Boolean));
     if (!isOwner && (CONTROL_RE.test(text) || CONFIRM_RE.test(text))) return ignore('group-control-from-member');
@@ -180,6 +202,7 @@ export function classifyInbound({ msg, type, mode, me, owner, groups, sentIds, b
       text,
       at,
       media: null,
+      file: content.file,
       quote: true,
     };
   }
@@ -190,7 +213,7 @@ export function classifyInbound({ msg, type, mode, me, owner, groups, sentIds, b
 
   if (mode === 'self') {
     if (!fromMe || !anySame(me.all, chatIds)) return ignore('not-self-chat');
-    return { kind: 'deliver', peerId: me.pn || normalizeJid(remote), chatType: 'private', senderId: me.pn, name, text, at, media: content.media, quote: false };
+    return { kind: 'deliver', peerId: me.pn || normalizeJid(remote), chatType: 'private', senderId: me.pn, name, text, at, media: content.media, file: content.file, quote: false };
   }
 
   if (fromMe) return ignore('from-me');
@@ -202,7 +225,44 @@ export function classifyInbound({ msg, type, mode, me, owner, groups, sentIds, b
     return { kind: 'bind', code: text, owner: { jid: normalizeJid(remote), pn, lid, name } };
   }
   if (!anySame(ownerIds(owner), chatIds)) return ignore('stranger');
-  return { kind: 'deliver', peerId: owner.jid, chatType: 'private', senderId: owner.jid, name, text, at, media: content.media, quote: false };
+  return { kind: 'deliver', peerId: owner.jid, chatType: 'private', senderId: owner.jid, name, text, at, media: content.media, file: content.file, quote: false };
+}
+
+// ---------- 媒体 ----------
+
+/** 和清单 net.domains 一致：媒体只在这些主机上传、下载 */
+export const MEDIA_HOST = 'mmg.whatsapp.net';
+const MEDIA_HOSTS = [/^mmg\.whatsapp\.net$/i, /\.cdn\.whatsapp\.net$/i];
+export const mediaHostAllowed = (host) => typeof host === 'string' && MEDIA_HOSTS.some((re) => re.test(host));
+
+/** 下载地址：directPath 拼到消息自带的媒体主机（不在清单里就用默认主机）；拼不出合规地址返回空串 */
+export function mediaDownloadUrl(file) {
+  let parsed = null;
+  try {
+    parsed = file?.url ? new URL(file.url) : null;
+  } catch {}
+  const ok = parsed?.protocol === 'https:' && !parsed.username && !parsed.password && mediaHostAllowed(parsed.hostname);
+  const path = typeof file?.directPath === 'string' ? file.directPath : '';
+  if (path.startsWith('/') && !path.startsWith('//')) return `https://${ok ? parsed.hostname : MEDIA_HOST}${path}`;
+  return ok ? parsed.href : '';
+}
+
+const toBytes = (v) => (typeof v === 'string' ? Buffer.from(v, 'base64') : v instanceof Uint8Array ? Buffer.from(v) : Buffer.alloc(0));
+
+/** WhatsApp 媒体：HKDF 展开 mediaKey 得 iv/密钥/MAC 密钥，密文是 AES-256-CBC 加 10 字节 HMAC */
+export function decryptMedia(enc, mediaKey, keyType) {
+  const key = toBytes(mediaKey);
+  const info = KEY_INFO[keyType];
+  if (!info || key.length !== 32) throw new Error('媒体密钥不对');
+  const data = toBytes(enc);
+  if (data.length < 26 || (data.length - 10) % 16) throw new Error('媒体数据不完整');
+  const keys = Buffer.from(hkdfSync('sha256', key, Buffer.alloc(0), info, 112));
+  const iv = keys.subarray(0, 16);
+  const body = data.subarray(0, -10);
+  const mac = createHmac('sha256', keys.subarray(48, 80)).update(iv).update(body).digest().subarray(0, 10);
+  if (!timingSafeEqual(mac, data.subarray(-10))) throw new Error('媒体校验失败');
+  const decipher = createDecipheriv('aes-256-cbc', keys.subarray(16, 48), iv);
+  return Buffer.concat([decipher.update(body), decipher.final()]);
 }
 
 // ---------- 绑定码 ----------

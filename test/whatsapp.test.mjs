@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createCipheriv, createHmac, hkdfSync, randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -167,6 +168,7 @@ async function withPlugin(opts, fn) {
       net: {
         fetch: async (url, init) => {
           fetches.push({ url, init });
+          if (init?.responseType === 'base64' && opts.media) return opts.media(url, init);
           return { status: 200, headers: {}, body: JSON.stringify({ url: 'https://mmg.whatsapp.net/d/x', direct_path: '/d/x' }) };
         },
       },
@@ -214,6 +216,40 @@ async function online(ctx) {
   await until(() => ctx.proto.sockets.length > 0, 'socket');
   ctx.sock().open();
   await until(() => ctx.handlers.state().connected, 'open');
+}
+
+/** 和 WhatsApp 一样加密：HKDF 展开 mediaKey，AES-256-CBC 加 10 字节 HMAC */
+function encryptMedia(plain, keyType = 'image') {
+  const mediaKey = randomBytes(32);
+  const info = keyType === 'image' ? 'WhatsApp Image Keys' : 'WhatsApp Document Keys';
+  const keys = Buffer.from(hkdfSync('sha256', mediaKey, Buffer.alloc(0), info, 112));
+  const iv = keys.subarray(0, 16);
+  const cipher = createCipheriv('aes-256-cbc', keys.subarray(16, 48), iv);
+  const body = Buffer.concat([cipher.update(plain), cipher.final()]);
+  const mac = createHmac('sha256', keys.subarray(48, 80)).update(iv).update(body).digest().subarray(0, 10);
+  return { mediaKey, enc: Buffer.concat([body, mac]) };
+}
+
+/** 假媒体服务器：directPath → 密文；hang 永不返回，404 返回错误码 */
+function mediaServer() {
+  const files = new Map();
+  let n = 0;
+  return {
+    files,
+    add(plain, { keyType = 'image', path } = {}) {
+      const { mediaKey, enc } = encryptMedia(plain, keyType);
+      const directPath = path ?? `/v/t62/${keyType}-${++n}`;
+      files.set(directPath, enc);
+      return { mediaKey, directPath, url: `https://mmg.whatsapp.net${directPath}?enc=1`, fileLength: plain.length };
+    },
+    handle: async (url) => {
+      const path = new URL(url).pathname;
+      if (path.startsWith('/hang')) return new Promise(() => {});
+      const enc = files.get(path);
+      if (!enc) return { status: 404, headers: {}, body: '' };
+      return { status: 200, headers: {}, body: enc.toString('base64') };
+    },
+  };
 }
 
 const loggedIn = { creds: { noiseKey: SECRET, me: { id: ME.id, lid: ME.lid } } };
@@ -506,19 +542,175 @@ describe('WhatsApp 联系方式', { concurrency: false }, () => {
     });
   });
 
-  test('收到图片、语音：带说明交文字并提示，纯媒体只回提示', async () => {
-    await withPlugin({ ...loggedIn, state: { owner: { jid: OWNER, pn: OWNER } } }, async (ctx) => {
-      const { inbounds } = ctx;
+  test('收图片：放行的私聊才下载，说明当 text，只有图片时 text 为空，相册一张一条', async () => {
+    const server = mediaServer();
+    await withPlugin({ ...loggedIn, state: { owner: { jid: OWNER, pn: OWNER } }, media: server.handle }, async (ctx) => {
+      const { inbounds, fetches } = ctx;
       await online(ctx);
       const s = ctx.sock();
-      const media = (message) => ({ key: { remoteJid: OWNER, fromMe: false, id: `M${Math.random()}` }, message });
-      s.receive([media({ imageMessage: { caption: '看看这张' } })]);
-      await until(() => s.sent.length === 1, 'hint');
+      const from = (jid, message, extra = {}) => ({ key: { remoteJid: jid, fromMe: false, id: `M${Math.random()}`, ...extra }, message, messageTimestamp: 1700000000 });
+      const photo = Buffer.from('\xff\xd8\xff\xe0 jpeg 图片字节', 'latin1');
+      const shot = server.add(photo);
+
+      s.receive([from(STRANGER, { imageMessage: { ...server.add(photo), caption: '陌生人的图' } })]);
+      await wait();
+      assert.equal(fetches.length, 0, '被忽略的消息不下载');
+      assert.equal(inbounds.length, 0);
+
+      s.receive([from(OWNER, { imageMessage: { ...shot, caption: '看看这张' } })]);
+      await until(() => inbounds.length === 1, 'caption image');
+      assert.deepEqual(inbounds[0].msg.images, [{ data: photo.toString('base64') }]);
       assert.equal(inbounds[0].msg.text, '看看这张');
-      s.receive([media({ documentMessage: { fileName: 'a.pdf' } }), media({ audioMessage: { ptt: true } })]);
-      await until(() => s.sent.length === 3, 'hints');
-      assert.equal(inbounds.length, 1);
-      assert.deepEqual(texts(s), ['暂不支持图片、文件和视频，只处理了文字', '暂不支持图片、文件和视频，请发文字', '暂时听不了语音，麻烦打字']);
+      assert.equal(inbounds[0].msg.chatType, 'private');
+      const req = fetches.at(-1);
+      assert.equal(new URL(req.url).hostname, 'mmg.whatsapp.net');
+      assert.equal(new URL(req.url).pathname, shot.directPath);
+      assert.equal(req.init.responseType, 'base64');
+      assert.equal(req.init.headers.Origin, 'https://web.whatsapp.com');
+
+      const album = [Buffer.from('一'), Buffer.from('二'), Buffer.from('三')];
+      s.receive(album.map((p) => from(OWNER, { imageMessage: server.add(p) })));
+      await until(() => inbounds.length === 4, 'album');
+      for (const [i, p] of album.entries()) {
+        assert.equal(inbounds[1 + i].msg.text, '', '只有图片时 text 是空串');
+        assert.deepEqual(inbounds[1 + i].msg.images, [{ data: p.toString('base64') }], '一张一条');
+      }
+
+      const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+      s.receive([from(OWNER, { documentWithCaptionMessage: { message: { documentMessage: { ...server.add(png, { keyType: 'document' }), mimetype: 'image/png', caption: '原图' } } } })]);
+      await until(() => inbounds.length === 5, 'png file');
+      assert.deepEqual(inbounds[4].msg.images, [{ data: png.toString('base64') }]);
+      assert.equal(inbounds[4].msg.text, '原图');
+
+      const before = fetches.length;
+      s.receive([
+        from(OWNER, { videoMessage: { caption: '视频说明' } }),
+        from(OWNER, { audioMessage: { ptt: true } }),
+        from(OWNER, { stickerMessage: {} }),
+        from(OWNER, { documentMessage: { fileName: 'a.pdf', mimetype: 'application/pdf', mediaKey: randomBytes(32), directPath: '/v/pdf' } }),
+        from(OWNER, { imageMessage: { ...server.add(photo), fileLength: 6 * 1024 * 1024 } }),
+        from(OWNER, { imageMessage: { mediaKey: randomBytes(32), url: 'https://evil.example/x.enc' } }),
+      ]);
+      await until(() => inbounds.length === 11, 'rejected');
+      assert.equal(fetches.length, before, '视频、语音、贴纸、文件、超大、不在清单的主机都不下载');
+      assert.deepEqual(
+        inbounds.slice(5).map((i) => [i.msg.text, i.msg.images]),
+        [
+          ['视频说明', [{ rejected: 'not-image' }]],
+          ['', [{ rejected: 'not-image' }]],
+          ['', [{ rejected: 'not-image' }]],
+          ['', [{ rejected: 'not-image' }]],
+          ['', [{ rejected: 'too-large' }]],
+          ['', [{ rejected: 'too-large' }]],
+        ],
+      );
+      assert.deepEqual(texts(s), [], '收不下由宿主回复，插件自己不回');
+    });
+  });
+
+  test('下载超时、失败、校验不过都按收不下交给宿主，不卡住后面的消息', async () => {
+    const server = mediaServer();
+    const ctx = await withPlugin(
+      { ...loggedIn, state: { owner: { jid: OWNER, pn: OWNER } }, media: server.handle, options: { downloadTimeoutMs: 60 } },
+      async (ctx) => {
+        const { inbounds } = ctx;
+        await online(ctx);
+        const s = ctx.sock();
+        const hung = server.add(Buffer.from('x'), { path: '/hang/1' });
+        const tampered = server.add(Buffer.from('原图'));
+        server.files.get(tampered.directPath)[0] ^= 1;
+        const missing = { ...server.add(Buffer.from('y')), directPath: '/v/gone' };
+        const started = Date.now();
+        s.receive([
+          { key: { remoteJid: OWNER, id: 'H1' }, message: { imageMessage: { ...hung, caption: '卡住的图' } } },
+          { key: { remoteJid: OWNER, id: 'H2' }, message: { imageMessage: tampered } },
+          { key: { remoteJid: OWNER, id: 'H3' }, message: { imageMessage: missing } },
+          dm(OWNER, '后面的文字'),
+        ]);
+        await until(() => inbounds.length === 4, 'all delivered', 2000);
+        assert.ok(Date.now() - started < 1500);
+        assert.deepEqual(
+          inbounds.map((i) => [i.msg.text, i.msg.images]),
+          [
+            ['卡住的图', [{ rejected: 'too-large' }]],
+            ['', [{ rejected: 'too-large' }]],
+            ['', [{ rejected: 'too-large' }]],
+            ['后面的文字', undefined],
+          ],
+        );
+        assert.deepEqual(texts(s), []);
+      },
+    );
+    assert.equal(ctx.logs.filter((l) => l.includes('下载图片失败')).length, 3);
+    assert.ok(ctx.logs.every((l) => !l.includes('/v/') && !l.includes(SECRET)));
+  });
+
+  test('群里收图片：被忽略的不下载；@ 或回复秘书才下载；收不下的附件不带也不回', async () => {
+    const server = mediaServer();
+    const state = { owner: { jid: OWNER, pn: OWNER }, groups: { [GROUP]: { title: '项目群' } }, sent: ['BOTX'] };
+    await withPlugin({ ...loggedIn, state, media: server.handle }, async (ctx) => {
+      const { inbounds, fetches } = ctx;
+      await online(ctx);
+      const s = ctx.sock();
+      const at = { mentionedJid: [ME_PN] };
+      const reply = { stanzaId: 'BOTX' };
+      const groupMedia = (message, extra = {}) => ({
+        key: { remoteJid: extra.group ?? GROUP, fromMe: false, id: extra.id ?? `GM${Math.random()}`, participant: MEMBER },
+        message,
+        pushName: '群友',
+        messageTimestamp: 1700000001,
+      });
+      const photo = Buffer.from('群里的图');
+
+      s.receive([
+        groupMedia({ imageMessage: { ...server.add(photo), caption: '没 @ 的图' } }),
+        groupMedia({ imageMessage: server.add(photo) }),
+        groupMedia({ imageMessage: { ...server.add(photo), caption: '@8613800000001 别的群', contextInfo: at } }, { group: OTHER_GROUP }),
+        groupMedia({ imageMessage: { ...server.add(photo), caption: '@8613800000001 /last', contextInfo: at } }),
+        groupMedia({ imageMessage: { ...server.add(photo), contextInfo: { stanzaId: 'SOMEONE' } } }),
+      ]);
+      await wait(40);
+      assert.equal(fetches.length, 0, '没触发、未绑定、成员发命令、回复别人：都不下载');
+      assert.equal(inbounds.length, 0);
+
+      s.receive([groupMedia({ imageMessage: { ...server.add(photo), caption: '@8613800000001 看这个', contextInfo: at } }, { id: 'GI1' })]);
+      await until(() => inbounds.length === 1, 'mention image');
+      assert.deepEqual(inbounds[0].msg, {
+        peerId: GROUP,
+        senderId: MEMBER,
+        chatType: 'group',
+        text: '看这个',
+        chatTitle: '项目群',
+        name: '群友',
+        at: 1700000001000,
+        images: [{ data: photo.toString('base64') }],
+      });
+      await ctx.handlers.channel.sendText(GROUP, { text: '看到了' });
+      assert.equal(s.sent.at(-1).opts.quoted.key.id, 'GI1', '回复引用那条图片消息');
+
+      s.receive([groupMedia({ imageMessage: { ...server.add(photo), contextInfo: reply } })]);
+      await until(() => inbounds.length === 2, 'reply image');
+      assert.equal(inbounds[1].msg.text, '');
+      assert.equal(inbounds[1].msg.images.length, 1);
+
+      const sentBefore = s.sent.length;
+      s.receive([
+        groupMedia({ videoMessage: { caption: '@8613800000001 看视频', contextInfo: at } }),
+        groupMedia({ videoMessage: { contextInfo: reply } }),
+        groupMedia({ imageMessage: { ...server.add(photo), directPath: '/v/gone', contextInfo: reply } }),
+        groupMedia({ imageMessage: { ...server.add(photo), fileLength: 6 * 1024 * 1024, caption: '@8613800000001 大图', contextInfo: at } }),
+      ]);
+      await until(() => inbounds.length === 4, 'rejected in group');
+      await wait();
+      assert.deepEqual(
+        inbounds.slice(2).map((i) => [i.msg.text, i.msg.images]),
+        [
+          ['看视频', undefined],
+          ['大图', undefined],
+        ],
+        '收不下的附件不带给宿主；没文字也没图就不交',
+      );
+      assert.equal(s.sent.length, sentBefore, '群里不回提示');
     });
   });
 

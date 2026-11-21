@@ -10,10 +10,13 @@ import {
   chunkText,
   classifyInbound,
   createBindCode,
+  decryptMedia,
   disconnectAction,
   displayNumber,
   isGroupJid,
   markdownToWhatsApp,
+  mediaDownloadUrl,
+  mediaHostAllowed,
   normalizeJid,
   safeError,
   selfIds,
@@ -28,12 +31,11 @@ const SENT_KEEP = 500;
 const SEEN_KEEP = 500;
 const RECENT_KEEP = 100;
 const MAX_RESTARTS = 5;
-const UNSUPPORTED = '暂不支持图片、文件和视频，请发文字';
-const UNSUPPORTED_WITH_TEXT = '暂不支持图片、文件和视频，只处理了文字';
-const VOICE = '暂时听不了语音，麻烦打字';
 const BOUND = '已绑定为主人。之后这个号只处理你发来的私聊消息。';
-/** 和清单 net.domains 一致：媒体只往这些主机上传 */
-const MEDIA_HOSTS = [/^mmg\.whatsapp\.net$/i, /\.cdn\.whatsapp\.net$/i];
+/** enso.net.fetch 的响应上限是 5MB，密文比原图多出填充和 MAC */
+const MAX_DOWNLOAD_BYTES = 5 * 1024 * 1024 - 32;
+/** 宿主只认 too-large / not-image：没下载下来（超时、失败、过大）一律按 too-large 报 */
+const NOT_DOWNLOADED = 'too-large';
 
 const DEFAULTS = {
   connectTimeoutMs: 30_000,
@@ -42,6 +44,7 @@ const DEFAULTS = {
   maxQrRounds: 3,
   sendTimeoutMs: 25_000,
   mediaTimeoutMs: 100_000,
+  downloadTimeoutMs: 30_000,
   queryTimeoutMs: 15_000,
   logoutTimeoutMs: 8_000,
   typingIdleMs: 8_000,
@@ -487,21 +490,41 @@ export async function activate(enso, options = {}) {
 
     // ---------- 入站 ----------
 
-    const deliver = async (msg, res) => {
-      if (res.chatType === 'group') quotes.set(res.peerId, { key: msg.key, message: msg.message });
-      if (res.text) {
-        const payload = { peerId: res.peerId, senderId: res.senderId, chatType: res.chatType, text: res.text };
-        if (res.chatTitle) payload.chatTitle = res.chatTitle;
-        if (res.name) payload.name = res.name;
-        if (res.at != null) payload.at = res.at;
-        await enso.contact.inbound(CHANNEL, payload);
-        try {
-          if (session.mode !== 'self') await sock?.readMessages?.([msg.key]);
-        } catch {}
-        if (res.media) await sendText(res.peerId, { text: UNSUPPORTED_WITH_TEXT });
-        return;
+    /** 经 enso.net.fetch 下载（只到清单里的媒体域名）、本地解密；格式、大小上限和落盘交给宿主 */
+    const fetchImage = async (file) => {
+      if (file.size > MAX_DOWNLOAD_BYTES) return { rejected: NOT_DOWNLOADED };
+      const url = mediaDownloadUrl(file);
+      if (!url) return { rejected: NOT_DOWNLOADED };
+      try {
+        const res = await withTimeout(
+          enso.net.fetch(url, { headers: { Origin: 'https://web.whatsapp.com' }, responseType: 'base64' }),
+          cfg.downloadTimeoutMs,
+          '下载超时',
+        );
+        if (typeof res?.status === 'number' && (res.status < 200 || res.status >= 300)) throw new Error(`HTTP ${res.status}`);
+        return { data: decryptMedia(res?.body ?? '', file.mediaKey, file.keyType).toString('base64') };
+      } catch (error) {
+        console.error(LOG, '下载图片失败', safeError(error));
+        return { rejected: NOT_DOWNLOADED };
       }
-      if (res.media) await sendText(res.peerId, { text: res.media === 'audio' ? VOICE : UNSUPPORTED });
+    };
+
+    const deliver = async (msg, res) => {
+      const group = res.chatType === 'group';
+      let images = res.file ? [await fetchImage(res.file)] : res.media ? [{ rejected: 'not-image' }] : [];
+      // 宿主对每个 rejected 都回对方一句，群里不回提示，所以群里收不下的不带
+      if (group) images = images.filter((image) => image.data);
+      if (!res.text && !images.length) return;
+      if (group) quotes.set(res.peerId, { key: msg.key, message: msg.message });
+      const payload = { peerId: res.peerId, senderId: res.senderId, chatType: res.chatType, text: res.text };
+      if (res.chatTitle) payload.chatTitle = res.chatTitle;
+      if (res.name) payload.name = res.name;
+      if (res.at != null) payload.at = res.at;
+      if (images.length) payload.images = images;
+      await enso.contact.inbound(CHANNEL, payload);
+      try {
+        if (session.mode !== 'self') await sock?.readMessages?.([msg.key]);
+      } catch {}
     };
 
     const tryBind = async (res) => {
@@ -604,8 +627,6 @@ export async function activate(enso, options = {}) {
       }
       return { messageId };
     }
-
-    const mediaHostAllowed = (host) => typeof host === 'string' && MEDIA_HOSTS.some((re) => re.test(host));
 
     /** 替换 Baileys 的上传：走 enso.net.fetch，域名受清单约束 */
     const upload = async (filePath, { mediaType, fileEncSha256B64 }) => {

@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
+import { createCipheriv, createHmac, hkdfSync, randomBytes } from 'node:crypto';
 import test, { describe } from 'node:test';
 import {
   backoffDelay,
   chunkText,
   classifyInbound,
+  decryptMedia,
   disconnectAction,
   markdownToWhatsApp,
+  mediaDownloadUrl,
   safeError,
   selfIds,
   silentLogger,
@@ -43,6 +46,35 @@ function classify(msg, over = {}) {
 }
 
 describe('WhatsApp 纯逻辑', () => {
+  test('媒体解密：和 WhatsApp 一样的 HKDF + AES-256-CBC + HMAC，篡改或类型不对就报错', () => {
+    const plain = randomBytes(1000);
+    const mediaKey = randomBytes(32);
+    const keys = Buffer.from(hkdfSync('sha256', mediaKey, Buffer.alloc(0), 'WhatsApp Image Keys', 112));
+    const iv = keys.subarray(0, 16);
+    const cipher = createCipheriv('aes-256-cbc', keys.subarray(16, 48), iv);
+    const body = Buffer.concat([cipher.update(plain), cipher.final()]);
+    const enc = Buffer.concat([body, createHmac('sha256', keys.subarray(48, 80)).update(iv).update(body).digest().subarray(0, 10)]);
+    assert.deepEqual(decryptMedia(enc, mediaKey, 'image'), plain);
+    assert.deepEqual(decryptMedia(enc.toString('base64'), mediaKey.toString('base64'), 'image'), plain);
+    assert.throws(() => decryptMedia(enc, mediaKey, 'document'), /校验失败/);
+    const bad = Buffer.from(enc);
+    bad[3] ^= 1;
+    assert.throws(() => decryptMedia(bad, mediaKey, 'image'), /校验失败/);
+    assert.throws(() => decryptMedia(enc.subarray(0, 20), mediaKey, 'image'), /不完整/);
+    assert.throws(() => decryptMedia(enc, randomBytes(8), 'image'), /密钥/);
+  });
+
+  test('媒体下载地址只落在清单里的媒体域名', () => {
+    assert.equal(mediaDownloadUrl({ directPath: '/v/t62/a?b=1' }), 'https://mmg.whatsapp.net/v/t62/a?b=1');
+    assert.equal(mediaDownloadUrl({ url: 'https://media-hkg4-1.cdn.whatsapp.net/v/x.enc', directPath: '/v/y' }), 'https://media-hkg4-1.cdn.whatsapp.net/v/y');
+    assert.equal(mediaDownloadUrl({ url: 'https://evil.example/v/x.enc', directPath: '/v/y' }), 'https://mmg.whatsapp.net/v/y');
+    assert.equal(mediaDownloadUrl({ url: 'https://mmg.whatsapp.net/v/x.enc' }), 'https://mmg.whatsapp.net/v/x.enc');
+    assert.equal(mediaDownloadUrl({ url: 'https://evil.example/v/x.enc' }), '');
+    assert.equal(mediaDownloadUrl({ url: 'http://mmg.whatsapp.net/v/x.enc' }), '');
+    assert.equal(mediaDownloadUrl({ url: 'https://cdn.whatsapp.net.evil.example/x' }), '');
+    assert.equal(mediaDownloadUrl({ directPath: '//evil.example/x' }), '');
+  });
+
   test('markdown 转 WhatsApp 格式', () => {
     assert.equal(markdownToWhatsApp('**粗体** 和 *斜体* 和 __也粗__ 和 _斜_'), '*粗体* 和 _斜体_ 和 *也粗* 和 _斜_');
     assert.equal(markdownToWhatsApp('~~删掉~~'), '~删掉~');
@@ -151,13 +183,22 @@ describe('WhatsApp 纯逻辑', () => {
       assert.equal(classify(text(OWNER.pn, '123456', { key: { fromMe: true } }), base).reason, 'from-me');
     });
 
-    test('图片带说明交文字并标记媒体；纯图片交空文字由上层回提示', () => {
-      const res = classify(text(OWNER.pn, '', { message: { imageMessage: { caption: '看图' } } }));
+    test('图片带说明交文字并带上要下载的文件；语音、贴纸、非图片文件不下载', () => {
+      const key = randomBytes(32);
+      const res = classify(text(OWNER.pn, '', { message: { imageMessage: { caption: '看图', mediaKey: key, directPath: '/v/1', fileLength: { toNumber: () => 1234 } } } }));
       assert.equal(res.text, '看图');
       assert.equal(res.media, 'image');
+      assert.deepEqual(res.file, { keyType: 'image', mediaKey: key, url: '', directPath: '/v/1', size: 1234 });
+      assert.equal(classify(text(OWNER.pn, '', { message: { imageMessage: { caption: '没密钥' } } })).file, null);
+      const png = classify(text(OWNER.pn, '', { message: { documentMessage: { mimetype: 'image/png', mediaKey: key, directPath: '/v/2' } } }));
+      assert.equal(png.file.keyType, 'document');
+      assert.equal(classify(text(OWNER.pn, '', { message: { documentMessage: { mimetype: 'application/pdf', mediaKey: key, directPath: '/v/3' } } })).file, null);
+      assert.equal(classify(text(OWNER.pn, '', { message: { stickerMessage: { mediaKey: key, directPath: '/v/4' } } })).file, null);
+      assert.equal(classify(text(OWNER.pn, '陌生人', { message: { imageMessage: { mediaKey: key, directPath: '/v/5' } }, key: { remoteJid: '8613700000009@s.whatsapp.net' } })).reason, 'stranger');
       const voice = classify(text(OWNER.pn, '', { message: { audioMessage: {} } }));
       assert.equal(voice.text, '');
       assert.equal(voice.media, 'audio');
+      assert.equal(voice.file, null);
       const wrapped = classify(text(OWNER.pn, '', { message: { ephemeralMessage: { message: { extendedTextMessage: { text: '阅后即焚' } } } } }));
       assert.equal(wrapped.text, '阅后即焚');
     });
@@ -201,6 +242,20 @@ describe('WhatsApp 纯逻辑', () => {
       const sentIds = new Set(['BOT1']);
       assert.equal(classify(groupMsg(member, '收到', { stanzaId: 'BOT1' }), { groups, sentIds }).kind, 'deliver');
       assert.equal(classify(groupMsg(member, '收到', { stanzaId: 'OTHER' }), { groups, sentIds }).reason, 'group-not-addressed');
+    });
+
+    test('群里只发图片也能触发（回复秘书），带上要下载的文件；只发视频没有文字就不交', () => {
+      const sentIds = new Set(['BOT1']);
+      const media = (message) => ({ key: { remoteJid: GROUP, fromMe: false, id: `GM${Math.random()}`, participant: member }, message });
+      const reply = { stanzaId: 'BOT1' };
+      const image = classify(media({ imageMessage: { mediaKey: randomBytes(32), directPath: '/v/g', contextInfo: reply } }), { groups, sentIds });
+      assert.equal(image.kind, 'deliver');
+      assert.equal(image.text, '');
+      assert.equal(image.file.directPath, '/v/g');
+      assert.equal(classify(media({ imageMessage: { mediaKey: randomBytes(32), directPath: '/v/g' } }), { groups, sentIds }).reason, 'group-not-addressed');
+      assert.equal(classify(media({ videoMessage: { contextInfo: reply } }), { groups, sentIds }).reason, 'group-no-text');
+      const video = classify(media({ videoMessage: { caption: '@8613800000001 看', contextInfo: { mentionedJid: [ME.pn] } } }), { groups, sentIds });
+      assert.deepEqual([video.text, video.media, video.file], ['看', null, null]);
     });
 
     test('秘书自己在群里发的消息不当入站；副号手机上发的也忽略', () => {
