@@ -11,6 +11,8 @@ const TOP = 12
 const WAIT_MS = 20_000
 const EMIT_MS = 150
 const ANSWER_TIMEOUT_MS = 5 * 60_000
+/** 写到要求个数的这么多倍还停不下来就截断（宽松模式本来也只用前 expected 个） */
+const RUNAWAY_RATIO = 1.5
 const QUICK_LOAD_MS = 3000
 const RETRY_MS = 1500
 
@@ -139,6 +141,7 @@ export function createFingerprint(enso, { sdk = lmfpd, now = Date.now, fetchData
     status: ch.status,
     count: ch.count,
     tools: ch.tools,
+    truncated: Boolean(ch.truncated),
     model: ch.model,
     error: ch.error,
     startedAt: ch.startedAt,
@@ -264,6 +267,7 @@ export function createFingerprint(enso, { sdk = lmfpd, now = Date.now, fetchData
     ch.status = 'running'
     ch.startedAt = now()
     ch.controller = new AbortController()
+    scheduleEmit(run)
     let started
     try {
       started = enso.agent.run({
@@ -275,6 +279,10 @@ export function createFingerprint(enso, { sdk = lmfpd, now = Date.now, fetchData
           if (event.type === 'text' && typeof event.text === 'string') {
             ch.text = event.text
             ch.count = sdk.parseNumbers(event.text).length
+            if (ch.count >= ch.expected * RUNAWAY_RATIO && !ch.truncated) {
+              ch.truncated = true
+              ch.controller?.abort()
+            }
             scheduleEmit(run)
           } else if (event.type === 'tool-start') {
             ch.tools += 1
@@ -297,6 +305,9 @@ export function createFingerprint(enso, { sdk = lmfpd, now = Date.now, fetchData
         (error) => {
           if (run.status === 'cancelled') {
             ch.status = 'cancelled'
+          } else if (ch.truncated) {
+            // 失控连写被截断：用已收到的文本评分，拿不到 result.model
+            ch.status = 'done'
           } else if (codeOf(error) === 'RATE_LIMITED' || codeOf(error) === 'NO_INVOCATION') {
             // 宿主名额还没腾出来，或发起调用已结束：放回队列，等侧栏的下一次 wait 再发
             ch.status = 'queued'
@@ -419,6 +430,8 @@ export function createFingerprint(enso, { sdk = lmfpd, now = Date.now, fetchData
 
   const snapshot = async (_args, ctx) => {
     const all = await loadHistory()
+    // 插件进程重启后还没加载过检测器时，从磁盘读一下参考数据的版本
+    dataMeta ??= await readFile(join(dataDir, 'meta.json'), 'utf8').then(JSON.parse, () => null)
     const sessionId = ctx?.sessionId ?? null
     const live = sessionId ? liveRun(sessionId) : null
     return {

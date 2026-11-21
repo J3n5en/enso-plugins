@@ -104,7 +104,7 @@
     .history { display: flex; flex-direction: column; gap: 2px; }
     .history button { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; width: 100%; padding: 7px 8px; border: 0; border-radius: var(--radius-md); background: none; color: var(--foreground); text-align: left; cursor: pointer; font: inherit; }
     .history button[aria-current='true'] { background: var(--fp-soft); }
-    .history .t { font-size: 10.5px; color: var(--muted-foreground); }
+    .history .t { min-width: 0; font-size: 10.5px; color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .history .p { font-weight: 600; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .history .c { font: 500 11px var(--font-mono); color: var(--muted-foreground); grid-row: span 2; align-self: center; }
     .foot { font-size: 10.5px; color: var(--muted-foreground); text-align: center; line-height: 1.6; }
@@ -229,6 +229,8 @@
       const steps = el('div', { className: 'steps' })
       const [ds, dm] = dataLine(run)
       steps.append(stepNode(ds, 1, '参考数据', dm))
+      // 三道题同一个原因失败时只在底部说一次
+      const shared = Boolean(run.error) && run.challenges.every((ch) => !ch.error || run.error.endsWith(ch.error))
       run.challenges.forEach((ch, i) => {
         const ratio = ch.expected ? Math.min(1, ch.count / ch.expected) : 0
         const body = []
@@ -240,9 +242,9 @@
           const tail = ch.tail.replace(/\s+/g, ' ').trim()
           body.push(el('div', { className: 'tail', textContent: tail.length > 54 ? `…${tail.slice(-54)}` : tail }))
         }
-        if (ch.error) body.push(el('div', { className: 'err', textContent: ch.error }))
+        if (ch.error && !shared) body.push(el('div', { className: 'err', textContent: ch.error }))
         const meta = [ch.lang, `要求 ${ch.expected} 个`, ch.startedAt ? secs(ch.startedAt, ch.endedAt) : '', ch.tools ? `调用工具 ${ch.tools} 次` : ''].filter(Boolean).join(' · ')
-        steps.append(stepNode(ch.status, i + 2, `第 ${i + 1} 题`, meta, { pill: el('span', { className: 'pill', dataset: { s: ch.status }, textContent: CH_LABEL[ch.status] }), body }))
+        steps.append(stepNode(ch.status, i + 2, `第 ${i + 1} 题`, meta, { pill: el('span', { className: 'pill', dataset: { s: ch.status }, textContent: ch.truncated ? '已截断' : CH_LABEL[ch.status] }), body }))
       })
       const scoreState = run.status === 'scoring' ? 'running' : run.status === 'done' ? 'done' : run.status === 'error' && run.challenges.some((c) => c.status === 'done') ? 'error' : run.status === 'cancelled' ? 'cancelled' : 'queued'
       const scoreMeta = run.status === 'done' ? `用了 ${run.result?.usedOutputs ?? 0} 条有效回答` : run.status === 'cancelled' ? '已取消，这一轮不评分' : '本机离线评分'
@@ -269,7 +271,7 @@
       const models = r.actualModels ?? []
       const [label, tone] = MATCH[r.match] ?? MATCH.unknown
       card.append(el('div', { className: 'compare' },
-        el('span', { className: 'k', textContent: '实际模型' }),
+        el('span', { className: 'k', textContent: '会话模型', title: 'agent.run 返回的 result.model：会话里配置的模型 id，不是上游接口自报的模型名' }),
         el('span', { className: 'v', title: models.join('、'), textContent: models.join('、') || '—' }),
         r.prediction ? el('span', { className: 'pill', dataset: { s: tone }, textContent: label }) : null))
       return card
@@ -329,7 +331,7 @@
         const at = answered.indexOf(ch.index)
         const d = at >= 0 ? r.diagnostics?.[at] : null
         const verdict = d ? (d.accepted ? el('span', { className: 'ok', textContent: '有效' }) : el('span', { className: 'bad', textContent: '无效' })) : el('span', { className: 'bad', textContent: CH_LABEL[ch.status] })
-        const sub = [ch.lang, `要求 ${ch.expected}`, d?.outOfRange ? `超范围 ${d.outOfRange}` : '', ch.tools ? `工具 ${ch.tools} 次` : '', ch.model || ''].filter(Boolean).join(' · ')
+        const sub = [ch.lang, `要求 ${ch.expected}`, d?.outOfRange ? `超范围 ${d.outOfRange}` : '', ch.tools ? `工具 ${ch.tools} 次` : '', ch.truncated ? `写了 ${ch.count} 个仍未停，已截断` : '', ch.model || ''].filter(Boolean).join(' · ')
         table.append(el('tr', {},
           el('td', {}, el('div', { textContent: `第 ${i + 1} 题` }), el('div', { className: 'label', textContent: sub })),
           el('td', { className: 'num', textContent: d ? String(d.parsed) : String(ch.count) }),
@@ -349,7 +351,7 @@
       const r = run.result
       const parts = [renderHero(run), renderRanking(r), renderSequence(r), renderDiagnostics(run)]
       if (r.evidence?.reason) parts.push(el('details', { className: 'raw' }, el('summary', { textContent: `检测器说明（${r.evidence.label || 'evidence'}）` }), el('pre', { textContent: r.evidence.reason })))
-      parts.push(el('div', { className: 'disclaimer', textContent: '结果是参考库内的封闭集合排序，不是身份证明：库外的模型也会得到一个「最像」的候选，置信度只在库内模型之间比较。实际模型名来自 Enso 的 agent.run，只作对照；Enso 的代理带系统提示和只读工具，可能让结果偏离直接调用接口时的样子。' }))
+      parts.push(el('div', { className: 'disclaimer', textContent: '结果是参考库内的封闭集合排序，不是身份证明：库外的模型也会得到一个「最像」的候选，置信度只在库内模型之间比较。「会话模型」是 agent.run 返回的模型 id，也就是会话里配置的名字，不代表上游实际提供的模型；Enso 的代理带系统提示和只读工具，可能让结果偏离直接调用接口时的样子。' }))
       return parts
     }
 
@@ -370,8 +372,9 @@
       for (const item of history) {
         const r = item.result
         const label = item.status === 'done' ? (r?.prediction ? r.predictionName : DECISION[r?.decision] ?? '完成') : RUN_LABEL[item.status]
+        const sub = item.status === 'done' ? (r?.actualModels ?? []).join('、') || '会话模型未知' : item.status === 'error' ? item.error || '' : '没有评分'
         const button = el('button', { dataset: { fill: '' } },
-          el('span', { className: 't', textContent: `${clock(item.startedAt)} · ${(item.result?.actualModels ?? []).join('、') || RUN_LABEL[item.status]}` }),
+          el('span', { className: 't', textContent: `${clock(item.startedAt)} · ${sub}` }),
           el('span', { className: 'c', textContent: item.status === 'done' ? pct(r?.probability) : '' }),
           el('span', { className: 'p', textContent: label }))
         button.setAttribute('aria-current', String(item.id === cur?.id))

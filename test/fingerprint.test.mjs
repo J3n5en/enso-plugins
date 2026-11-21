@@ -174,6 +174,11 @@ test('排队：同时最多 2 个 agent.run，第三道题在侧栏的 wait 里�
   const s = await setup();
   const { runId } = await s.call('start');
   assert.equal(s.runs.length, MAX_PARALLEL);
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  assert.deepEqual(
+    s.emitted.at(-1).data.challenges.map((c) => c.status),
+    ['running', 'running', 'queued']
+  );
   for (const run of s.runs) {
     assert.equal(run.input.context, 'none');
     assert.equal(run.input.systemPrompt, undefined);
@@ -265,6 +270,26 @@ test('一道题失败时用其余两道评分；全部失败报错', async () =>
   assert.equal(fail.status, 'error');
   assert.equal(t.analyzed.length, 0);
   assert.match((await t.call('snapshot')).history[0].error, /没有拿到回答：没有回复/);
+});
+
+test('回答写到要求个数 1.5 倍还不停：中止这道题，用已收到的文本评分', async () => {
+  const s = await setup();
+  const { runId } = await s.call('start');
+  const runaway = s.runs[0];
+  runaway.input.onEvent({ type: 'text', text: numbers(600) });
+  assert.ok(runaway.settled);
+  const res = await s.follow(runId, undefined, async () => {
+    const pending = s.runs.find((r) => !r.settled);
+    if (pending) pending.resolve({ text: numbers(300), model: 'glm-5.3' });
+    await s.settle();
+  });
+  assert.equal(res.status, 'done');
+  assert.equal(s.analyzed[0].length, 3);
+  const entry = (await s.call('snapshot')).history[0];
+  assert.equal(entry.challenges[0].status, 'done');
+  assert.equal(entry.challenges[0].truncated, true);
+  assert.equal(entry.challenges[0].count, 600);
+  assert.deepEqual(entry.result.actualModels, ['glm-5.3']);
 });
 
 test('宿主报 RATE_LIMITED 时放回队列稍后重发', async () => {
