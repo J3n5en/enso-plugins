@@ -1,0 +1,179 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="enso-ui.css" />
+    <style>
+      body { padding: 10px; font-size: 12px; }
+      #app { display: flex; flex-direction: column; gap: 8px; }
+      .card { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+      .row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+      .grow { flex: 1; min-width: 0; }
+      .m { color: var(--muted-foreground); font-size: 11px; line-height: 1.5; }
+      .err { color: var(--destructive); font-size: 11px; }
+      .warn { color: var(--warning); font-size: 11px; line-height: 1.5; }
+      .qr { display: flex; justify-content: center; background: #fff; border-radius: var(--radius-md); padding: 8px; }
+      .qr svg { width: 196px; height: 196px; }
+      .mode { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
+      .mode input { margin-top: 2px; }
+      .code { font: 600 22px/1.2 var(--font-mono, monospace); letter-spacing: 4px; text-align: center; padding: 6px; border-radius: var(--radius-md); background: var(--muted); }
+      .group { display: flex; align-items: center; gap: 8px; }
+      .group .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .ui-btn--block { width: 100%; height: 32px; }
+    </style>
+  </head>
+  <body>
+    <div id="app"><div class="ui-card card"><div class="ui-skeleton" style="height: 14px; width: 50%"></div></div></div>
+    <script src="enso-ui.js"></script>
+    <!-- Kazuhiko Arase, QR Code Generator, MIT. 页面没有网络，二维码在本地生成。 -->
+    <script src="lib/qrcode.js"></script>
+    <script>
+      const app = document.getElementById('app');
+      const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+      const LABEL = { unconfigured: '未登录', pending: '处理中', connected: '已连接', error: '出错' };
+      const BADGE = { pending: 'ui-badge--warning', connected: 'ui-badge--success', error: 'ui-badge--destructive' };
+      let view = null;
+      let groups = null;
+      let groupsBusy = false;
+      let error = '';
+      let last = '';
+
+      function qrSvg(text) {
+        if (!text || typeof qrcode !== 'function') return '';
+        try {
+          const qr = qrcode(0, 'M');
+          qr.addData(text);
+          qr.make();
+          return qr.createSvgTag({ cellSize: 4, margin: 8, scalable: true });
+        } catch {
+          return '';
+        }
+      }
+
+      function modeBlock(v) {
+        const opt = (value, title, desc) => `<label class="mode"><input type="radio" name="mode" value="${value}" ${v.mode === value ? 'checked' : ''} data-mode /><span><b>${title}</b><div class="m">${desc}</div></span></label>`;
+        const selfWarn = v.mode === 'self'
+          ? '<div class="warn">自己号码模式：秘书的回复出现在「给自己发消息」里，手机不会收到通知；用自己的号跑非官方协议，被封号的风险更高。</div>'
+          : '';
+        return `<div class="ui-card card">
+          <b>模式</b>
+          ${opt('secondary', '副号（推荐）', '扫码登录一个专用的副号，再用你的主号给它发绑定码。之后只认主号的私聊。')}
+          ${opt('self', '自己号码', '扫码登录你自己的号，只认「给自己发消息」这个对话，其他私聊一律不读不回。')}
+          ${selfWarn}
+        </div>`;
+      }
+
+      function ownerBlock(v) {
+        if (!v.connected || v.mode !== 'secondary') return '';
+        if (v.owner) {
+          return `<div class="ui-card card"><div class="row"><b>主人</b><span class="grow"></span><span class="ui-badge ui-badge--success">已绑定</span></div>
+            <div class="m">${esc(v.owner.number)}${v.owner.name ? ` · ${esc(v.owner.name)}` : ''}</div>
+            <div class="m">只处理这个号码发来的私聊；其他人的私聊不读也不回。</div>
+            <button class="ui-btn ui-btn--outline ui-btn--sm" type="button" data-unbind>解除主人</button></div>`;
+        }
+        const code = v.bindCode
+          ? `<div class="m">用你的主号给 ${esc(v.account)} 发一条只含下面 6 位数字的消息（10 分钟内有效，只能用一次）：</div><div class="code">${esc(v.bindCode.code)}</div>`
+          : '<div class="m">绑定码已失效。</div>';
+        return `<div class="ui-card card"><div class="row"><b>绑定主人</b><span class="grow"></span><span class="ui-badge ui-badge--warning">未绑定</span></div>
+          ${code}<button class="ui-btn ui-btn--outline ui-btn--sm" type="button" data-code>换一个绑定码</button></div>`;
+      }
+
+      function groupsBlock(v) {
+        if (!v.connected) return '';
+        const bound = new Set((v.groups || []).map((g) => g.jid));
+        const list = groups
+          ? groups.length
+            ? groups.map((g) => `<label class="group"><input class="ui-switch" type="checkbox" data-group="${esc(g.jid)}" ${bound.has(g.jid) ? 'checked' : ''} /><span class="grow t">${esc(g.title)}</span><span class="m">${g.missing ? '已不在群里' : g.size ? `${g.size} 人` : ''}</span></label>`).join('')
+            : '<div class="m">这个号目前不在任何群里。</div>'
+          : (v.groups || []).length
+            ? (v.groups || []).map((g) => `<div class="m">已启用：${esc(g.title)}</div>`).join('')
+            : '<div class="m">默认不读、不回任何群。</div>';
+        return `<div class="ui-card card"><div class="row"><b>群聊</b><span class="grow"></span><button class="ui-btn ui-btn--outline ui-btn--sm" type="button" data-groups ${groupsBusy ? 'disabled' : ''}>${groupsBusy ? '加载中…' : groups ? '刷新' : '列出所在的群'}</button></div>
+          <div class="warn">启用的群里，群消息会交给秘书，群里任何成员 @ 这个号或回复秘书的消息都能触发回复。只启用你信任的群。</div>
+          ${list}</div>`;
+      }
+
+      function render() {
+        const key = JSON.stringify(view) + '\n' + JSON.stringify(groups) + groupsBusy + '\n' + error;
+        if (key === last) return;
+        last = key;
+        const v = view;
+        if (!v) {
+          app.innerHTML = error ? `<div class="ui-empty err">${esc(error)}</div>` : '<div class="ui-empty">加载中…</div>';
+          return;
+        }
+        const badge = `<span class="ui-badge ${BADGE[v.status] || ''}">${esc(LABEL[v.status] || v.status)}</span>`;
+        const svg = v.qrText ? qrSvg(v.qrText) : '';
+        const qr = svg
+          ? `<div class="qr">${svg}</div><div class="m">手机 WhatsApp → 设置 → 已关联的设备 → 关联新设备，扫描上面的二维码。二维码会自动刷新。</div>`
+          : v.qrText ? '<div class="err">二维码生成失败</div>' : '';
+        const canLogin = !v.connected && !v.qrText && (v.status === 'unconfigured' || v.status === 'error');
+        const login = canLogin
+          ? `<button class="ui-btn ui-btn--primary ui-btn--block" type="button" data-login>${v.account ? '重新连接 / 扫码登录' : '扫码登录'}</button>`
+          : '';
+        const logout = v.status !== 'unconfigured' && (v.connected || v.account || v.qrText)
+          ? '<button class="ui-btn ui-btn--outline ui-btn--block" type="button" data-logout>退出登录</button>'
+          : '';
+        const account = v.account ? `<div class="m">已登录 ${esc(v.account)}</div>` : '';
+        app.innerHTML = `<div class="ui-card card ui-enter">
+          <div class="row"><b>WhatsApp</b><span class="grow"></span>${badge}</div>
+          ${v.detail ? `<div class="m">${esc(v.detail)}</div>` : ''}
+          ${account}${qr}${login}${logout}
+          <div class="warn">这是 WhatsApp Web 的非官方协议，可能违反 WhatsApp 条款并导致封号。建议用副号。</div>
+          ${error ? `<div class="err">${esc(error)}</div>` : ''}
+        </div>${modeBlock(v)}${ownerBlock(v)}${groupsBlock(v)}`;
+      }
+
+      async function call(method, args) {
+        try {
+          const out = await window.enso.call(method, args ?? {});
+          if (out && typeof out === 'object' && 'status' in out) view = out;
+          error = '';
+          return out;
+        } catch (e) {
+          error = e?.message ?? String(e);
+          return null;
+        } finally {
+          render();
+        }
+      }
+
+      async function loadGroups() {
+        groupsBusy = true;
+        render();
+        const out = await call('groups');
+        groupsBusy = false;
+        if (out && Array.isArray(out.groups)) groups = out.groups;
+        render();
+      }
+
+      if (!window.enso?.call) {
+        app.innerHTML = '<div class="ui-empty">请在 EnsoCode 的联系方式设置里打开。</div>';
+      } else {
+        window.ensoUI?.tooltip?.();
+        window.enso.on?.('status', (data) => {
+          if (!data || typeof data !== 'object') return;
+          if (!data.connected) groups = null;
+          view = data;
+          render();
+        });
+        app.addEventListener('click', (e) => {
+          const t = e.target.closest('button');
+          if (!t) return;
+          if (t.hasAttribute('data-login')) call('login');
+          else if (t.hasAttribute('data-logout')) { groups = null; call('logout'); }
+          else if (t.hasAttribute('data-code')) call('newBindCode');
+          else if (t.hasAttribute('data-unbind')) call('unbindOwner');
+          else if (t.hasAttribute('data-groups')) loadGroups();
+        });
+        app.addEventListener('change', (e) => {
+          const t = e.target;
+          if (t.hasAttribute('data-mode')) call('setMode', { mode: t.value });
+          else if (t.hasAttribute('data-group')) call('setGroup', { jid: t.getAttribute('data-group'), enabled: t.checked });
+        });
+        call('state');
+        setInterval(() => call('state'), 2000);
+      }
+    </script>
+  </body>
+</html>

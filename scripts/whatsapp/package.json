@@ -1,0 +1,9 @@
+{
+  "name": "enso-whatsapp-vendor",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "baileys": "7.0.0-rc14",
+    "esbuild": "^0.25.0"
+  }
+}

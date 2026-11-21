@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "id": "enso.whatsapp",
+  "name": "WhatsApp",
+  "version": "0.1.0",
+  "icon": "icon.svg",
+  "description": "WhatsApp 联系方式：扫码登录（WhatsApp Web 多设备协议，非官方），把主人发来的消息交给 EnsoCode 秘书，并把秘书的回复、图片和文件发回 WhatsApp。默认副号模式，也支持用自己号码的「给自己发消息」；可以在设置页启用群聊，群里 @ 这个号或回复秘书时触发。",
+  "engines": {
+    "enso": ">=0.3.9"
+  },
+  "main": "main.mjs",
+  "resident": true,
+  "permissions": [
+    "secretary.contact",
+    "net.fetch",
+    "process.background",
+    "ui.view"
+  ],
+  "net": {
+    "domains": [
+      "web.whatsapp.com",
+      "mmg.whatsapp.net",
+      "*.cdn.whatsapp.net"
+    ]
+  },
+  "contributes": {
+    "contactChannels": [
+      {
+        "id": "whatsapp",
+        "title": "WhatsApp",
+        "icon": "icon.svg",
+        "settingsView": "view.html"
+      }
+    ],
+    "methods": [
+      { "name": "state", "timeoutMs": 5000 },
+      { "name": "login", "timeoutMs": 25000 },
+      { "name": "logout", "timeoutMs": 15000 },
+      { "name": "setMode", "timeoutMs": 5000 },
+      { "name": "newBindCode", "timeoutMs": 5000 },
+      { "name": "unbindOwner", "timeoutMs": 5000 },
+      { "name": "groups", "timeoutMs": 20000 },
+      { "name": "setGroup", "timeoutMs": 5000 }
+    ]
+  }
+}
