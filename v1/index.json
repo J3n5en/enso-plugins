@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-21T02:22:55.333Z",
-  "sequence": 121,
+  "generatedAt": "2026-11-21T03:51:02.574Z",
+  "sequence": 122,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -1573,7 +1573,7 @@
     {
       "id": "enso.pstack",
       "name": "pstack",
-      "description": "Lauren Tan 的 pstack 0.15.44（MIT）：poteto-mode 按任务挑选 playbook，配套 arena、interrogate、architect 等 58 个 skill 和工程原则，先深挖再并行。只在输入框选了「pstack」预设的会话里加载。在输入框按钮里为某个会话打开后，该会话的每条消息自动展开 poteto-mode。",
+      "description": "Lauren Tan 的 pstack 0.15.46（MIT）：poteto-mode 按任务挑选 playbook，配套 arena、interrogate、architect 等 58 个 skill 和工程原则，先深挖再并行。只在输入框选了「pstack」预设的会话里加载。在输入框按钮里为某个会话打开后，该会话的每条消息自动展开 poteto-mode。",
       "tier": "official",
       "tags": [
         "skills",
@@ -1585,11 +1585,11 @@
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.pstack.svg",
       "category": "agent",
       "readme": {
-        "path": "packages/enso.pstack/0.3.4.readme.md",
-        "sha256": "aba77e36976eed17a2e4176fa31a6c99a4abfd0c3861572e443aea18abcd0fe7",
+        "path": "packages/enso.pstack/0.3.5.readme.md",
+        "sha256": "ebd29ae8654f8ebf48a4990c538586a99c3c4f8a07d3dd0d5f7df28298fd6633",
         "size": 28729
       },
-      "latest": "0.3.4",
+      "latest": "0.3.5",
       "versions": [
         {
           "version": "0.1.0",
@@ -1690,6 +1690,20 @@
           "sha256": "54ce3ce4b6393bc1a7219a696f2a59f40844c695c56828a4f05c9a8ac1980e06",
           "size": 661940,
           "publishedAt": "2026-11-19T10:51:44.767Z"
+        },
+        {
+          "version": "0.3.5",
+          "engines": {
+            "enso": ">=0.2.15"
+          },
+          "permissions": [
+            "agent.intercept",
+            "ui.slot"
+          ],
+          "path": "packages/enso.pstack/0.3.5.zip",
+          "sha256": "cd9a25ca92493603d3bdaec5d34e91eae1c859c8637b487057550d9abef44368",
+          "size": 664162,
+          "publishedAt": "2026-11-21T03:51:02.574Z"
         }
       ]
     },
