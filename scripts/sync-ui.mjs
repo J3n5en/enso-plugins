@@ -16,6 +16,7 @@ export const UI_PACKAGES = [
   'enso.bugbot',
   'enso.clawbot',
   'enso.example.notes',
+  'enso.fingerprint',
   'enso.fanqie',
   'enso.github',
   'enso.hongguo',
