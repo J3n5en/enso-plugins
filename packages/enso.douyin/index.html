@@ -1,0 +1,687 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>抖音推荐流</title>
+<style>
+  :root {
+    --bg: #000;
+    --fg: #fff;
+    --dim: rgba(255, 255, 255, .72);
+    --faint: rgba(255, 255, 255, .55);
+    --accent: #fe2c55;
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: var(--bg); color: var(--fg);
+    font: 13px/1.45 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #stage {
+    height: 100%;
+    overflow-y: scroll;
+    scroll-snap-type: y mandatory;
+    overscroll-behavior-y: contain;
+    scrollbar-width: none;
+  }
+  #stage::-webkit-scrollbar { display: none; }
+
+  .card {
+    position: relative;
+    height: 100%;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+    background: #000;
+    overflow: hidden;
+  }
+  .card video {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    object-fit: contain;
+    background: #000;
+  }
+  .card .poster {
+    position: absolute; inset: 0;
+    background-size: cover; background-position: center;
+    filter: blur(18px) brightness(.45);
+    transform: scale(1.15);
+    transition: opacity .35s ease;
+  }
+  .card.playing .poster { opacity: 0; }
+
+  .shade {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    height: 45%;
+    background: linear-gradient(to top, rgba(0,0,0,.78), rgba(0,0,0,0));
+    pointer-events: none;
+  }
+
+  .meta {
+    position: absolute; left: 14px; right: 76px;
+    bottom: calc(16px + var(--safe-bottom));
+    display: flex; flex-direction: column; gap: 6px;
+    text-shadow: 0 1px 3px rgba(0,0,0,.6);
+  }
+  .meta .author { font-size: 14px; font-weight: 600; }
+  .meta .desc {
+    font-size: 12.5px; color: var(--dim);
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .meta .music {
+    font-size: 12px; color: var(--faint);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .meta .music::before { content: "♪ "; }
+
+  .rail {
+    position: absolute; right: 12px; bottom: calc(20px + var(--safe-bottom));
+    display: flex; flex-direction: column; gap: 14px; align-items: center;
+  }
+  .rail .stat {
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    font-size: 11px; color: var(--fg);
+    text-shadow: 0 1px 3px rgba(0,0,0,.6);
+  }
+  .rail .stat .ico { font-size: 18px; line-height: 1; }
+  .rail .stat.liked .ico { color: var(--accent); }
+
+  .icon-btn {
+    width: 34px; height: 34px; border-radius: 50%;
+    border: none; cursor: pointer;
+    display: grid; place-items: center;
+    background: rgba(255,255,255,.14); color: #fff;
+    font-size: 15px; backdrop-filter: blur(8px);
+    transition: background .18s ease, transform .12s ease;
+  }
+  .icon-btn:hover { background: rgba(255,255,255,.26); }
+  .icon-btn:active { transform: scale(.92); }
+
+  #hud {
+    position: fixed; top: calc(10px + var(--safe-top)); left: 10px; right: 10px;
+    display: flex; align-items: center; gap: 8px;
+    pointer-events: none; z-index: 10;
+  }
+  #hud > * { pointer-events: auto; }
+  #hud .spacer { flex: 1; }
+  #status {
+    font-size: 11px; color: var(--faint);
+    background: rgba(0,0,0,.35); border-radius: 999px;
+    padding: 4px 10px; backdrop-filter: blur(8px);
+    max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  #status:empty { display: none; }
+
+  .card .paused-mark {
+    position: absolute; inset: 0; display: grid; place-items: center;
+    pointer-events: none; opacity: 0; transition: opacity .18s ease;
+  }
+  .card.paused .paused-mark { opacity: 1; }
+  .card .paused-mark span {
+    width: 62px; height: 62px; border-radius: 50%;
+    background: rgba(0,0,0,.5); backdrop-filter: blur(8px);
+    display: grid; place-items: center;
+    font-size: 22px; color: #fff; padding-left: 4px;
+    box-shadow: 0 2px 12px rgba(0,0,0,.35);
+  }
+
+  #linkbox {
+    position: fixed; inset: 0; z-index: 30;
+    display: grid; place-items: center;
+    background: rgba(0,0,0,.55); backdrop-filter: blur(6px);
+  }
+  #linkbox .panel {
+    width: min(440px, calc(100% - 32px));
+    background: #17171a; border: 1px solid rgba(255,255,255,.1);
+    border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 10px;
+    box-shadow: 0 16px 48px rgba(0,0,0,.6);
+  }
+  #linkbox .tip { font-size: 12px; color: var(--dim); }
+  #linkbox textarea {
+    width: 100%; height: 62px; resize: none;
+    background: #0d0d0f; color: var(--fg);
+    border: 1px solid rgba(255,255,255,.12); border-radius: 8px;
+    padding: 8px; font: 12px/1.5 ui-monospace, Menlo, monospace;
+  }
+  #linkbox .row { display: flex; gap: 8px; justify-content: flex-end; }
+  #linkbox .row button {
+    border: none; cursor: pointer; border-radius: 8px; padding: 7px 14px;
+    font-size: 12px; background: rgba(255,255,255,.12); color: #fff;
+  }
+  #linkbox .row button.primary { background: var(--accent); }
+
+  .noaudio {
+    font-size: 10px; color: var(--faint);
+    background: rgba(0,0,0,.45); border-radius: 999px;
+    padding: 2px 7px; backdrop-filter: blur(6px);
+  }
+
+  #hint {
+    position: absolute; inset: 0; display: grid; place-items: center;
+    color: var(--faint); font-size: 12px; text-align: center; padding: 24px;
+    pointer-events: none; opacity: 0; transition: opacity .25s ease;
+  }
+  #hint.on { opacity: 1; }
+
+  .spinner {
+    position: absolute; inset: 0; display: grid; place-items: center;
+    align-content: center; gap: 8px;
+    pointer-events: none; opacity: 0; transition: opacity .2s ease;
+  }
+  .spinner .pct { font-size: 11px; color: var(--dim); font-style: normal; }
+  .card.buffering .spinner { opacity: 1; }
+  .spinner span {
+    width: 26px; height: 26px; border-radius: 50%;
+    border: 2px solid rgba(255,255,255,.25);
+    border-top-color: #fff;
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .end {
+    height: 100%; scroll-snap-align: start;
+    display: grid; place-items: center;
+    color: var(--faint); font-size: 12px;
+    background: #000;
+  }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+
+<div id="hud">
+  <button class="icon-btn" id="refresh" title="换一批">↻</button>
+  <button class="icon-btn" id="mute" title="声音">🔇</button>
+  <div class="spacer"></div>
+  <div id="status"></div>
+</div>
+
+<div id="hint"></div>
+
+<script>
+const stage = document.getElementById('stage');
+const statusEl = document.getElementById('status');
+const hintEl = document.getElementById('hint');
+const muteBtn = document.getElementById('mute');
+
+const state = {
+  items: [],
+  cards: [],       // 与 items 下标对齐
+  seen: new Set(),
+  loading: false,
+  exhausted: false,
+  muted: true,
+  current: -1,
+};
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// 宿主限流 10 次/秒，连发会被拒；排队串行放行，播放取块插队
+const queue = [];
+let pumping = false;
+const call = (method, args, priority = 1) =>
+  new Promise((resolve, reject) => {
+    queue.push({ method, args, priority, resolve, reject, tries: 0 });
+    queue.sort((a, b) => a.priority - b.priority);
+    pump();
+  });
+
+async function pump() {
+  if (pumping) return;
+  pumping = true;
+  while (queue.length) {
+    const job = queue.shift();
+    enso.call(job.method, job.args).then(job.resolve, async (e) => {
+      const msg = String(e?.message || e);
+      if (/频繁|RATE_LIMITED|连续失败|CIRCUIT/.test(msg) && job.tries++ < 20) {
+        await sleep(/连续失败|CIRCUIT/.test(msg) ? 3000 : 400);
+        queue.unshift(job);
+        pump();
+      } else job.reject(e);
+    });
+    await sleep(120);
+  }
+  pumping = false;
+}
+
+const fmt = (n) => {
+  if (!n) return '0';
+  if (n >= 100000000) return (n / 100000000).toFixed(1).replace(/\.0$/, '') + '亿';
+  if (n >= 10000) return (n / 10000).toFixed(1).replace(/\.0$/, '') + 'w';
+  return String(n);
+};
+
+const say = (text, ms = 2200) => {
+  statusEl.textContent = text || '';
+  if (text && ms) setTimeout(() => { if (statusEl.textContent === text) statusEl.textContent = ''; }, ms);
+};
+
+async function copyText(text) {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      say('链接已复制');
+      return;
+    }
+  } catch {}
+  showLinkBox(text);
+}
+
+function showLinkBox(text) {
+  document.getElementById('linkbox')?.remove();
+  const box = document.createElement('div');
+  box.id = 'linkbox';
+  box.innerHTML = '<div class="panel"><div class="tip">复制下面的分享链接</div></div>';
+  const panel = box.querySelector('.panel');
+  const area = document.createElement('textarea');
+  area.value = text;
+  area.readOnly = true;
+  const row = document.createElement('div');
+  row.className = 'row';
+  const again = document.createElement('button');
+  again.textContent = '再试一次复制';
+  again.onclick = () => {
+    area.select();
+    try {
+      if (document.execCommand('copy')) say('链接已复制');
+    } catch {}
+  };
+  const close = document.createElement('button');
+  close.className = 'primary';
+  close.textContent = '关闭';
+  close.onclick = () => box.remove();
+  row.append(again, close);
+  panel.append(area, row);
+  document.body.append(box);
+  area.focus();
+  area.select();
+  box.addEventListener('click', (e) => { if (e.target === box) box.remove(); });
+}
+
+function makeCard(item, index) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.dataset.index = String(index);
+  card.innerHTML = `
+    <div class="poster"></div>
+    <video playsinline loop preload="none" muted></video>
+    <div class="shade"></div>
+    <div class="meta">
+      <div class="author"></div>
+      <div class="desc"></div>
+      <div class="music"></div>
+    </div>
+    <div class="rail">
+      <div class="stat digg"><span class="ico">♥</span><span class="num"></span></div>
+      <div class="stat comment"><span class="ico">💬</span><span class="num"></span></div>
+      <div class="stat share"><span class="ico">↗</span><span class="num"></span></div>
+      <button class="icon-btn copylink" title="复制分享链接">⧉</button>
+    </div>
+    <div class="paused-mark"><span>▶</span></div>
+    <div class="spinner"><span></span><em class="pct"></em></div>
+  `;
+  card.querySelector('.poster').style.backgroundImage = item.video?.cover ? `url("${item.video.cover}")` : '';
+  card.querySelector('.author').textContent = item.author?.nickname ? `@${item.author.nickname}` : '';
+  card.querySelector('.desc').textContent = item.desc || '';
+  const music = item.music?.title || '';
+  const musicEl = card.querySelector('.music');
+  musicEl.textContent = music;
+  if (!music) musicEl.remove();
+  card.querySelector('.digg .num').textContent = fmt(item.stats?.digg);
+  card.querySelector('.comment .num').textContent = fmt(item.stats?.comment);
+  card.querySelector('.share .num').textContent = fmt(item.stats?.share);
+  card.querySelector('.copylink').addEventListener('click', (event) => {
+    event.stopPropagation();
+    copyText(`https://www.douyin.com/video/${item.id}`);
+  });
+
+  const video = card.querySelector('video');
+  video.muted = state.muted;
+  video.addEventListener('playing', () => {
+    card.classList.add('playing');
+    card.classList.remove('buffering');
+  });
+  video.addEventListener('waiting', () => card.classList.add('buffering'));
+  video.addEventListener('canplay', () => card.classList.remove('buffering'));
+  video.addEventListener('error', () => {
+    card.classList.remove('buffering');
+    card.classList.add('failed');
+    say('这条视频加载失败，往下滑继续');
+  });
+  return card;
+}
+
+// 插件页面只能播 blob:/data:，所以视频由主进程落盘、页面按块拉回来。
+// 优先 MSE 边下边播；codec 不被接受时退回整段拼 Blob。
+const blobUrls = new Map();
+
+// 抖音有些作品本身没有音轨，静音按钮对它们无效，标出来免得以为是坏了
+function markNoAudio(card) {
+  if (card.querySelector('.noaudio')) return;
+  const tag = document.createElement('div');
+  tag.className = 'noaudio';
+  tag.textContent = '无音轨';
+  card.querySelector('.rail')?.prepend(tag);
+}
+
+const b64bytes = (s) => {
+  const bin = atob(s);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+};
+
+const idle = (sb) =>
+  new Promise((r) => {
+    try {
+      if (!sb.updating) return r();
+      const done = () => {
+        try { sb.removeEventListener('updateend', done); sb.removeEventListener('error', done); } catch {}
+        r();
+      };
+      sb.addEventListener('updateend', done, { once: true });
+      sb.addEventListener('error', done, { once: true });
+    } catch { r(); }
+  });
+
+// 已缓冲到当前位置之后的秒数
+function ahead(video) {
+  const b = video.buffered;
+  const t = video.currentTime;
+  for (let i = 0; i < b.length; i++) if (b.start(i) <= t + 0.5 && t <= b.end(i)) return b.end(i) - t;
+  return b.length ? b.end(b.length - 1) - t : 0;
+}
+
+async function appendChunk(sb, bytes, card, token) {
+  for (;;) {
+    if (card.dataset.token !== token) return;
+    await idle(sb);
+    if (card.dataset.token !== token) return;
+    try {
+      sb.appendBuffer(bytes);
+      await idle(sb);
+      return;
+    } catch (e) {
+      if (e.name === 'QuotaExceededError') {
+        await sleep(400);
+        continue;
+      }
+      throw e;
+    }
+  }
+}
+
+// 边下边播：MSE 喂 mp4 分片。返回 false 表示这条路走不通，调用方回退整段 Blob。
+async function streamPlay(video, item, card, token) {
+  const url = item.video.url;
+  const info = await call('media', { url }, 0);
+  if (info?.hasAudio === false) markNoAudio(card);
+  const MS = window.ManagedMediaSource || window.MediaSource;
+  // 抖音给的是整段 mp4（moov 没有 mvex），MSE 会直接拒收，别白试
+  if (!info?.fragmented) return false;
+  if (!MS || !info?.mime || !MS.isTypeSupported(info.mime)) return false;
+
+  const ms = new MS();
+  const objUrl = URL.createObjectURL(ms);
+  const drop = () => { try { URL.revokeObjectURL(objUrl); } catch {} };
+  video.src = objUrl;
+  await new Promise((r) => ms.addEventListener('sourceopen', r, { once: true }));
+  if (card.dataset.token !== token) { drop(); return true; }
+
+  let sb;
+  try {
+    sb = ms.addSourceBuffer(info.mime);
+  } catch {
+    drop();
+    return false;
+  }
+
+  const pct = card.querySelector('.pct');
+  let off = 0;
+  let started = false;
+  try {
+    for (;;) {
+      if (card.dataset.token !== token) { drop(); return true; }
+      if (started && ahead(video) > 90) { await sleep(600); continue; }
+      const res = await call('chunk', { url, offset: off }, 0);
+      if (!res?.data) break;
+      await appendChunk(sb, b64bytes(res.data), card, token);
+      if (card.dataset.token !== token) { drop(); return true; }
+      off = Number(res.next) || off + 1;
+      if (pct && info.size) pct.textContent = `${Math.min(99, Math.round((off / info.size) * 100))}%`;
+      if (!started) {
+        started = true;
+        video.play().catch(() => {});
+      }
+      if (res.done) break;
+    }
+    try { if (ms.readyState === 'open') ms.endOfStream(); } catch {}
+  } catch (e) {
+    drop();
+    throw e;
+  }
+  return true;
+}
+
+// 回退：整段拉完拼成一个 Blob 再播
+async function pullWhole(item, card, token) {
+  const url = item.video.url;
+  if (blobUrls.has(url)) return blobUrls.get(url);
+  const info = await call('media', { url }, 0);
+  if (info?.hasAudio === false) markNoAudio(card);
+  const size = Number(info?.size) || 0;
+  if (!size) throw new Error('拿不到视频大小');
+  const pct = card.querySelector('.pct');
+  const parts = [];
+  let off = 0;
+  while (off < size) {
+    if (card.dataset.token !== token) return null;
+    const res = await call('chunk', { url, offset: off }, 0);
+    if (!res?.data) break;
+    const bytes = b64bytes(res.data);
+    parts.push(bytes);
+    off = Number(res.next) || off + bytes.length;
+    if (pct) pct.textContent = `${Math.min(99, Math.round((off / size) * 100))}%`;
+    if (res.done) break;
+  }
+  if (!parts.length) throw new Error('视频下载中断');
+  const blobUrl = URL.createObjectURL(new Blob(parts, { type: 'video/mp4' }));
+  blobUrls.set(url, blobUrl);
+  return blobUrl;
+}
+
+function load(index) {
+  const card = state.cards[index];
+  const item = state.items[index];
+  if (!card || !item?.video?.url) return null;
+  const video = card.querySelector('video');
+  if (video.dataset.ready === '1' || video.dataset.loading === '1') return video;
+  video.dataset.loading = '1';
+  card.classList.add('buffering');
+  card.classList.remove('failed');
+  const token = `${Date.now()}-${Math.random()}`;
+  card.dataset.token = token;
+  (async () => {
+    let streamed = false;
+    try {
+      streamed = await streamPlay(video, item, card, token);
+    } catch (e) {
+      streamed = false;
+      say(e?.message || '视频加载失败');
+    }
+    if (card.dataset.token !== token) return;
+    if (!streamed) {
+      const blobUrl = await pullWhole(item, card, token);
+      if (!blobUrl || card.dataset.token !== token) return;
+      video.src = blobUrl;
+      video.play().catch(() => {});
+    }
+    video.dataset.ready = '1';
+  })()
+    .catch((e) => say(e?.message || '视频加载失败'))
+    .finally(() => {
+      delete video.dataset.loading;
+      card.classList.remove('buffering');
+    });
+  return video;
+}
+
+const prefetched = new Set();
+function prefetch(index) {
+  const item = state.items[index];
+  const url = item?.video?.url;
+  if (!url || prefetched.has(url)) return;
+  prefetched.add(url);
+  // 只触发主进程落盘，不等结果；滑到那一条时 chunk 直接读缓存
+  call('media', { url, prefetch: true }).catch(() => {});
+}
+
+let observer;
+function watchCards() {
+  observer?.disconnect();
+  observer = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      const card = entry.target;
+      const index = Number(card.dataset.index);
+      const video = card.querySelector('video');
+      if (entry.isIntersecting && entry.intersectionRatio > 0.6) {
+        state.current = index;
+        card.classList.remove('paused');
+        load(index);
+        prefetch(index + 1);
+        if (index >= state.items.length - 3) loadMore();
+      } else {
+        // 只要不是当前这条就停，否则滑动过程中上一条会继续出声
+        video?.pause();
+      }
+    }
+  }, { root: stage, threshold: [0, 0.6, 1] });
+  for (const card of state.cards) if (card) observer.observe(card);
+}
+
+function append(items) {
+  const fresh = [];
+  for (const item of items) {
+    if (!item?.id || state.seen.has(item.id)) continue;
+    state.seen.add(item.id);
+    fresh.push(item);
+  }
+  if (!fresh.length) return 0;
+  const start = state.items.length;
+  const frag = document.createDocumentFragment();
+  for (const [offset, item] of fresh.entries()) {
+    state.items.push(item);
+    const card = makeCard(item, start + offset);
+    state.cards.push(card);
+    frag.append(card);
+  }
+  const end = stage.querySelector('.end');
+  if (end) stage.insertBefore(frag, end);
+  else stage.append(frag);
+  watchCards();
+  return fresh.length;
+}
+
+async function loadMore() {
+  if (state.loading || state.exhausted) return;
+  state.loading = true;
+  try {
+    const res = await call('feed', { count: 10 });
+    const added = append(res?.items ?? []);
+    if (!added && !(res?.hasMore ?? false)) {
+      state.exhausted = true;
+      if (!stage.querySelector('.end')) {
+        const end = document.createElement('div');
+        end.className = 'end';
+        end.textContent = '刷到底啦，点左上角换一批';
+        stage.append(end);
+      }
+    }
+  } catch (e) {
+    say(e?.message || '加载失败');
+  } finally {
+    state.loading = false;
+  }
+}
+
+async function refresh() {
+  state.items = [];
+  state.cards = [];
+  state.seen.clear();
+  state.exhausted = false;
+  state.loading = false;
+  state.current = -1;
+  for (const url of blobUrls.values()) URL.revokeObjectURL(url);
+  blobUrls.clear();
+  prefetched.clear();
+  stage.innerHTML = '';
+  await loadMore();
+  if (state.current !== 0) stage.scrollTo({ top: 0 });
+}
+
+document.getElementById('refresh').addEventListener('click', () => {
+  refresh().catch((e) => say(e?.message || '刷新失败'));
+});
+
+muteBtn.addEventListener('click', () => {
+  state.muted = !state.muted;
+  muteBtn.textContent = state.muted ? '🔇' : '🔊';
+  for (const card of state.cards) {
+    const v = card?.querySelector('video');
+    if (v) v.muted = state.muted;
+  }
+  const index = state.current >= 0 ? state.current : 0;
+  const current = state.cards[index]?.querySelector('video');
+  if (current) {
+    current.muted = state.muted;
+    if (!state.muted) current.play().catch(() => {});
+  }
+  if (!state.muted) say('已开声音');
+});
+
+stage.addEventListener('click', () => {
+  const card = state.cards[state.current];
+  const v = card?.querySelector('video');
+  if (!v) return;
+  if (v.paused) {
+    card.classList.remove('paused');
+    v.play().catch(() => {});
+  } else {
+    v.pause();
+    card.classList.add('paused');
+  }
+});
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'ArrowDown' || event.key === 'j') {
+    event.preventDefault();
+    scrollToIndex(state.current + 1);
+  } else if (event.key === 'ArrowUp' || event.key === 'k') {
+    event.preventDefault();
+    scrollToIndex(state.current - 1);
+  } else if (event.key === 'm') {
+    muteBtn.click();
+  } else if (event.key === 'r') {
+    document.getElementById('refresh').click();
+  }
+});
+
+function scrollToIndex(index) {
+  const card = state.cards[Math.max(0, Math.min(index, state.items.length - 1))];
+  card?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+refresh()
+  .then(() => say('点右上角 🔊 开声音，滚轮或 ↑↓ 切换', 4200))
+  .catch((e) => {
+    hintEl.textContent = e?.message || '加载失败';
+    hintEl.classList.add('on');
+  });
+</script>
+</body>
+</html>
