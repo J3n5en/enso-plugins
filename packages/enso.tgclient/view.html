@@ -349,7 +349,7 @@
       // 没连上时不去碰数据接口：失败会累计到宿主的熔断里，连坏 5 次整个插件停 30 秒
       const ANY_STATE = new Set(['state', 'poll', 'focus', 'login', 'code', 'password', 'cancel', 'logout', 'reconnect', 'open', 'watches', 'unwatch']);
       async function call(method, args) {
-        if (!ANY_STATE.has(method) && S.st && S.st.status !== 'ready') throw new Error(S.st.status === 'offline' ? '正在重连 Telegram…' : '还没连上 Telegram');
+        if (!ANY_STATE.has(method) && S.st && S.st.status !== 'ready') throw new Error(S.st.status === 'offline' ? (S.st.connecting ? '正在重连 Telegram…' : `连接 Telegram 失败：${S.st.error || '未知原因'}`) : '还没连上 Telegram');
         for (let tries = 0; ; tries++) {
           for (;;) {
             const now = Date.now();
@@ -395,6 +395,10 @@
       // ---------- 时间 ----------
       const pad = (n) => String(n).padStart(2, '0');
       const hm = (t) => { const d = new Date(t * 1000); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+      // 后端给出的下次自动重连时间（毫秒时间戳）
+      const retryNote = (st) => { if (!st.retryAt) return ''; const d = new Date(st.retryAt); return `将于 ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())} 自动重试`; };
+      // 连接失败且这会儿没在重连：不能再转圈，要给出原因和重试按钮
+      const connFailed = (st = S.st) => st?.status === 'offline' && !st.connecting;
       const dayKey = (t) => new Date(t * 1000).toDateString();
       function shortDate(t) {
         if (!t) return '';
@@ -488,8 +492,12 @@
         $('auth').hidden = false;
         const err = st.error ? `<div class="err">${esc(st.error)}</div>` : '';
         if (st.status === 'connecting' || st.status === 'idle' || (st.status === 'offline' && !st.me)) {
-          $('auth').innerHTML = `<div class="center"><div class="ui-spin"></div><div class="m">正在连接 Telegram…</div>${err}
-            ${st.status === 'offline' ? '<button class="ui-btn ui-btn--sm ui-btn--outline" data-act="reconnect">立即重试</button><div class="m">国内网络需要在 设置 → 插件 → Telegram 客户端 里填写代理</div>' : ''}</div>`;
+          const hint = '<div class="m">国内网络需要在 设置 → 插件 → Telegram 客户端 里填写代理</div>';
+          $('auth').innerHTML = connFailed(st)
+            ? `<div class="center"><div class="err">连接 Telegram 失败：${esc(st.error || '未知原因')}</div><div class="m">${retryNote(st)}</div>
+              <button class="ui-btn ui-btn--sm ui-btn--outline" data-act="reconnect">重试</button>${hint}</div>`
+            : `<div class="center"><div class="ui-spin"></div><div class="m">正在连接 Telegram…${st.failures ? `（第 ${st.failures + 1} 次尝试）` : ''}</div>
+              ${st.error ? `<div class="err">上次失败：${esc(st.error)}</div>${hint}` : ''}</div>`;
           return;
         }
         const head = `<div class="logo">${ICON.tg}</div>`;
@@ -540,7 +548,7 @@
           if ($('main').hidden) { $('auth').hidden = true; $('main').hidden = false; renderMe(); showCached(); }
           renderBanner();
           if (now === 'ready' && was !== 'ready') { loadDialogs(); if (S.chat && was) openChat(S.chat.id, true); }
-        } else if (force || was !== now || prev?.error !== r.error) {
+        } else if (force || was !== now || prev?.error !== r.error || prev?.connecting !== r.connecting || prev?.retryAt !== r.retryAt) {
           if (now === 'setup') clearCache();
           if (!$('main').hidden) resetMain();
           if (!S.busy) renderAuth();
@@ -548,6 +556,7 @@
       }
       function resetMain() {
         Object.assign(S, { dialogs: [], chat: null, msgs: [], reply: null, files: [], edit: null, panel: null, stk: freshStickers(), folders: [] });
+        dlgErr = '';
         S.fcache.clear();
         renderFolders();
         S.avatars.clear();
@@ -576,7 +585,11 @@
         const off = S.st.status === 'offline';
         $('list').classList.toggle('syncing', S.st.status !== 'ready' && !off || dlgLoading);
         $('banner').hidden = !off;
-        if (off) $('banner').innerHTML = `<span class="grow">连接已断开，正在重连…${S.st.error ? ` ${esc(S.st.error)}` : ''}</span><button class="ui-btn ui-btn--sm" data-act="reconnect">重试</button>`;
+        if (!off) return;
+        $('banner').innerHTML = connFailed()
+          ? `<span class="grow">连接 Telegram 失败：${esc(S.st.error || '未知原因')}${retryNote(S.st) ? `，${retryNote(S.st)}` : ''}</span><button class="ui-btn ui-btn--sm" data-act="reconnect">重试</button>`
+          : `<span class="grow">正在重连 Telegram…${S.st.error ? ` 上次失败：${esc(S.st.error)}` : ''}</span>`;
+        if (!S.dialogs.length) renderDialogs();
       }
 
       async function loop() {
@@ -601,7 +614,8 @@
       }
 
       // ---------- 会话列表 ----------
-      let dlgTimer, slowTimer, dlgSeq = 0;
+      // dlgRetry：会话列表非限流失败后已自动重试的次数，有上限，成功或手动重试时清零；dlgErr：列表为空时代替转圈显示的失败原因
+      let dlgTimer, slowTimer, dlgSeq = 0, dlgRetry = 0, dlgErr = '';
       const scheduleDialogs = () => { clearTimeout(dlgTimer); dlgTimer = setTimeout(loadDialogs, 1200); };
       // 分组标签的未读数和非「全部」分组的列表变化不急，合并成慢刷新，避免频繁拉列表
       const scheduleSlow = () => { if (!slowTimer) slowTimer = setTimeout(() => { slowTimer = null; loadDialogs(); }, 8000); };
@@ -652,6 +666,7 @@
         void loadWatches();
         const folder = S.folder, my = ++dlgSeq;
         clearTimeout(slowTimer); slowTimer = null;
+        dlgErr = '';
         if (!S.dialogs.length && !S.fcache.has(folder)) {
           const c = cachedDialogs(folder);
           if (c) { S.dialogs = c.items; S.folders = c.folders ?? S.folders; renderFolders(); }
@@ -671,19 +686,27 @@
           if (S.dialogs.length > r.items.length) sortDialogs();
           S.dlgMore = !!r.more;
           S.fcache.set(folder, S.dialogs);
+          dlgRetry = 0;
+          dlgErr = '';
           if (S.chat) S.chat = S.dialogs.find((d) => d.id === S.chat.id) ?? S.chat;
           renderFolders();
           renderDialogs();
         } catch (e) {
-          const wait = floodWait(e);
+          // 限流按服务端给的秒数等；其他失败（超时、网络抖动）在已连接时退避自动重试 3 次：2、4、8 秒
+          const flood = floodWait(e);
+          const wait = flood || (S.st?.status === 'ready' && dlgRetry < 3 ? 2000 * 2 ** dlgRetry++ : 0);
           if (wait && my === dlgSeq) { clearTimeout(dlgTimer); dlgTimer = setTimeout(loadDialogs, wait); }
-          if (my === dlgSeq && !S.dialogs.length) $('dialogs').innerHTML = `<div class="ui-empty"><div class="err">${esc(e.message)}${wait ? '，到时自动重试' : ''}</div><button class="ui-btn ui-btn--sm" data-act="dialogs">重试</button></div>`;
+          if (my === dlgSeq) {
+            dlgErr = `<div class="ui-empty"><div class="err">加载会话列表失败：${esc(e.message)}${flood ? '，到时自动重试' : wait ? `，${Math.round(wait / 1000)} 秒后自动重试` : ''}</div><button class="ui-btn ui-btn--sm" data-act="dialogs">重试</button></div>`;
+            if (!S.dialogs.length) renderDialogs();
+          }
         } finally {
           if (my === dlgSeq) { dlgLoading = false; renderBanner(); }
         }
       }
       function switchFolder(id) {
         S.folder = id;
+        dlgErr = '';
         try { localStorage.setItem('tg:folder', String(id)); } catch {}
         S.dialogs = S.fcache.get(id) ?? cachedDialogs(id)?.items ?? [];
         S.dlgMore = false;
@@ -738,7 +761,10 @@
           const list = q ? S.dialogs.filter((d) => d.title.toLowerCase().includes(q)) : S.dialogs;
           if (!S.dialogs.length) {
             if (S.dlgMore && S.fcache.has(S.folder)) { $('dialogs').innerHTML = '<div class="ui-empty" style="padding:24px"><div class="ui-spin"></div><div>正在查找这个分组的聊天…</div></div>'; moreDialogs(); return; }
-            $('dialogs').innerHTML = S.fcache.has(S.folder) ? '<div class="ui-empty m" style="padding:24px">这个分组里还没有聊天</div>' : '<div class="ui-empty" style="padding:24px"><div class="ui-spin"></div></div>';
+            $('dialogs').innerHTML = S.fcache.has(S.folder) ? '<div class="ui-empty m" style="padding:24px">这个分组里还没有聊天</div>'
+              : dlgErr ? dlgErr
+              : connFailed() ? '<div class="ui-empty m" style="padding:24px">没连上 Telegram，连上后自动加载会话列表</div>'
+              : '<div class="ui-empty" style="padding:24px"><div class="ui-spin"></div></div>';
             return;
           }
           if (!list.length) { $('dialogs').innerHTML = '<div class="ui-empty m" style="padding:24px">没有匹配的聊天</div>'; return; }
@@ -1906,7 +1932,7 @@
         switch (t.dataset.act) {
           case 'reconnect': return call('reconnect').then((r) => applyState(r, true)).catch(fail);
           case 'cancel': return call('cancel').then((r) => applyState(r, true)).catch(fail);
-          case 'dialogs': return loadDialogs();
+          case 'dialogs': dlgRetry = 0; return loadDialogs();
           case 'back': document.body.classList.remove('open'); reportFocus(); return;
           case 'attach': return $('file').click();
           case 'reply': S.reply = id; S.files = []; renderTray(); $('input')?.focus(); return;

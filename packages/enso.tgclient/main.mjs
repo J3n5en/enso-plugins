@@ -30,6 +30,26 @@ const CHUNK = 512 * 1024;
 const MAX_UPLOAD = 20 * 1024 * 1024;
 const POLL_MS = 25_000;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// 单次连接上限：GramJS 的 connect() 重试用完只返回 false 不抛错，之后的 invoke 会一直等「已连接」，必须自己兜底
+const CONNECT_TIMEOUT_MS = 30_000;
+// 连不上时有限次退避重试；用完后转低频探测，常驻的 tg_watch 在网络恢复后还能自己续上
+const CONNECT_RETRY_MS = [2_000, 5_000, 15_000, 30_000, 60_000];
+const CONNECT_PROBE_MS = 5 * 60_000;
+// 会话列表单次请求上限，卡住的 GetDialogs 不能一直占着串行锁
+const LIST_TIMEOUT_MS = 20_000;
+
+export function withTimeout(promise, ms, message) {
+  let timer;
+  const limit = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(Object.assign(new Error(message), { code: 'TIMEOUT' })), ms);
+  });
+  return Promise.race([promise, limit]).finally(() => clearTimeout(timer));
+}
+
+/** 第 failures 次连接失败后等多久再连；exhausted 表示快速重试已用完 */
+export function connectRetryDelay(failures, steps = CONNECT_RETRY_MS) {
+  return failures <= steps.length ? { delayMs: steps[Math.max(0, failures - 1)], exhausted: false } : { delayMs: CONNECT_PROBE_MS, exhausted: true };
+}
 const API_ID = 94575;
 const API_HASH = 'a3406de8d171bb422bb6ddf3bbd800e2';
 let TelegramClientImpl = TelegramClient;
@@ -498,8 +518,11 @@ function createApp(enso, opts = {}) {
   const now = opts.now ?? Date.now;
   const setTimer = opts.setTimer ?? setTimeout;
   const clearTimer = opts.clearTimer ?? clearTimeout;
+  const connectTimeoutMs = opts.connectTimeoutMs ?? CONNECT_TIMEOUT_MS;
+  const retrySteps = opts.retryMs ?? CONNECT_RETRY_MS;
+  const listTimeoutMs = opts.listTimeoutMs ?? LIST_TIMEOUT_MS;
   const file = join(enso.dataDir, 'account.json');
-  const state = { status: 'idle', error: '', me: null, phone: '', hint: '', codeVia: '' };
+  const state = { status: 'idle', error: '', me: null, phone: '', hint: '', codeVia: '', retryAt: 0, failures: 0 };
   let account = {};
   let client = null;
   let pending = null;
@@ -541,7 +564,7 @@ function createApp(enso, opts = {}) {
     for (const w of waiters) w();
   };
   const setStatus = (status, extra = {}) => {
-    Object.assign(state, { error: '' }, extra, { status });
+    Object.assign(state, { error: '', retryAt: 0 }, extra, { status });
     push({ type: 'status' });
   };
   const save = async () => {
@@ -560,8 +583,10 @@ function createApp(enso, opts = {}) {
     return e;
   };
   const need = () => {
-    if (state.status !== 'ready' || !client) throw new Error(state.status === 'offline' ? '正在重连 Telegram…' : '请先登录 Telegram');
-    return client;
+    if (state.status === 'ready' && client) return client;
+    if (state.status === 'offline') throw new Error(`连接 Telegram 失败${state.error ? `：${state.error}` : ''}，正在重试`);
+    if (account.session && (state.status === 'connecting' || state.status === 'idle')) throw new Error('正在连接 Telegram…');
+    throw new Error('请先登录 Telegram');
   };
   const peer = (id) => entities.get(String(id)) ?? returnBigInt(String(id));
   // 会话自己没设免打扰时沿用「私聊 / 群组 / 频道」三类的全局默认；mutes 里 null 表示沿用默认，没有键表示还不知道
@@ -760,14 +785,17 @@ function createApp(enso, opts = {}) {
     }, new Raw({}));
   }
 
-  async function online() {
-    const me = keep(await client.getMe());
+  async function online(c = client) {
+    const me = keep(await c.getMe());
+    await loadDefaults(c);
+    // 超时后被丢弃的旧连接迟到的结果不能把新连接的状态覆盖掉
+    if (c !== client) throw new Error('连接已被替换');
     state.me = { id: idOf(me.id), name: nameOf(me), phone: me.phone ?? '', username: me.username ?? '', photo: !!me.photo?.photoId, premium: !!me.premium };
     selfCache = undefined;
-    await loadDefaults(client);
-    bindHandlers(client);
-    account.session = client.session.save();
+    bindHandlers(c);
+    account.session = c.session.save();
     await save();
+    state.failures = 0;
     setStatus('ready');
     // 预先拉好会话列表，侧栏打开时直接命中缓存
     void dialogsOf({}).catch(() => {});
@@ -775,24 +803,33 @@ function createApp(enso, opts = {}) {
 
   let connecting = null;
   function connect() {
-    connecting ??= doConnect().finally(() => (connecting = null));
+    // 结束后再推一次状态，界面才知道这次尝试已经收尾（connecting 变回 false）
+    connecting ??= doConnect().finally(() => {
+      connecting = null;
+      push({ type: 'status' });
+    });
     return connecting;
   }
 
   async function doConnect() {
     clearTimeout(retryTimer);
+    retryTimer = null;
     if (stopped) return;
-    setStatus(state.status === 'ready' ? 'offline' : 'connecting');
+    // 在线过（有 me）就停在 offline，侧栏保留会话列表只显示横幅；从没连上过才显示「正在连接」
+    setStatus(state.status === 'ready' || state.me ? 'offline' : 'connecting', { error: state.error });
     try {
-      client ??= await makeClient(account.session);
-      await client.connect();
-      if (!(await client.checkAuthorization())) {
-        await dropClient();
-        delete account.session;
-        await save();
-        return setStatus('setup', { error: '登录已失效，请重新登录' });
-      }
-      await online();
+      const c = client ?? (await makeClient(account.session));
+      if (stopped) return void (await Promise.resolve(c.destroy?.()).catch(() => {}));
+      client = c;
+      // 不用 checkAuthorization：它把断网等任何错误都当成「未登录」，会误删 session；未登录由 getMe 的 AUTH_KEY_* 错误判断
+      await withTimeout(
+        (async () => {
+          if ((await c.connect()) === false) throw new Error('连不上 Telegram 服务器，请检查网络或代理');
+          await online(c);
+        })(),
+        connectTimeoutMs,
+        `连接超时（${Math.round(connectTimeoutMs / 1000)} 秒没有响应）`,
+      );
     } catch (e) {
       if (stopped) return;
       const code = e?.errorMessage;
@@ -802,9 +839,12 @@ function createApp(enso, opts = {}) {
         await save();
         return setStatus('setup', { error: errText(e) });
       }
-      setStatus('offline', { error: errText(e) });
       await dropClient();
-      retryTimer = setTimeout(connect, 15_000);
+      if (stopped) return;
+      state.failures++;
+      const { delayMs } = connectRetryDelay(state.failures, retrySteps);
+      setStatus('offline', { error: errText(e), retryAt: Date.now() + delayMs });
+      retryTimer = setTimeout(connect, delayMs);
     }
   }
 
@@ -826,6 +866,9 @@ function createApp(enso, opts = {}) {
     phone: state.phone,
     hint: state.hint,
     codeVia: state.codeVia,
+    connecting: !!connecting,
+    retryAt: state.retryAt,
+    failures: state.failures,
     cursor: seq,
   });
 
@@ -849,8 +892,15 @@ function createApp(enso, opts = {}) {
     setStatus('connecting', { phone });
     try {
       client = await makeClient('');
-      await client.connect();
-      const r = await client.sendCode({ apiId: API_ID, apiHash: API_HASH }, phone);
+      const c = client;
+      const r = await withTimeout(
+        (async () => {
+          if ((await c.connect()) === false) throw new Error('连不上 Telegram 服务器，请检查网络或代理');
+          return c.sendCode({ apiId: API_ID, apiHash: API_HASH }, phone);
+        })(),
+        connectTimeoutMs,
+        `连接超时（${Math.round(connectTimeoutMs / 1000)} 秒没有响应），请检查网络或代理`,
+      );
       pending = { phone, hash: r.phoneCodeHash };
       setStatus('code', { codeVia: r.isCodeViaApp ? 'app' : 'sms' });
     } catch (e) {
@@ -922,7 +972,11 @@ function createApp(enso, opts = {}) {
   });
 
   handle('reconnect', async () => {
-    if (state.status === 'offline') await connect();
+    // 手动重试：重新开始退避计数，立即连一次
+    if (state.status === 'offline' && !connecting) {
+      state.failures = 0;
+      await connect();
+    }
     return view();
   });
 
@@ -937,6 +991,7 @@ function createApp(enso, opts = {}) {
       const cfg = await enso.config.get();
       if (String(cfg.proxy ?? '') !== proxyUsed) {
         proxyUsed = String(cfg.proxy ?? '');
+        state.failures = 0;
         await dropClient();
         void connect();
       }
@@ -977,7 +1032,7 @@ function createApp(enso, opts = {}) {
   const PAGE = 100;
   let listLock = Promise.resolve();
   const serial = (fn) => {
-    const p = listLock.then(fn);
+    const p = listLock.then(() => withTimeout(fn(), listTimeoutMs, '拉取会话列表超时，请检查网络'));
     listLock = p.catch(() => {});
     return p;
   };
