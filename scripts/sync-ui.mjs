@@ -28,6 +28,7 @@ export const UI_PACKAGES = [
   'enso.telegram',
   'enso.tgclient',
   'enso.walkthrough',
+  'enso.whatsapp',
 ];
 
 /** 返回与 shared/ 不一致的副本，供 validate 报错 */
