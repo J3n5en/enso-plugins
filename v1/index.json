@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-21T02:10:43.656Z",
-  "sequence": 120,
+  "generatedAt": "2026-11-21T02:22:55.333Z",
+  "sequence": 121,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -692,6 +692,31 @@
           "sha256": "00a994ad3ce59e5db5941b33c9146c8131c77f619446f4676b3e582324e1d333",
           "size": 2294768,
           "publishedAt": "2026-11-13T08:54:37.122Z"
+        }
+      ]
+    },
+    {
+      "id": "enso.douyin",
+      "name": "抖音推荐流",
+      "description": "在侧栏里刷抖音推荐流：全屏竖划切换，直接播放。基于公开 HTTP 接口，不需要设备或登录。仅供学习研究。",
+      "tier": "community",
+      "tags": [],
+      "readme": {
+        "path": "packages/enso.douyin/0.1.0.readme.md",
+        "sha256": "510daf25a0376113b75821081b85064ef1da967777efcfee4ea66b624453a769",
+        "size": 3100
+      },
+      "latest": "0.1.0",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "permissions": [
+            "ui.view"
+          ],
+          "path": "packages/enso.douyin/0.1.0.zip",
+          "sha256": "bd068e43ad04838bdbecba4d075a3e06fde8d1801934e57a092e40237a7cadd1",
+          "size": 41518,
+          "publishedAt": "2026-11-21T02:22:55.333Z"
         }
       ]
     },
