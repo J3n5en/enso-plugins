@@ -271,7 +271,7 @@
       const models = r.actualModels ?? []
       const [label, tone] = MATCH[r.match] ?? MATCH.unknown
       card.append(el('div', { className: 'compare' },
-        el('span', { className: 'k', textContent: '会话模型', title: 'agent.run 返回的 result.model：会话里配置的模型 id，不是上游接口自报的模型名' }),
+        el('span', { className: 'k', textContent: '会话模型', title: '会话直接选了具体模型时，是它的模型 id（会话里配置的 id，不是上游接口自报的名字）；用 Auto 这类虚拟模型时，宿主拿不到实际答题的模型' }),
         el('span', { className: 'v', title: models.join('、'), textContent: models.join('、') || (r.modelHidden ? '宿主没给模型 id' : '—') }),
         r.prediction ? el('span', { className: 'pill', dataset: { s: tone }, textContent: r.modelHidden ? '无法对照' : label }) : null))
       if (r.modelHidden) card.append(el('div', { className: 'note', textContent: 'agent.run 返回的是设置条目的 id，不是模型 id。会话用 Enso 虚拟模型时会这样：每道题可能被路由到不同的成员模型，宿主没有告诉插件实际用了哪个，所以这里不做对照，排名也可能混合了几个成员的回答。' }))
@@ -352,7 +352,7 @@
       const r = run.result
       const parts = [renderHero(run), renderRanking(r), renderSequence(r), renderDiagnostics(run)]
       if (r.evidence?.reason) parts.push(el('details', { className: 'raw' }, el('summary', { textContent: `检测器说明（${r.evidence.label || 'evidence'}）` }), el('pre', { textContent: r.evidence.reason })))
-      parts.push(el('div', { className: 'disclaimer', textContent: '结果是参考库内的封闭集合排序，不是身份证明：库外的模型也会得到一个「最像」的候选，置信度只在库内模型之间比较。「会话模型」是 agent.run 返回的模型 id，也就是会话里配置的名字，不代表上游实际提供的模型；Enso 的代理带系统提示和只读工具，可能让结果偏离直接调用接口时的样子。' }))
+      parts.push(el('div', { className: 'disclaimer', textContent: '结果是参考库内的封闭集合排序，不是身份证明：库外的模型也会得到一个「最像」的候选，置信度只在库内模型之间比较。会话直接选了具体模型时，结果和这个模型 id 对照（会话里配置的 id，不代表上游实际提供的模型）；会话用的是 Auto 这类虚拟模型时，宿主拿不到实际答题的模型，不做对照。Enso 的代理带系统提示和只读工具，可能让结果偏离直接调用接口时的样子。' }))
       return parts
     }
 
