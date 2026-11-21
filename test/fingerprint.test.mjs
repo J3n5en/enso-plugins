@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -11,6 +11,7 @@ import {
   activate,
   compareModel,
   createFingerprint,
+  isEntryId,
   languageOf,
   probabilityNote,
   summarize,
@@ -216,6 +217,44 @@ test('排队：同时最多 2 个 agent.run，第三道题在侧栏的 wait 里�
   assert.equal(entry.result.match, 'same');
   assert.ok(entry.challenges.every((c) => c.status === 'done' && c.count === 310 && c.text));
   assert.deepEqual((await s.call('snapshot', {}, { sessionId: 's2' })).history, []);
+});
+
+test('虚拟模型会话：result.model 是条目 UUID，不当模型名展示，也不拿来对照', async () => {
+  const uuid = '7b11a559-f632-4648-a52b-f0c2e536e19f';
+  assert.ok(isEntryId(uuid));
+  assert.ok(!isEntryId('claude-opus-4-7'));
+  const s = await setup();
+  const { runId } = await s.call('start');
+  const res = await s.follow(runId, undefined, async () => {
+    const pending = s.runs.find((r) => !r.settled);
+    if (pending) pending.resolve({ text: numbers(310), model: uuid });
+    await s.settle();
+  });
+  assert.equal(res.status, 'done');
+  const entry = (await s.call('snapshot')).history[0];
+  assert.deepEqual(entry.result.actualModels, []);
+  assert.equal(entry.result.modelHidden, true);
+  assert.equal(entry.result.match, 'unknown');
+  assert.ok(entry.challenges.every((c) => c.model === null && c.modelHidden));
+  assert.ok(!JSON.stringify(entry).includes(uuid));
+});
+
+test('旧历史里存成模型名的条目 UUID，读出时清掉', async () => {
+  const uuid = '7b11a559-f632-4648-a52b-f0c2e536e19f';
+  const dataDir = await mkdtemp(join(tmpdir(), 'fp-'));
+  const legacy = {
+    id: 'old',
+    status: 'done',
+    challenges: [{ index: 0, status: 'done', model: uuid }],
+    result: { prediction: 'claude-opus-4.7', actualModels: [uuid], match: 'different' },
+  };
+  await writeFile(join(dataDir, 'history.json'), JSON.stringify({ s1: [legacy] }));
+  const s = await setup({ dataDir });
+  const [entry] = (await s.call('snapshot')).history;
+  assert.deepEqual(entry.result.actualModels, []);
+  assert.equal(entry.result.match, 'unknown');
+  assert.equal(entry.result.modelHidden, true);
+  assert.equal(entry.challenges[0].model, null);
 });
 
 test('同会话重复点开始复用进行中的一轮；没有会话时报错', async () => {

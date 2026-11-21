@@ -272,8 +272,9 @@
       const [label, tone] = MATCH[r.match] ?? MATCH.unknown
       card.append(el('div', { className: 'compare' },
         el('span', { className: 'k', textContent: '会话模型', title: 'agent.run 返回的 result.model：会话里配置的模型 id，不是上游接口自报的模型名' }),
-        el('span', { className: 'v', title: models.join('、'), textContent: models.join('、') || '—' }),
-        r.prediction ? el('span', { className: 'pill', dataset: { s: tone }, textContent: label }) : null))
+        el('span', { className: 'v', title: models.join('、'), textContent: models.join('、') || (r.modelHidden ? '宿主没给模型 id' : '—') }),
+        r.prediction ? el('span', { className: 'pill', dataset: { s: tone }, textContent: r.modelHidden ? '无法对照' : label }) : null))
+      if (r.modelHidden) card.append(el('div', { className: 'note', textContent: 'agent.run 返回的是设置条目的 id，不是模型 id。会话用 Enso 虚拟模型时会这样：每道题可能被路由到不同的成员模型，宿主没有告诉插件实际用了哪个，所以这里不做对照，排名也可能混合了几个成员的回答。' }))
       return card
     }
 
@@ -331,7 +332,7 @@
         const at = answered.indexOf(ch.index)
         const d = at >= 0 ? r.diagnostics?.[at] : null
         const verdict = d ? (d.accepted ? el('span', { className: 'ok', textContent: '有效' }) : el('span', { className: 'bad', textContent: '无效' })) : el('span', { className: 'bad', textContent: CH_LABEL[ch.status] })
-        const sub = [ch.lang, `要求 ${ch.expected}`, d?.outOfRange ? `超范围 ${d.outOfRange}` : '', ch.tools ? `工具 ${ch.tools} 次` : '', ch.truncated ? `写了 ${ch.count} 个仍未停，已截断` : '', ch.model || ''].filter(Boolean).join(' · ')
+        const sub = [ch.lang, `要求 ${ch.expected}`, d?.outOfRange ? `超范围 ${d.outOfRange}` : '', ch.tools ? `工具 ${ch.tools} 次` : '', ch.truncated ? `写了 ${ch.count} 个仍未停，已截断` : '', ch.model || (ch.modelHidden ? '模型 id 未知' : '')].filter(Boolean).join(' · ')
         table.append(el('tr', {},
           el('td', {}, el('div', { textContent: `第 ${i + 1} 题` }), el('div', { className: 'label', textContent: sub })),
           el('td', { className: 'num', textContent: d ? String(d.parsed) : String(ch.count) }),
@@ -372,7 +373,7 @@
       for (const item of history) {
         const r = item.result
         const label = item.status === 'done' ? (r?.prediction ? r.predictionName : DECISION[r?.decision] ?? '完成') : RUN_LABEL[item.status]
-        const sub = item.status === 'done' ? (r?.actualModels ?? []).join('、') || '会话模型未知' : item.status === 'error' ? item.error || '' : '没有评分'
+        const sub = item.status === 'done' ? (r?.actualModels ?? []).join('、') || (r?.modelHidden ? '虚拟模型，成员未知' : '会话模型未知') : item.status === 'error' ? item.error || '' : '没有评分'
         const button = el('button', { dataset: { fill: '' } },
           el('span', { className: 't', textContent: `${clock(item.startedAt)} · ${sub}` }),
           el('span', { className: 'c', textContent: item.status === 'done' ? pct(r?.probability) : '' }),

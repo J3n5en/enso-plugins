@@ -102,6 +102,35 @@ export function compareModel(actual, summary) {
 
 const codeOf = (error) => (typeof error?.code === 'string' ? error.code : '')
 
+const ENTRY_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+/**
+ * 会话用 Enso 虚拟模型时，agent.run 的 result.model 是虚拟模型条目的 UUID，不是模型 id；
+ * 路由到的成员宿主不告诉插件，所以这种值不展示、不对照
+ */
+export const isEntryId = (value) => typeof value === 'string' && ENTRY_ID.test(value.trim())
+
+/** 旧版本把条目 UUID 当模型名存进了历史，读出时清掉 */
+function scrubEntry(entry) {
+  let hidden = false
+  for (const ch of entry?.challenges ?? []) {
+    if (isEntryId(ch.model)) {
+      ch.model = null
+      ch.modelHidden = true
+      hidden = true
+    }
+  }
+  const r = entry?.result
+  if (r && Array.isArray(r.actualModels) && r.actualModels.some(isEntryId)) {
+    r.actualModels = r.actualModels.filter((m) => !isEntryId(m))
+    hidden = true
+  }
+  if (r && hidden && !r.actualModels?.length) {
+    r.modelHidden = true
+    r.match = 'unknown'
+  }
+  return entry
+}
+
 export function createFingerprint(enso, { sdk = lmfpd, now = Date.now, fetchData = ensureData } = {}) {
   const dataDir = join(enso.dataDir, 'lmfpd')
   const historyFile = join(enso.dataDir, 'history.json')
@@ -117,7 +146,9 @@ export function createFingerprint(enso, { sdk = lmfpd, now = Date.now, fetchData
     (history ??= readFile(historyFile, 'utf8').then(
       (text) => {
         const parsed = JSON.parse(text)
-        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
+        for (const list of Object.values(parsed)) if (Array.isArray(list)) list.forEach(scrubEntry)
+        return parsed
       },
       () => ({})
     ).catch(() => ({})))
@@ -143,6 +174,7 @@ export function createFingerprint(enso, { sdk = lmfpd, now = Date.now, fetchData
     tools: ch.tools,
     truncated: Boolean(ch.truncated),
     model: ch.model,
+    modelHidden: Boolean(ch.modelHidden),
     error: ch.error,
     startedAt: ch.startedAt,
     endedAt: ch.endedAt,
@@ -255,6 +287,7 @@ export function createFingerprint(enso, { sdk = lmfpd, now = Date.now, fetchData
       result.answered = answered.map((ch) => ch.index)
       const models = [...new Set(run.challenges.map((ch) => ch.model).filter(Boolean))]
       result.actualModels = models
+      result.modelHidden = !models.length && run.challenges.some((ch) => ch.modelHidden)
       result.match = models.length ? compareModel(models[0], result) : 'unknown'
       finish(run, { status: 'done', result })
     } catch (error) {
@@ -299,7 +332,9 @@ export function createFingerprint(enso, { sdk = lmfpd, now = Date.now, fetchData
           if (run.status === 'cancelled') return
           ch.text = typeof result?.text === 'string' ? result.text : ch.text
           ch.count = sdk.parseNumbers(ch.text).length
-          ch.model = result?.model ?? null
+          const model = typeof result?.model === 'string' ? result.model.trim() : ''
+          ch.modelHidden = isEntryId(model)
+          ch.model = model && !ch.modelHidden ? model : null
           ch.status = 'done'
         },
         (error) => {
