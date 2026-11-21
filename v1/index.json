@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-21T03:51:02.574Z",
-  "sequence": 122,
+  "generatedAt": "2026-11-21T04:59:41.845Z",
+  "sequence": 123,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -2584,6 +2584,42 @@
           "sha256": "ef758a982d7055178f3883b4879027b859cf8dae1731fe1134678b2c0396f1ae",
           "size": 656867,
           "publishedAt": "2026-11-06T08:50:16.583Z"
+        }
+      ]
+    },
+    {
+      "id": "enso.whatsapp",
+      "name": "WhatsApp",
+      "description": "WhatsApp 联系方式：扫码登录（WhatsApp Web 多设备协议，非官方），把主人发来的消息交给 EnsoCode 秘书，并把秘书的回复、图片和文件发回 WhatsApp。默认副号模式，也支持用自己号码的「给自己发消息」；可以在设置页启用群聊，群里 @ 这个号或回复秘书时触发。",
+      "tier": "official",
+      "tags": [
+        "contact",
+        "whatsapp",
+        "联系方式"
+      ],
+      "category": "integrations",
+      "readme": {
+        "path": "packages/enso.whatsapp/0.1.0.readme.md",
+        "sha256": "6efd2941331f5e2e775a5e2ac673ff7b65bef0569600f4df5827d2a50ec251c6",
+        "size": 6775
+      },
+      "latest": "0.1.0",
+      "versions": [
+        {
+          "version": "0.1.0",
+          "engines": {
+            "enso": ">=0.3.9"
+          },
+          "permissions": [
+            "secretary.contact",
+            "net.fetch",
+            "process.background",
+            "ui.view"
+          ],
+          "path": "packages/enso.whatsapp/0.1.0.zip",
+          "sha256": "6602452f82ebee66f3e222f98b7c5dc2ae8f960c3a74cf8671f2fd6ce50ba449",
+          "size": 5192639,
+          "publishedAt": "2026-11-21T04:59:41.845Z"
         }
       ]
     },
