@@ -1,0 +1,471 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>模型指纹</title>
+  <link rel="stylesheet" href="enso-ui.css" />
+  <style>
+    :root { --fp: oklch(0.55 0.17 255); --fp-soft: color-mix(in oklch, var(--fp) 12%, transparent); --track: color-mix(in oklch, var(--foreground) 8%, transparent); }
+    :root[data-theme='dark'] { --fp: oklch(0.72 0.15 255); }
+    body { padding: 14px 14px 20px; display: flex; flex-direction: column; gap: 12px; font-size: 12.5px; }
+    h1, h2, h3 { margin: 0; }
+    .head { display: flex; align-items: flex-start; gap: 10px; }
+    .head .titles { flex: 1; min-width: 0; }
+    .head h1 { font-size: 15px; font-weight: 650; letter-spacing: -0.01em; }
+    .head .sub { color: var(--muted-foreground); font-size: 11.5px; margin-top: 1px; }
+    .cta { display: flex; align-items: center; gap: 8px; }
+    .btn-fp { background: var(--fp); color: #fff; border-color: transparent; box-shadow: var(--shadow-xs); height: 30px; padding: 0 14px; }
+    .btn-fp:hover { background: color-mix(in oklch, var(--fp) 88%, black); }
+    .hint { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border-radius: var(--radius-md); background: var(--muted); color: var(--muted-foreground); font-size: 11.5px; line-height: 1.55; }
+    .hint svg { flex: none; width: 14px; height: 14px; margin-top: 2px; }
+    .card { padding: 12px; }
+    .label { font-size: 11px; color: var(--muted-foreground); }
+    .section-title { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+    .section-title h2 { font-size: 12.5px; font-weight: 600; }
+
+    /* 进度 */
+    .steps { display: flex; flex-direction: column; }
+    .step { display: grid; grid-template-columns: 18px 1fr; gap: 0 10px; position: relative; padding-bottom: 12px; }
+    .step:last-child { padding-bottom: 0; }
+    .step::before { content: ''; position: absolute; left: 8.5px; top: 18px; bottom: 0; width: 1px; background: var(--border); }
+    .step:last-child::before { display: none; }
+    .dot { width: 18px; height: 18px; border-radius: 999px; border: 1.5px solid var(--border); background: var(--card); display: grid; place-items: center; font: 600 9.5px/1 var(--font-mono); color: var(--muted-foreground); position: relative; z-index: 1; transition: background-color var(--dur-2) var(--ease-out), border-color var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out); }
+    .dot svg { width: 10px; height: 10px; }
+    .step[data-s='running'] .dot { border-color: var(--fp); color: var(--fp); }
+    .step[data-s='running'] .dot::after { content: ''; position: absolute; inset: -4px; border-radius: 999px; border: 1.5px solid var(--fp); opacity: 0; animation: ring 1.6s var(--ease-out) infinite; }
+    .step[data-s='done'] .dot { background: var(--fp); border-color: var(--fp); color: #fff; }
+    .step[data-s='error'] .dot { border-color: var(--destructive); color: var(--destructive); }
+    .step[data-s='cancelled'] .dot { border-color: var(--warning); color: var(--warning); }
+    @keyframes ring { 0% { opacity: .6; scale: .8; } 100% { opacity: 0; scale: 1.25; } }
+    .step-main { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+    .step-head { display: flex; align-items: center; gap: 6px; min-height: 18px; }
+    .step-head b { font-weight: 600; font-size: 12.5px; }
+    .step-head .meta { color: var(--muted-foreground); font-size: 11px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .count { display: flex; align-items: center; gap: 8px; }
+    .count .num { font: 600 12px/1 var(--font-mono); font-variant-numeric: tabular-nums; min-width: 66px; }
+    .count .num small { color: var(--muted-foreground); font-weight: 500; }
+    .bar { flex: 1; height: 6px; border-radius: 999px; background: var(--track); overflow: hidden; }
+    .bar > i { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--fp); transition: width var(--dur-3) var(--ease-out); }
+    .bar[data-tone='muted'] > i { background: color-mix(in oklch, var(--foreground) 22%, transparent); }
+    .bar[data-tone='bad'] > i { background: var(--destructive); }
+    .tail { font: 10.5px/1.45 var(--font-mono); color: var(--muted-foreground); white-space: nowrap; overflow: hidden; }
+    .err { color: var(--destructive); font-size: 11.5px; word-break: break-word; }
+    .pill { display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 7px; border-radius: 999px; font: 500 10.5px/1 var(--font-sans); background: var(--muted); color: var(--muted-foreground); white-space: nowrap; }
+    .pill[data-s='running'] { background: var(--fp-soft); color: var(--fp); }
+    .pill[data-s='done'] { background: color-mix(in oklch, var(--success) 13%, transparent); color: var(--success); }
+    .pill[data-s='error'] { background: color-mix(in oklch, var(--destructive) 12%, transparent); color: var(--destructive); }
+    .pill[data-s='cancelled'] { background: color-mix(in oklch, var(--warning) 15%, transparent); color: var(--warning); }
+    .pill[data-s='running']::before { content: ''; width: 5px; height: 5px; border-radius: 999px; background: currentColor; animation: blink 1s steps(2, jump-none) infinite; }
+    @keyframes blink { 50% { opacity: .25; } }
+
+    /* 结果 */
+    .hero { display: flex; gap: 12px; align-items: flex-start; padding: 14px; }
+    .hero .who { flex: 1; min-width: 0; }
+    .hero .name { font-size: 21px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; margin-top: 3px; word-break: break-word; }
+    .hero .family { color: var(--muted-foreground); margin-top: 3px; }
+    .hero .conf { text-align: right; flex: none; }
+    .hero .pct { font: 700 28px/1 var(--font-sans); font-variant-numeric: tabular-nums; letter-spacing: -0.03em; }
+    .hero .pct[data-none] { color: var(--muted-foreground); }
+    .hero .conf .label { margin-top: 4px; }
+    .hero[data-decision='not_model'] .name, .hero[data-decision='unscorable'] .name { font-size: 16px; }
+    .note { font-size: 11.5px; color: var(--muted-foreground); line-height: 1.55; padding: 0 14px 12px; margin-top: -4px; }
+    .compare { display: flex; align-items: center; gap: 8px; padding: 9px 14px; border-top: 1px solid var(--border); font-size: 11.5px; }
+    .compare .k { color: var(--muted-foreground); flex: none; }
+    .compare .v { flex: 1; min-width: 0; font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rank { list-style: none; margin: 0; padding: 0; }
+    .rank li { display: grid; grid-template-columns: 18px minmax(0, 1fr) 76px 46px; gap: 8px; align-items: center; padding: 7px 12px; border-top: 1px solid var(--border); }
+    .rank li:first-child { border-top: 0; }
+    .rank .n { color: var(--muted-foreground); font: 11px/1 var(--font-mono); }
+    .rank .m { min-width: 0; }
+    .rank .m b { display: block; font-weight: 600; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rank .m span { display: block; color: var(--muted-foreground); font-size: 10.5px; }
+    .rank .v { text-align: right; font: 500 11.5px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+    .rank li[data-top] .m b { color: var(--fp); }
+    .more { display: block; width: 100%; padding: 8px 12px; border: 0; border-top: 1px solid var(--border); background: none; color: var(--fp); font: 500 11.5px var(--font-sans); text-align: left; cursor: pointer; }
+    .more:hover { background: var(--hover); }
+    .kv { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; font-size: 11.5px; }
+    .kv .k { color: var(--muted-foreground); }
+    .kv .v { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
+    .verdict { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .verdict b { font-size: 13px; }
+    .diag { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+    .diag th { text-align: left; font-weight: 500; color: var(--muted-foreground); font-size: 10.5px; padding: 0 0 6px; }
+    .diag td { padding: 6px 0; border-top: 1px solid var(--border); vertical-align: top; }
+    .diag td.num, .diag th.num { text-align: right; padding-left: 14px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .diag .ok { color: var(--success); }
+    .diag .bad { color: var(--destructive); }
+    details.raw > summary { cursor: pointer; color: var(--muted-foreground); font-size: 11px; list-style: none; }
+    details.raw > summary::before { content: '▸ '; }
+    details.raw[open] > summary::before { content: '▾ '; }
+    details.raw pre { margin: 6px 0 0; padding: 8px; max-height: 160px; overflow: auto; white-space: pre-wrap; word-break: break-all; font: 10.5px/1.5 var(--font-mono); border-radius: var(--radius-md); background: var(--muted); }
+    .disclaimer { font-size: 11px; line-height: 1.6; color: var(--muted-foreground); }
+
+    /* 历史 */
+    .history { display: flex; flex-direction: column; gap: 2px; }
+    .history button { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; width: 100%; padding: 7px 8px; border: 0; border-radius: var(--radius-md); background: none; color: var(--foreground); text-align: left; cursor: pointer; font: inherit; }
+    .history button[aria-current='true'] { background: var(--fp-soft); }
+    .history .t { font-size: 10.5px; color: var(--muted-foreground); }
+    .history .p { font-weight: 600; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .history .c { font: 500 11px var(--font-mono); color: var(--muted-foreground); grid-row: span 2; align-self: center; }
+    .foot { font-size: 10.5px; color: var(--muted-foreground); text-align: center; line-height: 1.6; }
+    .hidden { display: none !important; }
+    @media (prefers-reduced-motion: reduce) { .step[data-s='running'] .dot::after, .pill[data-s='running']::before { animation: none; } }
+  </style>
+</head>
+<body>
+  <header class="head">
+    <div class="titles">
+      <h1>模型指纹</h1>
+      <div class="sub">当前会话的模型最像参考库里的哪个模型</div>
+    </div>
+    <div class="cta">
+      <button id="cancel" class="ui-btn ui-btn--outline hidden">取消</button>
+      <button id="start" class="ui-btn btn-fp">开始检测</button>
+    </div>
+  </header>
+  <div class="hint">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>
+    <div>每次检测让当前会话的模型回答 3 道随机整数题，会花 <b>3 次模型调用</b>。结果是参考库内的相似度排序，不是身份证明。</div>
+  </div>
+  <main id="main"></main>
+  <section id="history-box" class="hidden">
+    <div class="section-title"><h2>本会话最近的检测</h2><span class="label" id="history-count"></span></div>
+    <div class="history ui-card" id="history" style="padding:4px"></div>
+  </section>
+  <div class="foot" id="foot"></div>
+  <script src="enso-ui.js"></script>
+  <script>
+    const host = window.enso
+    const LIVE = ['loading', 'answering', 'scoring']
+    const CH_LABEL = { queued: '排队', running: '作答中', done: '完成', error: '失败', cancelled: '已取消' }
+    const RUN_LABEL = { loading: '准备中', answering: '作答中', scoring: '评分中', done: '完成', error: '失败', cancelled: '已取消' }
+    const MATCH = {
+      same: ['与预测一致', 'done'],
+      family: ['同家族，型号不同', 'running'],
+      different: ['与预测不一致', 'error'],
+      unknown: ['没有拿到模型名', ''],
+    }
+    const DECISION = {
+      scored: '排名第一的库内候选',
+      partial: '排名第一的库内候选（部分回答）',
+      not_model: '不像语言模型写的',
+      unscorable: '无法评分',
+    }
+    const CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>'
+    const CROSS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M7 7l10 10M17 7L7 17"/></svg>'
+
+    let sessionId = null
+    let live = null
+    let history = []
+    let selected = null
+    let dataMeta = null
+    let showAll = false
+    let notice = ''
+    let waiting = false
+
+    const $ = (id) => document.getElementById(id)
+    const el = (tag, props = {}, ...children) => {
+      const { dataset, html, ...rest } = props
+      const node = Object.assign(document.createElement(tag), rest)
+      if (dataset) for (const [k, v] of Object.entries(dataset)) if (v != null) node.dataset[k] = v
+      if (html != null) node.innerHTML = html
+      for (const child of children) if (child != null && child !== false) node.append(child)
+      return node
+    }
+    const pct = (p) => (p == null ? '—' : `${(p * 100).toFixed(1)}%`)
+    /** 就地更新 DOM：保留节点，进度条宽度能过渡、动画不重来，展开的 details 保持展开 */
+    function morph(a, b) {
+      if (a.nodeType !== b.nodeType || a.nodeName !== b.nodeName) return a.replaceWith(b)
+      if (a.nodeType === 3) {
+        if (a.data !== b.data) a.data = b.data
+        return
+      }
+      for (const { name } of [...a.attributes]) if (name !== 'open' && !b.hasAttribute(name)) a.removeAttribute(name)
+      for (const { name, value } of [...b.attributes]) if (a.getAttribute(name) !== value) a.setAttribute(name, value)
+      a.onclick = b.onclick
+      const from = [...a.childNodes]
+      const to = [...b.childNodes]
+      to.forEach((node, i) => (i < from.length ? morph(from[i], node) : a.append(node)))
+      for (const node of from.slice(to.length)) node.remove()
+    }
+    const secs = (a, b) => {
+      if (!a) return ''
+      const s = Math.max(0, Math.round(((b ?? Date.now()) - a) / 1000))
+      return s >= 60 ? `${Math.floor(s / 60)}分${s % 60}秒` : `${s}秒`
+    }
+    const clock = (t) => {
+      const d = new Date(t)
+      const pad = (n) => String(n).padStart(2, '0')
+      return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+    }
+    const day = (iso) => (iso ? String(iso).slice(0, 10) : '')
+    const current = () => (selected && selected === live?.id ? live : history.find((r) => r.id === selected)) ?? live ?? history[0] ?? null
+
+    function dataLine(run) {
+      const d = run.data ?? {}
+      if (d.phase === 'check') return ['running', '检查参考数据版本…']
+      if (d.phase === 'download') return ['running', `下载参考数据 ${d.part}/${d.parts}…`]
+      if (d.phase === 'ready' || run.status !== 'loading') {
+        if (run.status === 'error' && !run.challenges.some((c) => c.startedAt)) return ['error', '加载失败']
+        const meta = d.builtAt ? `${d.models} 个模型 · 参考库 ${day(d.builtAt)}` : '已就绪'
+        return ['done', meta]
+      }
+      return ['running', '加载参考数据…']
+    }
+
+    function stepNode(state, index, title, meta, extra) {
+      const dot = el('span', { className: 'dot', html: state === 'done' ? CHECK : state === 'error' ? CROSS : String(index) })
+      return el('div', { className: 'step', dataset: { s: state } }, dot,
+        el('div', { className: 'step-main' },
+          el('div', { className: 'step-head' }, el('b', { textContent: title }), el('span', { className: 'meta', textContent: meta || '' }), extra?.pill ?? null),
+          ...(extra?.body ?? [])))
+    }
+
+    function renderProgress(run) {
+      const box = el('div', { className: 'ui-card card' })
+      const head = el('div', { className: 'section-title' },
+        el('h2', { textContent: LIVE.includes(run.status) ? '检测进行中' : '检测过程' }),
+        el('span', { className: 'label', textContent: `${clock(run.startedAt)} · ${secs(run.startedAt, run.endedAt)}` }))
+      const steps = el('div', { className: 'steps' })
+      const [ds, dm] = dataLine(run)
+      steps.append(stepNode(ds, 1, '参考数据', dm))
+      run.challenges.forEach((ch, i) => {
+        const ratio = ch.expected ? Math.min(1, ch.count / ch.expected) : 0
+        const body = []
+        if (ch.status !== 'queued' || ch.count) {
+          const bar = el('div', { className: 'bar', dataset: { tone: ch.status === 'error' ? 'bad' : ch.status === 'cancelled' ? 'muted' : null } }, el('i', { style: `width:${(ratio * 100).toFixed(1)}%` }))
+          body.push(el('div', { className: 'count' }, el('span', { className: 'num', html: `${ch.count}<small> / ${ch.expected}</small>` }), bar))
+        }
+        if (ch.status === 'running' && ch.tail) {
+          const tail = ch.tail.replace(/\s+/g, ' ').trim()
+          body.push(el('div', { className: 'tail', textContent: tail.length > 54 ? `…${tail.slice(-54)}` : tail }))
+        }
+        if (ch.error) body.push(el('div', { className: 'err', textContent: ch.error }))
+        const meta = [ch.lang, `要求 ${ch.expected} 个`, ch.startedAt ? secs(ch.startedAt, ch.endedAt) : '', ch.tools ? `调用工具 ${ch.tools} 次` : ''].filter(Boolean).join(' · ')
+        steps.append(stepNode(ch.status, i + 2, `第 ${i + 1} 题`, meta, { pill: el('span', { className: 'pill', dataset: { s: ch.status }, textContent: CH_LABEL[ch.status] }), body }))
+      })
+      const scoreState = run.status === 'scoring' ? 'running' : run.status === 'done' ? 'done' : run.status === 'error' && run.challenges.some((c) => c.status === 'done') ? 'error' : run.status === 'cancelled' ? 'cancelled' : 'queued'
+      const scoreMeta = run.status === 'done' ? `用了 ${run.result?.usedOutputs ?? 0} 条有效回答` : run.status === 'cancelled' ? '已取消，这一轮不评分' : '本机离线评分'
+      steps.append(stepNode(scoreState, 5, '评分', scoreMeta))
+      box.append(head, steps)
+      if (run.error) box.append(el('div', { className: 'err', style: 'margin-top:10px', textContent: run.error }))
+      return box
+    }
+
+    function renderHero(run) {
+      const r = run.result
+      const hero = el('div', { className: 'hero', dataset: { decision: r.decision } })
+      const name = r.decision === 'not_model' || r.decision === 'unscorable' ? (r.decision === 'not_model' ? '不像语言模型的回答' : '没有可评分的回答') : r.predictionName
+      hero.append(
+        el('div', { className: 'who' },
+          el('div', { className: 'label', textContent: DECISION[r.decision] ?? '结果' }),
+          el('div', { className: 'name', textContent: name || '—' }),
+          r.familyName && r.prediction ? el('div', { className: 'family', textContent: r.familyName }) : null),
+        el('div', { className: 'conf' },
+          el('div', { className: 'pct', textContent: pct(r.probability), dataset: { none: r.probability == null ? '' : null } }),
+          el('div', { className: 'label', textContent: '置信度' })))
+      const card = el('div', { className: 'ui-card' }, hero)
+      if (r.note) card.append(el('div', { className: 'note', textContent: r.note }))
+      const models = r.actualModels ?? []
+      const [label, tone] = MATCH[r.match] ?? MATCH.unknown
+      card.append(el('div', { className: 'compare' },
+        el('span', { className: 'k', textContent: '实际模型' }),
+        el('span', { className: 'v', title: models.join('、'), textContent: models.join('、') || '—' }),
+        r.prediction ? el('span', { className: 'pill', dataset: { s: tone }, textContent: label }) : null))
+      return card
+    }
+
+    function renderRanking(r) {
+      const list = r.candidates ?? []
+      if (!list.length) return null
+      const useProb = list.some((c) => c.probability != null)
+      const scores = list.map((c) => c.score ?? 0)
+      const hi = Math.max(...scores)
+      const lo = Math.min(...scores)
+      const shown = showAll ? list : list.slice(0, 6)
+      const ol = el('ol', { className: 'rank' })
+      shown.forEach((c, i) => {
+        const width = useProb ? (c.probability ?? 0) : hi > lo ? 0.08 + 0.92 * ((c.score - lo) / (hi - lo)) : 1
+        ol.append(el('li', { dataset: { top: i === 0 ? '' : null } },
+          el('span', { className: 'n', textContent: String(i + 1) }),
+          el('span', { className: 'm', title: c.model }, el('b', { textContent: c.name }), el('span', { textContent: c.familyName || '' })),
+          el('div', { className: 'bar', dataset: { tone: i === 0 ? null : 'muted' } }, el('i', { style: `width:${(width * 100).toFixed(1)}%` })),
+          el('span', { className: 'v', textContent: useProb ? pct(c.probability) : (c.score ?? 0).toFixed(2) })))
+      })
+      const card = el('div', { className: 'ui-card', style: 'overflow:hidden' }, ol)
+      if (list.length > 6) {
+        const more = el('button', { className: 'more', textContent: showAll ? '收起' : `显示前 ${list.length} 项（参考库共 ${r.total} 项）` })
+        more.onclick = () => { showAll = !showAll; render() }
+        card.append(more)
+      }
+      return el('section', {},
+        el('div', { className: 'section-title' }, el('h2', { textContent: '候选排名' }), el('span', { className: 'label', textContent: useProb ? '库内相对概率' : '排名分数（越高越像）' })),
+        card)
+    }
+
+    function renderSequence(r) {
+      const s = r.sequence
+      const card = el('div', { className: 'ui-card card' })
+      if (!s) {
+        card.append(el('div', { className: 'ui-muted', textContent: '没有有效回答，没法检查。' }))
+      } else {
+        card.append(
+          el('div', { className: 'verdict' },
+            el('span', { className: 'pill', dataset: { s: s.modelLike ? 'done' : 'error' }, textContent: s.modelLike ? '像' : '不像' }),
+            el('b', { textContent: s.modelLike ? '数字的变化方式像语言模型写的' : '数字的变化方式不像语言模型写的' })),
+          el('div', { className: 'kv' },
+            el('span', { className: 'k', textContent: '相邻自相关' }), el('span', { className: 'v', textContent: s.autocorrelation == null ? '—' : s.autocorrelation.toFixed(3) }),
+            el('span', { className: 'k', textContent: '小步变化占比' }), el('span', { className: 'v', textContent: s.smallStepShare == null ? '—' : pct(s.smallStepShare) })))
+      }
+      return el('section', {}, el('div', { className: 'section-title' }, el('h2', { textContent: '是否像语言模型写的' })), card)
+    }
+
+    function renderDiagnostics(run) {
+      const r = run.result
+      const table = el('table', { className: 'diag' })
+      table.append(el('tr', {}, el('th', { textContent: '题目' }), el('th', { className: 'num', textContent: '解析出' }), el('th', { className: 'num', textContent: '最少' }), el('th', { className: 'num', textContent: '结论' })))
+      const answered = r.answered ?? []
+      run.challenges.forEach((ch, i) => {
+        const at = answered.indexOf(ch.index)
+        const d = at >= 0 ? r.diagnostics?.[at] : null
+        const verdict = d ? (d.accepted ? el('span', { className: 'ok', textContent: '有效' }) : el('span', { className: 'bad', textContent: '无效' })) : el('span', { className: 'bad', textContent: CH_LABEL[ch.status] })
+        const sub = [ch.lang, `要求 ${ch.expected}`, d?.outOfRange ? `超范围 ${d.outOfRange}` : '', ch.tools ? `工具 ${ch.tools} 次` : '', ch.model || ''].filter(Boolean).join(' · ')
+        table.append(el('tr', {},
+          el('td', {}, el('div', { textContent: `第 ${i + 1} 题` }), el('div', { className: 'label', textContent: sub })),
+          el('td', { className: 'num', textContent: d ? String(d.parsed) : String(ch.count) }),
+          el('td', { className: 'num', textContent: d ? String(d.minimum) : '—' }),
+          el('td', { className: 'num' }, verdict)))
+      })
+      const card = el('div', { className: 'ui-card card' }, table)
+      for (const [i, ch] of run.challenges.entries()) {
+        if (!ch.text) continue
+        card.append(el('details', { className: 'raw', style: 'margin-top:8px' }, el('summary', { textContent: `第 ${i + 1} 题：题目与原始回答` }),
+          el('pre', { textContent: `${ch.prompt}\n\n———\n\n${ch.text}` })))
+      }
+      return el('section', {}, el('div', { className: 'section-title' }, el('h2', { textContent: '每道题的解析' }), el('span', { className: 'label', textContent: `有效 ${r.usedOutputs}/3` })), card)
+    }
+
+    function renderResult(run) {
+      const r = run.result
+      const parts = [renderHero(run), renderRanking(r), renderSequence(r), renderDiagnostics(run)]
+      if (r.evidence?.reason) parts.push(el('details', { className: 'raw' }, el('summary', { textContent: `检测器说明（${r.evidence.label || 'evidence'}）` }), el('pre', { textContent: r.evidence.reason })))
+      parts.push(el('div', { className: 'disclaimer', textContent: '结果是参考库内的封闭集合排序，不是身份证明：库外的模型也会得到一个「最像」的候选，置信度只在库内模型之间比较。实际模型名来自 Enso 的 agent.run，只作对照；Enso 的代理带系统提示和只读工具，可能让结果偏离直接调用接口时的样子。' }))
+      return parts
+    }
+
+    function renderEmpty() {
+      return el('div', { className: 'ui-card ui-empty' },
+        el('div', { html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M7 17c0-4 2-8 5-8s5 4 5 8"/><path d="M10 19c-.3-1-.3-2-.3-3 0-2.3 1-4 2.3-4s2.3 1.7 2.3 4c0 1.4-.2 2.8-.6 3.8"/><path d="M4 13c1.3-4.5 4.4-7.5 8-7.5s6.7 3 8 7.5"/></svg>' }),
+        el('div', { style: 'color:var(--foreground);font-weight:600', textContent: '还没有检测过这个会话的模型' }),
+        el('div', { textContent: '点右上角「开始检测」：模型会回答 3 道题，回答收齐后在本机评分，显示最像的模型和候选排名。' }))
+    }
+
+    function renderHistory() {
+      const box = $('history-box')
+      const list = $('history')
+      list.replaceChildren()
+      const cur = current()
+      box.classList.toggle('hidden', !history.length || (history.length === 1 && cur?.id === history[0].id))
+      $('history-count').textContent = `保留最近 ${history.length} 次`
+      for (const item of history) {
+        const r = item.result
+        const label = item.status === 'done' ? (r?.prediction ? r.predictionName : DECISION[r?.decision] ?? '完成') : RUN_LABEL[item.status]
+        const button = el('button', { dataset: { fill: '' } },
+          el('span', { className: 't', textContent: `${clock(item.startedAt)} · ${(item.result?.actualModels ?? []).join('、') || RUN_LABEL[item.status]}` }),
+          el('span', { className: 'c', textContent: item.status === 'done' ? pct(r?.probability) : '' }),
+          el('span', { className: 'p', textContent: label }))
+        button.setAttribute('aria-current', String(item.id === cur?.id))
+        button.onclick = () => { selected = item.id; showAll = false; render() }
+        list.append(button)
+      }
+      window.ensoUI?.fill(list)
+    }
+
+    function render() {
+      const run = current()
+      const running = Boolean(live && LIVE.includes(live.status))
+      $('start').textContent = running ? '检测中…' : history.length || live ? '重新检测' : '开始检测'
+      $('start').disabled = running || !sessionId
+      $('cancel').classList.toggle('hidden', !running)
+      const main = $('main')
+      const wrap = el('div', { style: 'display:flex;flex-direction:column;gap:12px' })
+      if (notice) wrap.append(el('div', { className: 'err', textContent: notice }))
+      if (!run) wrap.append(renderEmpty())
+      else {
+        if (run.status === 'done' && run.result) wrap.append(...renderResult(run).filter(Boolean))
+        wrap.append(renderProgress(run))
+      }
+      if (main.firstChild) morph(main.firstChild, wrap)
+      else main.append(wrap)
+      renderHistory()
+      const meta = dataMeta
+      $('foot').textContent = `评分用 Fingerpoint Detector（lmfpd-sdk）在本机离线完成${meta?.builtAt ? ` · 参考库 ${day(meta.builtAt)}，${meta.models} 个模型` : ''}`
+    }
+
+    function accept(run) {
+      if (!run || run.sessionId !== sessionId) return
+      if (LIVE.includes(run.status) || !live || live.id === run.id) live = run
+      if (run.data?.builtAt) dataMeta = { ...(dataMeta ?? {}), builtAt: run.data.builtAt, models: run.data.models }
+      if (!LIVE.includes(run.status)) {
+        history = [run, ...history.filter((item) => item.id !== run.id)].slice(0, 5)
+      }
+      render()
+    }
+
+    async function follow(runId) {
+      if (waiting) return
+      waiting = true
+      let rev = -1
+      let failures = 0
+      try {
+        for (;;) {
+          let res
+          try {
+            res = await host.call('wait', { runId, rev })
+            failures = 0
+          } catch (error) {
+            if (error?.code === 'TIMEOUT') continue
+            if (++failures > 5) { notice = error?.message || '和插件失去联系'; render(); return }
+            await new Promise((resolve) => setTimeout(resolve, 1000))
+            continue
+          }
+          if (res.status === 'missing') return
+          rev = res.rev
+          if (!LIVE.includes(res.status)) return
+        }
+      } finally {
+        waiting = false
+      }
+    }
+
+    $('start').onclick = async () => {
+      notice = ''
+      try {
+        const { runId } = await host.call('start', {})
+        selected = runId
+        showAll = false
+        void follow(runId)
+      } catch (error) {
+        notice = error?.message || '启动失败'
+        render()
+      }
+    }
+    $('cancel').onclick = () => { if (live) host.call('cancel', { runId: live.id }).catch(() => {}) }
+
+    host.on('run', accept)
+    setInterval(() => { if (live && LIVE.includes(live.status)) render() }, 1000)
+    window.ensoUI?.tooltip()
+
+    host.call('snapshot', {}).then((snap) => {
+      sessionId = snap.sessionId
+      dataMeta = snap.data
+      history = snap.history ?? []
+      live = snap.live
+      selected = live?.id ?? history[0]?.id ?? null
+      render()
+      if (live && LIVE.includes(live.status)) void follow(live.id)
+    }, (error) => { notice = error?.message || '读取失败'; render() })
+    render()
+  </script>
+</body>
+</html>

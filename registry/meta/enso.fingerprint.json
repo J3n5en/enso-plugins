@@ -1,0 +1,7 @@
+{
+  "tier": "official",
+  "category": "insights",
+  "tags": ["model", "fingerprint", "agent"],
+  "homepage": "https://lm.ikale.io",
+  "icon": "registry/icons/enso.fingerprint.svg"
+}
