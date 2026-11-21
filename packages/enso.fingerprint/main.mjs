@@ -89,7 +89,7 @@ const normalize = (id) =>
     .replace(/^.*\//, '')
     .replace(/[._:\s]+/g, '-')
 
-/** 实际模型名和预测对照：same / family / different / unknown */
+/** 会话模型 id 和预测对照：same / family / different / unknown */
 export function compareModel(actual, summary) {
   const a = normalize(actual)
   if (!a || !summary?.prediction) return 'unknown'
