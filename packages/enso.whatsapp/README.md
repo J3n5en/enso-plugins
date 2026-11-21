@@ -2,14 +2,26 @@
 
 把 WhatsApp 当作 EnsoCode 秘书的一个联系方式。扫码登录后，主人发来的文字和图片交给秘书，秘书的回复、图片和文件再发回 WhatsApp。
 
-需要 EnsoCode 0.3.9 及以上（这一版才有 `secretary.contact`）。收图片还要 EnsoCode 带上联系方式入站图片的版本；更旧的版本只收到图片的说明文字，只发图片的消息交不过去。
+## 版本要求
 
-> ⚠️ 这里用的是 WhatsApp Web 多设备协议的非官方实现（[Baileys](https://github.com/WhiskeySockets/Baileys)），可能违反 WhatsApp 条款并导致封号。建议用副号。
+- 文字收发、秘书发图片和文件：EnsoCode 0.3.9 及以上（含 0.3.12 稳定版和 0.3.13 内测版）。
+- 收图片：EnsoCode 0.3.13-beta.13 及以上的内测版，或之后的 0.3.13 正式版。更旧的版本只把图片的说明文字交给秘书；只发图片或附件、没有文字的私聊消息交不过去，插件会回一句升级提示。
+
+## 风险
+
+> ⚠️ 使用前请先读完这一段。
+
+- 这里用的是 WhatsApp Web 多设备协议的**非官方实现**（[Baileys](https://github.com/WhiskeySockets/Baileys)），不是 WhatsApp 官方接口，可能违反 WhatsApp 服务条款。
+- 扫码的号码**可能被限制或封号**。「自己号码」模式下风险更高，因为被封的是你的主号。
+- **建议用副号**（默认模式）。
+- 这个插件**还没有在真实号码上做过完整验证**：协议层只在不联网的条件下测过，收发、群聊、收图片、重连都靠模拟测试覆盖。WhatsApp 改协议时可能突然不能用。
 
 ## 登录
 
 1. 在插件市场安装并启用「WhatsApp」。
-2. 打开秘书的联系方式，选「WhatsApp」，先选模式（默认副号），再点「扫码登录」。
+2. 打开秘书的联系方式，展开「WhatsApp」卡片并打开开关，再选模式（默认副号），点「扫码登录」。
+   - 有多个秘书时，每个秘书都能看到这张卡片，但同一时间只有一个秘书能打开它，消息只交给打开它的秘书；没有秘书打开时，收到的消息不处理、不回复。
+   - 登录的号码、绑定的主人和群属于插件本身，不按秘书区分；换一个秘书打开，就由那个秘书接手同一个号。
 3. 手机 WhatsApp → 设置 → 已关联的设备 → 关联新设备，扫描页面上的二维码。二维码会自动刷新，刷满 3 轮还没扫就停下，再点一次即可。
 
 ## 两种模式
@@ -57,9 +69,13 @@
 
 清单里的 `web.whatsapp.com` 是协议的 WebSocket（`wss://web.whatsapp.com/ws/chat`）。EnsoCode 没有 WebSocket 权限，这条连接由插件进程直接建立，写在 `net.domains` 里是为了让连接去向在市场里可见。
 
+## 许可证
+
+Baileys（MIT）依赖 Signal 协议实现 [libsignal](https://github.com/WhiskeySockets/libsignal-node)，它是 **GPL-3.0**。两者一起打包在 `vendor/baileys.mjs` 里，所以本插件整体按 **GPL-3.0** 分发，全文见 `LICENSE`。打进包的每个依赖及其许可证全文见 `vendor/THIRD_PARTY.md`。源码和打包脚本都在 [enso-plugins](https://github.com/J3n5en/enso-plugins) 仓库：插件在 `packages/enso.whatsapp/`，打包脚本在 `scripts/whatsapp/`。
+
 ## 开发
 
-`vendor/baileys.mjs` 是打包产物，不要手改。打进去的依赖和许可证见 `vendor/THIRD_PARTY.md`，其中 Signal 协议实现 `libsignal` 是 GPL-3.0。更新 Baileys：
+`vendor/baileys.mjs`、`vendor/THIRD_PARTY.md` 和 `LICENSE` 是打包产物，不要手改。更新 Baileys：
 
 ```bash
 cd scripts/whatsapp && npm ci && node build.mjs

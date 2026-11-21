@@ -181,7 +181,10 @@ async function withPlugin(opts, fn) {
             bag.unregistered += 1;
           };
         },
-        inbound: async (id, msg) => inbounds.push({ id, msg }),
+        inbound: async (id, msg) => {
+          if (opts.inbound) await opts.inbound(msg);
+          inbounds.push({ id, msg });
+        },
         setStatus: async (id, st) => statuses.push({ id, ...st }),
       },
     };
@@ -643,6 +646,26 @@ describe('WhatsApp 联系方式', { concurrency: false }, () => {
     );
     assert.equal(ctx.logs.filter((l) => l.includes('下载图片失败')).length, 3);
     assert.ok(ctx.logs.every((l) => !l.includes('/v/') && !l.includes(SECRET)));
+  });
+
+  test('旧版 EnsoCode 拒收只有附件的消息：私聊回一句升级提示，带文字的照常交', async () => {
+    const server = mediaServer();
+    // 0.3.13 之前的网关：text 为空就报错，images 字段不认
+    const oldHost = async (msg) => {
+      if (!msg.text.trim()) throw new Error('text 不合法或过长');
+    };
+    await withPlugin({ ...loggedIn, state: { owner: { jid: OWNER, pn: OWNER } }, media: server.handle, inbound: oldHost }, async (ctx) => {
+      const { inbounds } = ctx;
+      await online(ctx);
+      const s = ctx.sock();
+      s.receive([
+        { key: { remoteJid: OWNER, id: 'O1' }, message: { imageMessage: server.add(Buffer.from('图')) } },
+        { key: { remoteJid: OWNER, id: 'O2' }, message: { imageMessage: { ...server.add(Buffer.from('图')), caption: '有说明' } } },
+      ]);
+      await until(() => inbounds.length === 1 && s.sent.length === 1, 'old host');
+      assert.equal(inbounds[0].msg.text, '有说明');
+      assert.match(texts(s)[0], /0\.3\.13 之前的版本还收不了图片/);
+    });
   });
 
   test('群里收图片：被忽略的不下载；@ 或回复秘书才下载；收不下的附件不带也不回', async () => {

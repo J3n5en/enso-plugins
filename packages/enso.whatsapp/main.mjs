@@ -32,6 +32,7 @@ const SEEN_KEEP = 500;
 const RECENT_KEEP = 100;
 const MAX_RESTARTS = 5;
 const BOUND = '已绑定为主人。之后这个号只处理你发来的私聊消息。';
+const IMAGES_NOT_DELIVERED = '这条图片或附件没能交给秘书。EnsoCode 0.3.13 之前的版本还收不了图片，请升级或改发文字。';
 /** enso.net.fetch 的响应上限是 5MB，密文比原图多出填充和 MAC */
 const MAX_DOWNLOAD_BYTES = 5 * 1024 * 1024 - 32;
 /** 宿主只认 too-large / not-image：没下载下来（超时、失败、过大）一律按 too-large 报 */
@@ -521,7 +522,13 @@ export async function activate(enso, options = {}) {
       if (res.name) payload.name = res.name;
       if (res.at != null) payload.at = res.at;
       if (images.length) payload.images = images;
-      await enso.contact.inbound(CHANNEL, payload);
+      try {
+        await enso.contact.inbound(CHANNEL, payload);
+      } catch (error) {
+        // 0.3.13 之前的 EnsoCode 不认 images，只有附件、text 为空时会拒收：私聊里告诉对方一声
+        if (!payload.text && !group) await sendText(res.peerId, { text: IMAGES_NOT_DELIVERED });
+        throw error;
+      }
       try {
         if (session.mode !== 'self') await sock?.readMessages?.([msg.key]);
       } catch {}
