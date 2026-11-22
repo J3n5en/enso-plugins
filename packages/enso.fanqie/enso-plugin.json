@@ -2,13 +2,13 @@
   "schemaVersion": 1,
   "id": "enso.fanqie",
   "name": "番茄小说",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "icon": "icon.svg",
   "description": "在侧栏里浏览、搜索并阅读番茄免费小说（基于 openfanqie 匿名 SDK）。仅供学习研究。",
   "main": "main.mjs",
   "permissions": ["ui.view"],
   "contributes": {
-    "views": [{ "id": "reader", "title": "番茄小说", "entry": "index.html" }],
+    "views": [{ "id": "reader", "title": "番茄小说", "entry": "index.html", "scope": "global" }],
     "methods": [
       { "name": "discover", "timeoutMs": 30000 },
       { "name": "search", "timeoutMs": 30000 },

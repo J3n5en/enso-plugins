@@ -6,7 +6,7 @@
 
 EnsoCode 侧栏插件。在会话右边栏里浏览、搜索、收藏并收听互联网电台。
 
-当前版本 **0.3.2** · 数据源 [Radio Browser](https://api.radio-browser.info/)（免 key）· 只播 HTTP MP3 / AAC 直播流。
+当前版本 **0.3.3** · 数据源 [Radio Browser](https://api.radio-browser.info/)（免 key）· 只播 HTTP MP3 / AAC 直播流。
 
 | | |
 | --- | --- |

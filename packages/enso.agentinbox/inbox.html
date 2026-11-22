@@ -275,6 +275,8 @@
         host.on('inbox', () => {
           pull().catch((error) => toast(error?.message || '刷新失败', true));
         });
+        // 全局侧栏页面切会话时不重载，「当前项目」要跟着新会话重算
+        if (typeof host.onSession === 'function') host.onSession(() => pull().catch(() => {}));
         setInterval(() => { if (state?.loaded) render(); }, 30_000);
         syncFilters();
         requestAnimationFrame(() => ensoUI.seg($('kinds')));
