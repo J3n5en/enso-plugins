@@ -166,6 +166,8 @@
       run('state');
       // 跟随会话切换和后台完成的绑定；state 只读本地文件，开销很小
       setInterval(() => run('state'), 1500);
+      // 全局侧栏页面切会话时不重载，立即换成新会话的绑定
+      if (typeof window.enso?.onSession === 'function') window.enso.onSession(() => run('state'));
       setInterval(tick, 1000);
     </script>
   </body>

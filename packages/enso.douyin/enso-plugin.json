@@ -2,13 +2,13 @@
   "schemaVersion": 1,
   "id": "enso.douyin",
   "name": "抖音推荐流",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "icon": "icon.svg",
   "description": "在侧栏里刷抖音推荐流：全屏竖划切换，直接播放。基于公开 HTTP 接口，不需要设备或登录。仅供学习研究。",
   "main": "main.mjs",
   "permissions": ["ui.view"],
   "contributes": {
-    "views": [{ "id": "player", "title": "抖音推荐流", "entry": "index.html" }],
+    "views": [{ "id": "player", "title": "抖音推荐流", "entry": "index.html", "scope": "global" }],
     "methods": [
       { "name": "feed", "timeoutMs": 30000 },
       { "name": "reset", "timeoutMs": 10000 }
