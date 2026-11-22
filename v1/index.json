@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-21T13:32:34.973Z",
-  "sequence": 125,
+  "generatedAt": "2026-11-22T10:44:24.622Z",
+  "sequence": 126,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -91,11 +91,11 @@
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/box.radio.svg",
       "category": "fun",
       "readme": {
-        "path": "packages/box.radio/0.3.2.readme.md",
-        "sha256": "a3f1158c7a40cf34d855a3101977ae181249c8fcde345008cf08f65c57c3f47a",
+        "path": "packages/box.radio/0.3.3.readme.md",
+        "sha256": "84059633a70005dac6593a8954bc536384b2894dcafee3e1857af154623b426f",
         "size": 2169
       },
-      "latest": "0.3.2",
+      "latest": "0.3.3",
       "versions": [
         {
           "version": "0.3.2",
@@ -106,6 +106,16 @@
           "sha256": "db78b2d07fbbc061c53aaaf27d8f06532856cd56906a2a6999186d22362fa3fc",
           "size": 1455011,
           "publishedAt": "2026-11-13T01:23:04.977Z"
+        },
+        {
+          "version": "0.3.3",
+          "permissions": [
+            "ui.view"
+          ],
+          "path": "packages/box.radio/0.3.3.zip",
+          "sha256": "b80159adc97402c43e91184a719823996dcf0642b4b4c77e3ea554c3d971061e",
+          "size": 1455030,
+          "publishedAt": "2026-11-22T10:44:24.622Z"
         }
       ]
     },
@@ -187,11 +197,11 @@
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.agentinbox.svg",
       "category": "productivity",
       "readme": {
-        "path": "packages/enso.agentinbox/0.1.1.readme.md",
+        "path": "packages/enso.agentinbox/0.1.2.readme.md",
         "sha256": "c7f1fdebca8638ec5fbad6751afd2997d192de2134f821906ce5b434067aec34",
         "size": 4058
       },
-      "latest": "0.1.1",
+      "latest": "0.1.2",
       "versions": [
         {
           "version": "0.1.0",
@@ -226,6 +236,23 @@
           "sha256": "88eaabefdd5d179dea7149f3cec6170afe69b4ea56a07b903a11bd53bdcdafa7",
           "size": 62952,
           "publishedAt": "2026-11-12T08:56:53.638Z"
+        },
+        {
+          "version": "0.1.2",
+          "engines": {
+            "enso": ">=0.3.2"
+          },
+          "permissions": [
+            "ui.view",
+            "agent.observe",
+            "process.background",
+            "session.readAll",
+            "session.focus"
+          ],
+          "path": "packages/enso.agentinbox/0.1.2.zip",
+          "sha256": "b87caa5159fd890adac2c4e693b395941bd6dd05a7417ae9a86808a64c37fe4a",
+          "size": 63163,
+          "publishedAt": "2026-11-22T10:44:24.622Z"
         }
       ]
     },
@@ -478,11 +505,11 @@
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.chatboard.svg",
       "category": "productivity",
       "readme": {
-        "path": "packages/enso.chatboard/0.1.0.readme.md",
+        "path": "packages/enso.chatboard/0.1.1.readme.md",
         "sha256": "4c4e082aca7d37bc0f4da7871b4966dcbf483867feb797221d9e44931b597381",
         "size": 3793
       },
-      "latest": "0.1.0",
+      "latest": "0.1.1",
       "versions": [
         {
           "version": "0.1.0",
@@ -496,6 +523,19 @@
           "sha256": "2233c0af69da4719057fc64ce3e98c61c26949ad36231076b0577de1836ffec5",
           "size": 94012,
           "publishedAt": "2026-11-12T05:56:27.978Z"
+        },
+        {
+          "version": "0.1.1",
+          "permissions": [
+            "ui.view",
+            "session.readAll",
+            "session.focus",
+            "session.create"
+          ],
+          "path": "packages/enso.chatboard/0.1.1.zip",
+          "sha256": "55a03fbcfd04c8f0c26a3f42a4a8812bc3e3176197fd50334d7f9e8a09e645fb",
+          "size": 94341,
+          "publishedAt": "2026-11-22T10:44:24.622Z"
         }
       ]
     },
@@ -702,11 +742,11 @@
       "tier": "community",
       "tags": [],
       "readme": {
-        "path": "packages/enso.douyin/0.1.0.readme.md",
+        "path": "packages/enso.douyin/0.1.1.readme.md",
         "sha256": "510daf25a0376113b75821081b85064ef1da967777efcfee4ea66b624453a769",
         "size": 3100
       },
-      "latest": "0.1.0",
+      "latest": "0.1.1",
       "versions": [
         {
           "version": "0.1.0",
@@ -717,6 +757,16 @@
           "sha256": "bd068e43ad04838bdbecba4d075a3e06fde8d1801934e57a092e40237a7cadd1",
           "size": 41518,
           "publishedAt": "2026-11-21T02:22:55.333Z"
+        },
+        {
+          "version": "0.1.1",
+          "permissions": [
+            "ui.view"
+          ],
+          "path": "packages/enso.douyin/0.1.1.zip",
+          "sha256": "c584cd35377e8c68a31efbc7b15fc86bbe7394c4ac6607183d86dcf33a0b2380",
+          "size": 41537,
+          "publishedAt": "2026-11-22T10:44:24.622Z"
         }
       ]
     },
@@ -926,11 +976,11 @@
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.fanqie.svg",
       "category": "fun",
       "readme": {
-        "path": "packages/enso.fanqie/0.1.2.readme.md",
+        "path": "packages/enso.fanqie/0.1.3.readme.md",
         "sha256": "971664ef9109e34a2b78f327b8df9778f1423687a18f5dd133adba1b115c08f6",
         "size": 4999
       },
-      "latest": "0.1.2",
+      "latest": "0.1.3",
       "versions": [
         {
           "version": "0.1.0",
@@ -961,6 +1011,16 @@
           "sha256": "ab1c6db5e80207ee764c02d4af38318a00daddef458f9cefac8017ef2ef2262f",
           "size": 158666,
           "publishedAt": "2026-11-07T11:06:31.858Z"
+        },
+        {
+          "version": "0.1.3",
+          "permissions": [
+            "ui.view"
+          ],
+          "path": "packages/enso.fanqie/0.1.3.zip",
+          "sha256": "343365d3c9c9d16d734b3c49d2e8b05eaddfc7bca16a44c5d55c403fce294383",
+          "size": 158685,
+          "publishedAt": "2026-11-22T10:44:24.622Z"
         }
       ]
     },
@@ -1112,11 +1172,11 @@
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.hongguo.svg",
       "category": "fun",
       "readme": {
-        "path": "packages/enso.hongguo/0.2.18.readme.md",
+        "path": "packages/enso.hongguo/0.2.19.readme.md",
         "sha256": "79210b6ca7f151a09a0b87121ce16bffa9ea13552822bb7a9d3c349f89465ed7",
         "size": 7783
       },
-      "latest": "0.2.18",
+      "latest": "0.2.19",
       "versions": [
         {
           "version": "0.2.4",
@@ -1257,6 +1317,16 @@
           "sha256": "473f2861a936f68efb7f0571d89e805553ef36f44f3f10bc24acdd364b3fffc1",
           "size": 8121337,
           "publishedAt": "2026-11-20T18:22:49.418Z"
+        },
+        {
+          "version": "0.2.19",
+          "permissions": [
+            "ui.view"
+          ],
+          "path": "packages/enso.hongguo/0.2.19.zip",
+          "sha256": "d792766829d6d76663f2b491d600d910db5c439a2806ed74e8d5171f1901364d",
+          "size": 8121356,
+          "publishedAt": "2026-11-22T10:44:24.622Z"
         }
       ]
     },
@@ -1905,11 +1975,11 @@
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.skyfighter.svg",
       "category": "fun",
       "readme": {
-        "path": "packages/enso.skyfighter/0.1.0.readme.md",
+        "path": "packages/enso.skyfighter/0.1.1.readme.md",
         "sha256": "dc6810e2e7c8958b984429c39dbf4265b82fc6445857589ee8bacd02b911922b",
         "size": 2846
       },
-      "latest": "0.1.0",
+      "latest": "0.1.1",
       "versions": [
         {
           "version": "0.1.0",
@@ -1920,6 +1990,16 @@
           "sha256": "24226efe1b304059a5fc3d4a09b4ba57e40bb9c245bb27abef428ec33927bd94",
           "size": 254616,
           "publishedAt": "2026-11-12T05:39:27.183Z"
+        },
+        {
+          "version": "0.1.1",
+          "permissions": [
+            "ui.view"
+          ],
+          "path": "packages/enso.skyfighter/0.1.1.zip",
+          "sha256": "fc7c810ae56c755bdc2607f289d2b8f2666ab0702a0c9d5213775b9ce2e6b96d",
+          "size": 254635,
+          "publishedAt": "2026-11-22T10:44:24.622Z"
         }
       ]
     },
@@ -2044,11 +2124,11 @@
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.telegram.svg",
       "category": "integrations",
       "readme": {
-        "path": "packages/enso.telegram/0.3.1.readme.md",
+        "path": "packages/enso.telegram/0.3.2.readme.md",
         "sha256": "dacdc1b222c796cb63a674cdf2bebeb8ec78e828ee7ae254868103b0e036a7a7",
         "size": 3177
       },
-      "latest": "0.3.1",
+      "latest": "0.3.2",
       "versions": [
         {
           "version": "0.2.0",
@@ -2148,6 +2228,27 @@
           "sha256": "38482bd30fe4a29cf99dba7da88e851b7a1f732b3502df3245fc477a7cc121ce",
           "size": 82514,
           "publishedAt": "2026-11-07T12:01:21.782Z"
+        },
+        {
+          "version": "0.3.2",
+          "engines": {
+            "enso": ">=0.2.14"
+          },
+          "permissions": [
+            "agent.tool",
+            "agent.observe",
+            "agent.inject",
+            "session.read",
+            "session.create",
+            "process.background",
+            "net.fetch",
+            "ui.view",
+            "ui.openExternal"
+          ],
+          "path": "packages/enso.telegram/0.3.2.zip",
+          "sha256": "2454435b8ccbec6d5d65db264438eeb75429d14e88a4c74edac11e61ac5d1174",
+          "size": 82722,
+          "publishedAt": "2026-11-22T10:44:24.622Z"
         }
       ]
     },
@@ -2163,11 +2264,11 @@
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.tgclient.svg",
       "category": "integrations",
       "readme": {
-        "path": "packages/enso.tgclient/0.5.6.readme.md",
+        "path": "packages/enso.tgclient/0.5.7.readme.md",
         "sha256": "7a5315e22f6c86ffacd2637c3bd28c857d8a33107d8c544e25ea3edf9d85a843",
         "size": 4881
       },
-      "latest": "0.5.6",
+      "latest": "0.5.7",
       "versions": [
         {
           "version": "0.1.0",
@@ -2442,6 +2543,25 @@
           "sha256": "76cff0f536a484bb3413e233fd4e596b928c3c97a67a0c9494a3222b4c3ec5d5",
           "size": 1345880,
           "publishedAt": "2026-11-21T02:10:43.656Z"
+        },
+        {
+          "version": "0.5.7",
+          "engines": {
+            "enso": ">=0.2.14"
+          },
+          "permissions": [
+            "agent.tool",
+            "agent.inject",
+            "ui.view",
+            "ui.notify",
+            "ui.openExternal",
+            "process.background",
+            "session.read"
+          ],
+          "path": "packages/enso.tgclient/0.5.7.zip",
+          "sha256": "432d24f707e8f7b19dd25c52ec79dffeebf359e19294c3282740ff9c15ad5ced",
+          "size": 1345907,
+          "publishedAt": "2026-11-22T10:44:24.622Z"
         }
       ]
     },
