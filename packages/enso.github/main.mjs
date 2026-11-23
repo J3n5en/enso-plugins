@@ -132,7 +132,7 @@ export function activate(enso) {
     return cred;
   };
 
-  const call = async (method, path, body, accept = 'application/vnd.github+json') => {
+  const request = async (method, path, { body, accept = 'application/vnd.github+json', headers } = {}) => {
     const cred = await requireCred();
     const res = await enso.net.fetch(`${API}${path}`, {
       method,
@@ -141,6 +141,7 @@ export function activate(enso) {
         authorization: `Bearer ${cred.token}`,
         'x-github-api-version': '2022-11-28',
         'user-agent': 'enso-github',
+        ...headers,
         ...(body ? { 'content-type': 'application/json' } : {}),
       },
       body: body ? JSON.stringify(body) : undefined,
@@ -153,7 +154,12 @@ export function activate(enso) {
       if (cred.source === 'device') await saveAuth(null);
       if (cred.source === 'gh') ghToken = undefined;
     }
-    if (res.status >= 400) throw new Error(`GitHub ${res.status}：${data?.message ?? '请求失败'}`);
+    return { status: res.status, headers: res.headers ?? {}, data };
+  };
+
+  const call = async (method, path, body, accept) => {
+    const { status, data } = await request(method, path, { body, accept });
+    if (status >= 400) throw new Error(`GitHub ${status}：${data?.message ?? '请求失败'}`);
     return data;
   };
 
