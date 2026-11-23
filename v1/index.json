@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-23T17:44:39.482Z",
-  "sequence": 135,
+  "generatedAt": "2026-11-23T19:02:42.685Z",
+  "sequence": 136,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -572,11 +572,11 @@
       ],
       "category": "integrations",
       "readme": {
-        "path": "packages/enso.clawbot/0.2.0.readme.md",
-        "sha256": "886c77f183512aeaca26046bf1b008ea78f2f3f514985dcbad2ad46f6c0cbf3a",
-        "size": 2321
+        "path": "packages/enso.clawbot/0.2.1.readme.md",
+        "sha256": "442363df7d1cfdb0c3ef4151af0dbe809cdf7db82b4df8ad3137f30bcf32afec",
+        "size": 2832
       },
-      "latest": "0.2.0",
+      "latest": "0.2.1",
       "versions": [
         {
           "version": "0.1.0",
@@ -625,6 +625,22 @@
           "sha256": "57d759584859150c1e1f6eccaedb34a4d297f9a7700adb9279f0719270a6888d",
           "size": 120386,
           "publishedAt": "2026-11-17T02:44:38.956Z"
+        },
+        {
+          "version": "0.2.1",
+          "engines": {
+            "enso": ">=0.3.9"
+          },
+          "permissions": [
+            "secretary.contact",
+            "net.fetch",
+            "process.background",
+            "ui.view"
+          ],
+          "path": "packages/enso.clawbot/0.2.1.zip",
+          "sha256": "a04432fcf4693e637e54da0acdb1d10fcf52d826aa9ae8ffb554bc4c192d9b05",
+          "size": 122233,
+          "publishedAt": "2026-11-23T19:02:42.685Z"
         }
       ]
     },
@@ -1108,11 +1124,11 @@
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.github.svg",
       "category": "integrations",
       "readme": {
-        "path": "packages/enso.github/0.5.0.readme.md",
-        "sha256": "fb6beff6cf4558e830e6e24714ed4c12aca745db3de6b2ea34539d084bfab961",
-        "size": 9165
+        "path": "packages/enso.github/0.5.1.readme.md",
+        "sha256": "edc0072b6bf52223c7b5e0d477cf71ba2d8eb3959e2ac2a5cade0c0a0c03855f",
+        "size": 9359
       },
-      "latest": "0.5.0",
+      "latest": "0.5.1",
       "versions": [
         {
           "version": "0.1.0",
@@ -1301,6 +1317,27 @@
           "sha256": "1ce3c9ae23caf41f20cbbf372e29cf3b5d073698bd6a0cb8a6899a2518941f4a",
           "size": 135660,
           "publishedAt": "2026-11-23T17:15:57.087Z"
+        },
+        {
+          "version": "0.5.1",
+          "engines": {
+            "enso": ">=0.3.14"
+          },
+          "permissions": [
+            "agent.tool",
+            "net.fetch",
+            "ui.view",
+            "ui.openExternal",
+            "agent.inject",
+            "session.readAll",
+            "session.focus",
+            "process.background",
+            "ui.notify"
+          ],
+          "path": "packages/enso.github/0.5.1.zip",
+          "sha256": "9d9cb45a9fc589281c32bb8849c1433e49590cd635b0145af8ac84dabca486c2",
+          "size": 136520,
+          "publishedAt": "2026-11-23T19:02:42.685Z"
         }
       ]
     },
