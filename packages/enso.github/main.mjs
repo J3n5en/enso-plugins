@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { createWatcher } from './watch.mjs';
+import { attachSessions, createWatcher } from './watch.mjs';
 
 const CLIENT_ID = 'Ov23liudxhEHEczTvPcC';
 const API = 'https://api.github.com';
@@ -422,8 +422,20 @@ export function activate(enso) {
     const cred = await credential();
     let repo = null;
     if (ctx?.projectRoot) repo = parseRemote(await exec('git', ['remote', 'get-url', 'origin'], ctx.projectRoot).catch(() => ''));
-    return { source: cred?.source ?? null, login: auth?.login ?? null, pending, error: loginError, repo };
+    const { watches } = await watcher.overview();
+    return { source: cred?.source ?? null, login: auth?.login ?? null, pending, error: loginError, repo, watches: watches.length };
   });
+  enso.renderer.handle('watches', async () => {
+    const overview = await watcher.overview();
+    const listed = await enso.session.list({ scope: 'all' }).catch(() => null);
+    return { ...overview, watches: attachSessions(overview.watches, listed), sessionsKnown: listed != null };
+  });
+  enso.renderer.handle('stopWatch', async (args) => {
+    const sessionId = args?.sessionId;
+    if (typeof sessionId !== 'string' || sessionId === '') throw new Error('sessionId 不能为空');
+    return watcher.unwatch(sessionId);
+  });
+  enso.renderer.handle('focusSession', (args) => enso.session.focus(args?.sessionId));
   enso.renderer.handle('login', login);
   enso.renderer.handle('cancelLogin', () => ((pending = null), null));
   enso.renderer.handle('logout', async () => {

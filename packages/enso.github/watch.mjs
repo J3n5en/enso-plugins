@@ -189,16 +189,18 @@ export function formatDelivery(w, items) {
 /** 投递失败的处置，语义同 tg_watch：队列保留，按错误码退避 */
 function planRetry(error, w) {
   const code = error?.code;
+  const denied = code === 'PERMISSION_DENIED';
   const failures = w.failures ?? 0;
-  if (code === 'RATE_LIMITED') return { delayMs: RETRY_MS, failures, error: w.error };
-  if (code === 'PERMISSION_DENIED')
-    return { delayMs: MAX_RETRY_MS, failures, error: `GitHub 监听没法投递：${PERMISSION_HINT}`, notify: w.warned ? null : 'permission' };
+  if (code === 'RATE_LIMITED') return { delayMs: RETRY_MS, failures, error: w.error, denied: !!w.denied };
+  if (denied)
+    return { delayMs: MAX_RETRY_MS, failures, error: `GitHub 监听没法投递：${PERMISSION_HINT}`, notify: w.warned ? null : 'permission', denied };
   const next = failures + 1;
   return {
     delayMs: Math.min(RETRY_MS * 2 ** (next - 1), MAX_RETRY_MS),
     failures: next,
     error: `投递失败，正在重试：${code ? `${code} ` : ''}${error?.message ?? String(error)}`,
     notify: next >= FAIL_NOTIFY_AT && !w.failNotified ? 'failed' : null,
+    denied,
   };
 }
 
@@ -207,6 +209,27 @@ const stamp = (t) => {
   const p = (x) => String(x).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 };
+
+/** 把 session.list 的结果贴到监听上。列表失败或已满 cap 时无法判断会话是否还在。 */
+export function attachSessions(watches, listed, cap = 200) {
+  const sessions = listed?.sessions;
+  const known = Array.isArray(sessions);
+  const full = known && sessions.length >= cap;
+  const byId = known ? new Map(sessions.map((s) => [s.id, s])) : null;
+  const current = byId?.get(listed.current);
+  return watches.map((w) => {
+    const s = byId?.get(w.sessionId.split('::')[0]);
+    let orphan = null;
+    if (known && s) orphan = false;
+    else if (known && !full) orphan = true;
+    return {
+      ...w,
+      session: s ? { title: s.title, projectName: s.projectName, archived: !!s.archived } : null,
+      orphan,
+      canFocus: !!(s && current && s.projectId && s.projectId === current.projectId),
+    };
+  });
+}
 
 const blankState = () => ({ v: 1, login: null, rate: {}, repos: {}, watches: {} });
 const blankRepo = () => ({ endpoints: {}, pulls: {}, issues: {}, seen: { comments: [], reviewComments: [], reviews: [], runs: [] }, failures: 0 });
@@ -621,10 +644,11 @@ export function createWatcher({ request, login, inject, notify, load, save, now 
         warned: false,
         failNotified: false,
         retryAt: undefined,
+        denied: undefined,
       });
     } catch (e) {
       const plan = planRetry(e, w);
-      Object.assign(w, { error: plan.error, failures: plan.failures, retryAt: t + plan.delayMs });
+      Object.assign(w, { error: plan.error, failures: plan.failures, retryAt: t + plan.delayMs, denied: plan.denied || undefined });
       if (plan.notify === 'permission') {
         await notify?.('GitHub 监听没法投递', PERMISSION_HINT)?.catch(() => {});
         w.warned = true;
@@ -656,6 +680,28 @@ export function createWatcher({ request, login, inject, notify, load, save, now 
     prune();
     for (const sid of Object.keys(state.watches)) arm(sid);
   });
+
+  const rateView = () => {
+    const r = state.rate;
+    return compact({ limit: r.limit, remaining: r.remaining, resetAt: iso(r.resetAt), until: r.until > now() ? iso(r.until) : undefined });
+  };
+  const pollOf = (rs) =>
+    compact({
+      lastPollAt: iso(rs.lastPollAt),
+      lastOkAt: iso(rs.lastOkAt),
+      nextPollAt: iso(rs.nextPollAt),
+      failures: rs.failures ?? 0,
+      error: rs.error,
+    });
+  const deliveryOf = (w) =>
+    compact({
+      pending: Object.keys(w.queue ?? {}).length + (w.overflow ?? 0),
+      pendingSince: iso(w.queuedAt),
+      waitingReady: Object.keys(w.ready ?? {}).length,
+      delivered: w.delivered ?? 0,
+      lastAt: iso(w.lastAt),
+      deliveryError: w.error,
+    });
 
   return {
     ready,
@@ -717,10 +763,21 @@ export function createWatcher({ request, login, inject, notify, load, save, now 
         return { ok: true, stopped: viewOf(w) };
       }),
 
+    async overview() {
+      await ready.catch(() => {});
+      const watches = Object.entries(state.watches)
+        .map(([sessionId, w]) => compact({ sessionId, ...viewOf(w), project: w.project, ...deliveryOf(w), denied: w.denied || undefined }))
+        .sort((a, b) => time(b.since) - time(a.since));
+      return {
+        rate: rateView(),
+        repos: Object.fromEntries(Object.entries(state.repos).map(([repo, rs]) => [repo, { ...pollOf(rs), watchers: watchersOf(repo).length }])),
+        watches,
+      };
+    },
+
     async status(sid) {
       await ready.catch(() => {});
       const w = sid ? state.watches[sid] : undefined;
-      const r = state.rate;
       return {
         watching: w ? viewOf(w) : null,
         ...(w
@@ -728,19 +785,13 @@ export function createWatcher({ request, login, inject, notify, load, save, now 
               repos: Object.fromEntries(
                 w.repos.map((repo) => {
                   const rs = state.repos[repo] ?? {};
-                  const at = { lastPollAt: iso(rs.lastPollAt), lastOkAt: iso(rs.lastOkAt), nextPollAt: iso(rs.nextPollAt) };
-                  return [repo, compact({ ...at, failures: rs.failures ?? 0, error: rs.error, endpoints: Object.keys(rs.endpoints ?? {}) })];
+                  return [repo, compact({ ...pollOf(rs), endpoints: Object.keys(rs.endpoints ?? {}) })];
                 }),
               ),
-              pending: Object.keys(w.queue).length + (w.overflow ?? 0),
-              pendingSince: iso(w.queuedAt),
-              waitingReady: Object.keys(w.ready).length,
-              delivered: w.delivered ?? 0,
-              lastAt: iso(w.lastAt),
-              deliveryError: w.error,
+              ...deliveryOf(w),
             })
           : {}),
-        rate: compact({ limit: r.limit, remaining: r.remaining, resetAt: iso(r.resetAt), until: r.until > now() ? iso(r.until) : undefined }),
+        rate: rateView(),
         otherWatches: Object.keys(state.watches).filter((k) => k !== sid).length,
       };
     },

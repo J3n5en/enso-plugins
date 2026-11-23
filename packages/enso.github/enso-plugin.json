@@ -2,14 +2,14 @@
   "schemaVersion": 1,
   "id": "enso.github",
   "name": "GitHub",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "icon": "icon.svg",
-  "description": "在侧栏查看、回复、关闭和重开当前项目的 GitHub issue 与 PR，也可查看 Actions 运行、失败原因与日志，并重跑或取消。会话里的 agent 也能调用，还能监听仓库的 PR、issue、@提及与 CI 失败，有事件才投递进会话。支持设备码登录，已登录的 gh CLI 可直接复用。",
+  "description": "在侧栏查看、回复、关闭和重开当前项目的 GitHub issue 与 PR，也可查看 Actions 运行、失败原因与日志，并重跑或取消。会话里的 agent 也能调用，还能监听仓库的 PR、issue、@提及与 CI 失败，有事件才投递进会话。支持设备码登录，已登录的 gh CLI 可直接复用。侧栏可查看和停止所有会话的监听。",
   "engines": {
     "enso": ">=0.2.14"
   },
   "main": "main.mjs",
-  "permissions": ["agent.tool", "net.fetch", "ui.view", "ui.openExternal", "agent.inject", "process.background", "ui.notify"],
+  "permissions": ["agent.tool", "net.fetch", "ui.view", "ui.openExternal", "agent.inject", "session.readAll", "session.focus", "process.background", "ui.notify"],
   "net": {
     "domains": ["github.com", "api.github.com"]
   },
@@ -22,7 +22,10 @@
         "secret": true
       }
     ],
-    "views": [{ "id": "github", "title": "GitHub", "entry": "view.html" }],
+    "views": [
+      { "id": "github", "title": "GitHub", "entry": "view.html" },
+      { "id": "watch", "title": "GitHub 监听", "entry": "watch.html", "scope": "global" }
+    ],
     "schedules": [{ "id": "watch", "intervalSeconds": 60, "timeoutMs": 120000 }],
     "methods": [
       { "name": "state", "timeoutMs": 15000 },
@@ -34,7 +37,10 @@
       { "name": "runs", "timeoutMs": 30000 },
       { "name": "run", "timeoutMs": 30000 },
       { "name": "jobLog", "timeoutMs": 30000 },
-      { "name": "runAction", "timeoutMs": 30000 }
+      { "name": "runAction", "timeoutMs": 30000 },
+      { "name": "watches", "timeoutMs": 15000 },
+      { "name": "stopWatch", "timeoutMs": 15000 },
+      { "name": "focusSession", "timeoutMs": 15000 }
     ],
     "agentTools": [
       {

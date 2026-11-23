@@ -238,6 +238,7 @@
           ? `<span class="ui-badge" data-tip="${SOURCES[a.source]}">${esc(a.login ?? SOURCES[a.source])}</span>${a.source === 'device' ? '<button class="ui-btn ui-btn--sm" data-logout>退出</button>' : ''}`
           : '';
         const head = `<div class="row"><input class="ui-input grow ui-mono" id="repo" placeholder="owner/name" value="${esc(ui.repo)}" />
+          <button class="ui-btn ui-btn--sm" data-panel>${a.watches ? `监听 ${a.watches}` : '监听'}</button>
           <button class="ui-btn ui-btn--sm" data-reload ${ui.busy ? 'disabled' : ''}>${ui.busy ? '…' : '刷新'}</button>${account}</div>`;
         const body = !a.source ? authView(a) : ui.detail?.kind === 'run' ? runView(ui.detail.run) : ui.detail ? detailView(ui.detail) : listView();
         app.innerHTML = head + body + (ui.error ? `<div class="err">${esc(ui.error)}</div>` : '');
@@ -261,6 +262,10 @@
         if ('login' in d) act(async () => { await call('login'); await refreshAuth(); });
         else if ('cancel' in d) act(async () => { await call('cancelLogin'); await refreshAuth(); });
         else if ('logout' in d) act(async () => { await call('logout'); ui.items = null; ui.detail = null; ui.logs = {}; await refreshAuth(); });
+        else if ('panel' in d) {
+          const open = window.enso.views && window.enso.views.open;
+          if (typeof open === 'function') open('watch');
+        }
         else if (d.open) call('open', { url: d.open });
         else if ('reload' in d) ui.detail?.kind === 'run' ? loadRun(ui.detail.run.id) : ui.detail ? loadDetail(ui.detail.number) : loadList();
         else if ('back' in d) { ui.detail = null; ui.logs = {}; loadList(); }
