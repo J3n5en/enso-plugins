@@ -11,6 +11,7 @@ import {
   mirrorTargets,
   rootSession,
   route,
+  senderOf,
   takeReply,
 } from '../packages/enso.telegram/lib.mjs';
 
@@ -85,6 +86,8 @@ test('配对码一次有效、过期失效；配对后消息投到绑定的会�
     sessionId: 's1',
     text: '你好',
     from: 'alice',
+    fromId: '7',
+    fromName: '@alice',
     messageId: 5,
     deliverAs: 'followUp',
   });
@@ -171,6 +174,79 @@ test('同步：只发给开启 sync 的绑定，且排除本轮已回发的聊�
 test('子会话归到主会话；投递文本带来源', () => {
   assert.equal(rootSession('main::child'), 'main');
   assert.equal(inboundText({ from: 'alice', text: 'hi' }), '[Telegram 消息，来自 alice]\n\nhi');
+});
+
+const noOwnerFields = (sender) => {
+  for (const key of ['owner', 'isOwner', 'role', 'trusted']) assert.equal(Object.hasOwn(sender, key), false);
+};
+
+test('senderOf 组出宿主 sender：私聊、群聊、匿名管理员、缺发送者、旧队列、超长名字', () => {
+  const state = bound();
+  const priv = route(state, msg('你好'), 0, BOT);
+  assert.deepEqual(senderOf(priv), {
+    channel: 'telegram',
+    chatId: '42',
+    userId: '7',
+    displayName: '@alice',
+  });
+  noOwnerFields(senderOf({ ...priv, owner: true, isOwner: true, role: 'admin', trusted: true }));
+
+  const gstate = emptyState();
+  bindChat(gstate, { chatId: -100, sessionId: 's1' });
+  const grp = route(gstate, group('@enso_bot 看下'), 0, BOT);
+  assert.equal(grp.fromId, '7');
+  assert.deepEqual(senderOf(grp), {
+    channel: 'telegram',
+    chatId: '-100',
+    userId: '7',
+    displayName: '@alice',
+  });
+
+  const anon = route(
+    gstate,
+    group('@enso_bot 匿名', { from: { id: 1087968824, username: 'GroupAnonymousBot' } }),
+    0,
+    BOT
+  );
+  assert.equal(anon.kind, 'inject');
+  assert.equal(anon.fromId, undefined);
+  assert.equal(anon.fromName, '匿名管理员');
+  const anonSender = senderOf(anon);
+  assert.deepEqual(anonSender, { channel: 'telegram', chatId: '-100', displayName: '匿名管理员' });
+  assert.equal(anonSender.userId, undefined);
+
+  const missing = route(gstate, group('@enso_bot 没头', { from: undefined }), 0, BOT);
+  assert.equal(missing.fromId, undefined);
+  assert.equal(missing.fromName, '-100');
+  assert.deepEqual(senderOf(missing), { channel: 'telegram', chatId: '-100', displayName: '-100' });
+
+  assert.deepEqual(senderOf({ chatId: 42, from: 'alice' }), {
+    channel: 'telegram',
+    chatId: '42',
+    displayName: 'alice',
+  });
+  assert.equal(senderOf({ chatId: 42, from: 'alice' }).userId, undefined);
+
+  const spaced = `  ${'A'.repeat(80)}   ${'B'.repeat(80)}  `;
+  const named = route(state, msg('长', 42, { from: { id: 9, first_name: spaced } }), 0, BOT);
+  assert.equal(named.fromId, '9');
+  assert.equal(named.fromName.length, 128);
+  assert.equal(named.fromName.includes('  '), false);
+  assert.equal(named.fromName.startsWith('A'), true);
+
+  const longSender = senderOf({ chatId: 1, fromId: '  9  ', from: `  ${'名'.repeat(200)}  ` });
+  assert.equal(longSender.userId, '9');
+  assert.equal(longSender.displayName.length, 128);
+  assert.equal(senderOf({ chatId: '1'.repeat(129), fromId: '1'.repeat(129), fromName: '   ' }).chatId, undefined);
+  assert.deepEqual(senderOf({ chatId: '   ', fromId: '1087968824', fromName: '   ' }), { channel: 'telegram' });
+
+  const steered = route(state, msg('/steer 改用 pnpm'), 0, BOT);
+  assert.equal(steered.deliverAs, 'steer');
+  assert.equal(steered.fromId, '7');
+  assert.equal(steered.fromName, '@alice');
+  const photo = route(state, msg(undefined, 42, { photo: [{ file_id: 'p', file_size: 10 }], caption: '图' }), 0, BOT);
+  assert.equal(photo.fromId, '7');
+  assert.equal(photo.fromName, '@alice');
 });
 
 test('深链 /start <配对码> 等同 /bind', () => {

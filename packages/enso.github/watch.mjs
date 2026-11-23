@@ -53,6 +53,11 @@ const compact = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v 
 const time = (v) => Date.parse(v) || 0;
 const iso = (t) => (t ? new Date(t).toISOString() : undefined);
 const clean = (v, max = 200) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
+const cleanLogin = (v) => {
+  if (typeof v !== 'string') return undefined;
+  const s = v.trim();
+  return s.length >= 1 && s.length <= 128 ? s : undefined;
+};
 
 const clampSec = (v, lo, hi, fallback) => {
   const n = Number(v);
@@ -141,16 +146,62 @@ export function passes(w, f, ev, { login, defaultBranch } = {}, draftOk = false)
 
 function itemOf(f, ev, truncated) {
   const i = f.info ?? {};
-  const base = { repo: f.repo, kind: f.kind, title: i.title ?? '', author: i.author, url: i.url, events: { [ev]: 1 }, ...(truncated ? { truncated } : {}) };
+  const actor = cleanLogin(f.actor);
+  const base = {
+    repo: f.repo,
+    kind: f.kind,
+    title: i.title ?? '',
+    author: i.author,
+    url: i.url,
+    events: { [ev]: 1 },
+    ...(actor ? { actors: [actor] } : { unknownActor: true }),
+    ...(truncated ? { truncated } : {}),
+  };
   if (f.kind === 'ci') return { ...base, number: i.number, branch: f.branch, sha: i.sha, conclusion: i.conclusion };
   return { ...base, number: f.n, state: i.merged ? 'merged' : i.state, ...(f.kind === 'pr' ? { draft: !!i.draft, sha: i.sha } : {}) };
+}
+
+function unionActors(a, b) {
+  const out = [];
+  const seen = new Set();
+  for (const login of [...(a.actors ?? []), ...(b.actors ?? [])]) {
+    const key = login.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(login);
+  }
+  return out;
 }
 
 function mergeItem(a, b) {
   if (!a) return b;
   const events = { ...a.events };
   for (const [k, v] of Object.entries(b.events)) events[k] = (events[k] ?? 0) + v;
-  return { ...a, ...b, events, ...(a.truncated || b.truncated ? { truncated: true } : {}) };
+  const actors = unionActors(a, b);
+  const unknownActor = Boolean(a.unknownActor || b.unknownActor);
+  const merged = { ...a, ...b, events, ...(actors.length ? { actors } : {}), ...(unknownActor ? { unknownActor: true } : {}), ...(a.truncated || b.truncated ? { truncated: true } : {}) };
+  if (!actors.length) delete merged.actors;
+  if (!unknownActor) delete merged.unknownActor;
+  return merged;
+}
+
+export function senderOfDelivery(items, overflow = 0) {
+  if (overflow > 0 || !Array.isArray(items) || !items.length) return { channel: 'github' };
+  const seen = new Set();
+  const logins = [];
+  for (const it of items) {
+    if (!it || it.kind === 'summary' || it.kind === 'alert' || it.unknownActor || !it.actors?.length) return { channel: 'github' };
+    for (const raw of it.actors) {
+      const login = cleanLogin(raw);
+      if (!login) return { channel: 'github' };
+      const key = login.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      logins.push(login);
+    }
+  }
+  if (logins.length !== 1) return { channel: 'github' };
+  return { channel: 'github', userId: logins[0], displayName: logins[0] };
 }
 
 export function lineOf(it) {
@@ -609,7 +660,7 @@ export function createWatcher({ request, login, inject, notify, load, save, now 
         if (!gone && (rs.lastOkAt ?? 0) - r.pushAt < w.settleSec * 1000) continue;
         delete w.ready[key];
         changed = true;
-        if (!gone && (!p.draft || w.includeDrafts)) enqueue(w, key, itemOf({ repo, kind: 'pr', n: p.n, info: p }, 'pr_ready'));
+        if (!gone && (!p.draft || w.includeDrafts)) enqueue(w, key, itemOf({ repo, kind: 'pr', n: p.n, actor: p.author, info: p }, 'pr_ready'));
       }
     return changed;
   }
@@ -678,7 +729,7 @@ export function createWatcher({ request, login, inject, notify, load, save, now 
       return persist();
     }
     try {
-      await inject({ sessionId: sid, text: formatDelivery(w, items), deliverAs: 'followUp', triggerTurn: true });
+      await inject({ sessionId: sid, text: formatDelivery(w, items), deliverAs: 'followUp', triggerTurn: true, sender: senderOfDelivery(items, w.overflow) });
       Object.assign(w, {
         queue: {},
         overflow: undefined,

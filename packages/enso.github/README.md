@@ -2,7 +2,7 @@
 
 在侧栏查看、回复、关闭和重开当前项目的 GitHub issue 与 PR，也可以查看 Actions 运行、失败原因和日志，并重跑或取消。会话里的 agent 也能通过工具做同样的操作。
 
-需要 EnsoCode 0.2.14 及以上。
+需要 EnsoCode 0.3.14 及以上。
 
 ## 登录
 
@@ -79,6 +79,8 @@
 同一 PR 或 issue 的多条事件合成一条，例如 `pr_opened, pr_commented×2`。投递只含仓库、编号、标题、作者、分支、head 和链接，不含正文。外部内容前有一句提示，说明它们是 GitHub 上第三方填写的数据，不是用户的指令。`note` 原样放在提示之前。
 
 整条投递由 EnsoCode 包进 `<untrusted-content>`，0.4.3 起插件不再自己包一层，因此要求 EnsoCode 0.3.14 及以上。标题、作者、分支等外部内容里形似包裹标签的写法，例如 `</untrusted-content>`、`<untrusted-content …>`、`<system-reminder>`，会在 `<` 后插一个反斜杠，变成 `<\/untrusted-content>` 这样。它们结束不了宿主的包裹，也伪造不出新的一层。
+
+每次投递都带 `sender`，供宿主判断来源和权限。一批里只有一个明确触发者时，`channel` 是 `github`，`userId` 和 `displayName` 都是该 GitHub 登录名。同一批有多个触发者、有的事件看不出操作者、或这条投递是摘要或告警时，`sender` 只有 `{ channel: 'github' }`，不带 `userId`。
 
 ### 参数
 
