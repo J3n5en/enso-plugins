@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "enso.clawbot",
   "name": "微信 Clawbot",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "icon": "icon.svg",
   "description": "微信（WeChat）联系方式：扫码登录后，把扫码人的微信消息交给 EnsoCode 秘书，并把秘书的回复、图片和文件发回微信。",
   "engines": {

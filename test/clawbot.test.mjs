@@ -41,7 +41,7 @@ async function withBot(opts, fn) {
   }
 }
 
-async function setup({ dataDir, state, queues } = {}) {
+async function setup({ dataDir, state, queues, activateOptions } = {}) {
   const dir = dataDir ?? (await mkdtemp(join(tmpdir(), 'claw-')));
   if (state) await writeFile(join(dir, 'state.json'), JSON.stringify(state));
   const calls = [];
@@ -81,6 +81,8 @@ async function setup({ dataDir, state, queues } = {}) {
         else if (url.includes('/sendtyping')) data = shift(q.typing, url);
         else if (url.includes('/getuploadurl')) data = shift(q.upload, url);
         else throw new Error(`未预期的请求 ${url}`);
+        if (typeof data === 'function') data = await data();
+        if (data instanceof Error) throw data;
         return { status: 200, headers: {}, body: JSON.stringify(data) };
       },
     },
@@ -97,7 +99,7 @@ async function setup({ dataDir, state, queues } = {}) {
       setStatus: async (id, st) => statuses.push({ id, ...st }),
     },
   };
-  const { tick } = await activate(enso, { loop: false });
+  const { tick } = await activate(enso, { loop: false, ...activateOptions });
   return { dir, tick, calls, statuses, inbounds, events, handlers, bag };
 }
 
@@ -520,7 +522,7 @@ describe('微信 Clawbot', { concurrency: false }, () => {
   });
 
   test('语音无转写、文字带附件、单独附件各回一句说明；正常文字和语音不打扰', async () => {
-    const from = (...items) => ({ from_user_id: 'U', message_type: 1, item_list: items });
+    const from = (...items) => ({ from_user_id: 'U', message_type: 1, context_token: 'CTX', item_list: items });
     const cases = [
       { items: [{ type: 3, voice_item: {} }], inbound: null, hint: '这条语音没能转成文字，麻烦再发一次或者打字' },
       { items: [{ type: 3, voice_item: { text: '' } }], inbound: null, hint: '这条语音没能转成文字，麻烦再发一次或者打字' },
@@ -704,7 +706,7 @@ describe('微信 Clawbot', { concurrency: false }, () => {
     const pdf = Buffer.from('%PDF-1.4 report body that is longer than one block');
     await withBot(
       {
-        state: logged(),
+        state: logged({ contexts: { U: 'CTX' } }),
         queues: {
           upload: [{ ret: 0, upload_param: 'UP/PARAM=' }],
           cdn: [{ status: 200, headers: { 'x-encrypted-param': 'DL2' } }],
@@ -746,7 +748,7 @@ describe('微信 Clawbot', { concurrency: false }, () => {
     const data = Buffer.from('hello');
     await withBot(
       {
-        state: logged(),
+        state: logged({ contexts: { U: 'CTX' } }),
         queues: {
           upload: [{ upload_param: 'P' }, { upload_param: 'P' }, { upload_param: 'P' }],
           cdn: [
@@ -776,21 +778,140 @@ describe('微信 Clawbot', { concurrency: false }, () => {
     const data = Buffer.from('x');
     await withBot(
       {
-        state: logged(),
+        state: logged({ contexts: { U: 'CTX' } }),
         queues: {
           upload: [{ ret: 0 }, { upload_full_url: 'https://novac2c.cdn.weixin.qq.com/c2c/upload?f=1' }],
           cdn: [{ status: 200, headers: { 'x-encrypted-param': 'D' } }],
-          send: [{ ret: -2, errmsg: 'bad' }],
+          send: [{ ret: 9, errmsg: 'bad' }],
         },
       },
       async ({ handlers }) => {
         await assert.rejects(handlers.channel.sendImage('U', { data, fileName: 'a.png' }), /没有返回上传地址/);
-        await assert.rejects(handlers.channel.sendImage('U', { data, fileName: 'a.png' }), /ret=-2/);
+        await assert.rejects(handlers.channel.sendImage('U', { data, fileName: 'a.png' }), /ret=9/);
       },
     );
     await withBot({}, async ({ handlers }) => {
       await assert.rejects(handlers.channel.sendFile('U', { data, fileName: 'a.txt' }), /未登录/);
     });
+  });
+
+  const EXPIRED = '微信会话已过期，请在微信给机器人发任意一条消息后恢复';
+  const expired = (err) => {
+    assert.equal(err.message, EXPIRED);
+    assert.equal(err.code, 'SESSION_EXPIRED');
+    assert.equal(err.userMessage, EXPIRED);
+    return true;
+  };
+
+  test('没有 context_token 时文字、图片、文件都直接报会话过期，不请求接口', async () => {
+    await withBot({ state: logged() }, async ({ calls, handlers }) => {
+      await assert.rejects(handlers.channel.sendText('U', { text: '你好' }), expired);
+      await assert.rejects(handlers.channel.sendImage('U', { data: Buffer.from('i'), fileName: 'a.png', caption: '图' }), expired);
+      await assert.rejects(handlers.channel.sendFile('U', { data: Buffer.from('d'), fileName: 'a.pdf' }), expired);
+      assert.equal(calls.length, 0);
+    });
+  });
+
+  test('sendmessage ret=-2 标记 token 失效：之后快速失败、重启仍失效，新入站消息后恢复', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'claw-'));
+    await withBot(
+      { dataDir: dir, state: logged({ contexts: { U: 'OLD' } }), queues: { send: [{ ret: -2, errmsg: 'prepare failed' }] } },
+      async ({ calls, handlers }) => {
+        await assert.rejects(handlers.channel.sendText('U', { text: '第一条' }), expired);
+        await assert.rejects(handlers.channel.sendText('U', { text: '第二条' }), expired);
+        await assert.rejects(handlers.channel.sendImage('U', { data: Buffer.from('i'), fileName: 'a.png' }), expired);
+        assert.equal(of(calls, '/sendmessage').length, 1);
+        assert.equal(of(calls, '/getuploadurl').length, 0);
+      },
+    );
+    await withBot(
+      {
+        dataDir: dir,
+        queues: {
+          updates: [
+            {
+              ret: 0,
+              msgs: [{ from_user_id: 'U', message_type: 1, context_token: 'NEW', item_list: [{ type: 1, text_item: { text: '在' } }] }],
+            },
+          ],
+          send: [{ ret: 0 }],
+        },
+      },
+      async ({ tick, calls, handlers }) => {
+        await assert.rejects(handlers.channel.sendText('U', { text: '重启后' }), expired);
+        assert.equal(of(calls, '/sendmessage').length, 0);
+        await tick();
+        await handlers.channel.sendText('U', { text: '恢复' });
+        assert.equal(of(calls, '/sendmessage').at(-1).body.msg.context_token, 'NEW');
+      },
+    );
+  });
+
+  test('媒体 sendmessage ret=-2 同样报会话过期并标记失效', async () => {
+    await withBot(
+      {
+        state: logged({ contexts: { U: 'OLD' } }),
+        queues: {
+          upload: [{ upload_full_url: 'https://novac2c.cdn.weixin.qq.com/c2c/upload?f=1' }],
+          cdn: [{ status: 200, headers: { 'x-encrypted-param': 'D' } }],
+          send: [{ ret: -2 }],
+        },
+      },
+      async ({ calls, handlers }) => {
+        await assert.rejects(handlers.channel.sendFile('U', { data: Buffer.from('d'), fileName: 'a.pdf' }), expired);
+        await assert.rejects(handlers.channel.sendText('U', { text: '再发' }), expired);
+        assert.equal(of(calls, '/sendmessage').length, 1);
+      },
+    );
+  });
+
+  const captureConsole = async (levels, fn) => {
+    const logs = Object.fromEntries(levels.map((level) => [level, []]));
+    const saved = levels.map((level) => [level, console[level]]);
+    for (const level of levels) console[level] = (...args) => logs[level].push(args.join(' '));
+    try {
+      await fn();
+    } finally {
+      for (const [level, original] of saved) console[level] = original;
+    }
+    return logs;
+  };
+
+  test('长轮询失败先记 warn，连续超过阈值才记 error，成功一次后重新计数', async () => {
+    const fail = () => new TypeError('fetch failed');
+    let finish;
+    const finished = new Promise((resolve) => (finish = resolve));
+    const logs = await captureConsole(['warn', 'error'], () =>
+      withBot(
+        {
+          state: logged(),
+          activateOptions: { loop: true, backoffStartMs: 1, backoffMaxMs: 2, minGapMs: 0, pollErrorAfter: 3 },
+          queues: {
+            updates: [fail, fail, fail, fail, { ret: 0, msgs: [] }, fail, () => (finish(), { ret: 0, msgs: [] })],
+          },
+        },
+        () => finished,
+      ),
+    );
+    assert.equal(logs.warn.length, 4);
+    assert.equal(logs.error.length, 1);
+    assert.match(logs.error[0], /fetch failed/);
+  });
+
+  test('typing 被取消只记 debug，其他失败仍记 error', async () => {
+    const aborted = Object.assign(new Error('This operation was aborted'), { name: 'AbortError' });
+    const logs = await captureConsole(['debug', 'error'], () =>
+      withBot(
+        { state: logged({ contexts: { U: 'CTX' } }), queues: { config: [aborted, new Error('微信 HTTP 500')] } },
+        async ({ handlers }) => {
+          await handlers.channel.typing('U', { on: true });
+          await handlers.channel.typing('U', { on: true });
+        },
+      ),
+    );
+    assert.equal(logs.debug.length, 1);
+    assert.equal(logs.error.length, 1);
+    assert.match(logs.error[0], /HTTP 500/);
   });
 });
 
