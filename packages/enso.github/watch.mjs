@@ -191,7 +191,7 @@ function planRetry(error, w) {
   const code = error?.code;
   const denied = code === 'PERMISSION_DENIED';
   const failures = w.failures ?? 0;
-  if (code === 'RATE_LIMITED') return { delayMs: RETRY_MS, failures, error: w.error, denied };
+  if (code === 'RATE_LIMITED') return { delayMs: RETRY_MS, failures, error: w.error, denied: !!w.denied };
   if (denied)
     return { delayMs: MAX_RETRY_MS, failures, error: `GitHub 监听没法投递：${PERMISSION_HINT}`, notify: w.warned ? null : 'permission', denied };
   const next = failures + 1;
@@ -218,7 +218,7 @@ export function attachSessions(watches, listed, cap = 200) {
   const byId = known ? new Map(sessions.map((s) => [s.id, s])) : null;
   const current = byId?.get(listed.current);
   return watches.map((w) => {
-    const s = byId?.get(w.sessionId);
+    const s = byId?.get(w.sessionId.split('::')[0]);
     let orphan = null;
     if (known && s) orphan = false;
     else if (known && !full) orphan = true;

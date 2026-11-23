@@ -197,6 +197,10 @@ test('attachSessions 只在同项目且列表能确定时标记 orphan 与 canFo
   const [found] = attachSessions([{ sessionId: 'a' }], { current: 'b', sessions: listed.sessions }, 2);
   assert.equal(found.orphan, false);
   assert.equal(found.canFocus, false);
+
+  const [child] = attachSessions([{ sessionId: 'a::sub' }], listed);
+  assert.equal(child.orphan, false, '子会话按所属主会话判断');
+  assert.equal(child.session.title, '甲');
 });
 
 test('watches 只读本地状态，stopWatch 卸下订阅和独占仓库', async (t) => {

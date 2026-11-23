@@ -123,7 +123,7 @@
         const ms = Date.parse(iso);
         return Number.isFinite(ms) ? new Date(ms).toLocaleString(zh ? 'zh-CN' : undefined, { hour12: false }) : '';
       };
-      const ui = { data: null, error: '', key: '' };
+      const ui = { data: null, error: '' };
       const confirming = new Map();
       ensoUI.tooltip();
 
@@ -203,15 +203,10 @@
           <button class="ui-btn ui-btn--sm" data-reload>${esc(L.refresh)}</button></div>
           ${rateLine}${paused}${denied}${ui.error ? `<div class="err">${esc(ui.error)}</div>` : ''}${list}${repoCard(data.repos)}`;
       }
-      async function load(force) {
+      async function load() {
         try {
-          const data = await call('watches');
-          const key = JSON.stringify(data);
-          const hadError = ui.error;
+          ui.data = await call('watches');
           ui.error = '';
-          if (!force && key === ui.key && !hadError) return;
-          ui.key = key;
-          ui.data = data;
         } catch (e) {
           ui.error = e?.message ?? String(e);
         }
@@ -220,7 +215,7 @@
       app.addEventListener('click', (e) => {
         const t = e.target.closest('button');
         if (!t || t.disabled) return;
-        if ('reload' in t.dataset) return load(true);
+        if ('reload' in t.dataset) return load();
         if (t.dataset.focus) {
           call('focusSession', { sessionId: t.dataset.focus }).catch((err) => {
             ui.error = err?.message ?? String(err);
@@ -241,15 +236,15 @@
         clearTimeout(confirming.get(sid));
         confirming.delete(sid);
         call('stopWatch', { sessionId: sid })
-          .then(() => load(true))
+          .then(load)
           .catch((err) => {
             ui.error = err?.message ?? String(err);
             render();
           });
       });
-      load(true);
-      setInterval(() => load(false), 5000);
-      if (typeof window.enso.onSession === 'function') window.enso.onSession(() => load(false));
+      load();
+      setInterval(load, 5000);
+      if (typeof window.enso.onSession === 'function') window.enso.onSession(load);
     </script>
   </body>
 </html>
