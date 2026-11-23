@@ -15,3 +15,16 @@
 ## 使用前提
 
 安装后请前往 **设置 → 插件 → Session Bridge**，开启 **「允许向任意运行中的会话发送消息」**（或执行 `enso-server plugin inject-anywhere enso.bridge`）。
+
+## 权限
+
+| 权限 | 用途 |
+| --- | --- |
+| `ui.view` | 打开「会话桥」侧栏 |
+| `process.background` | 插件常驻，维持群聊与跨会话投递 |
+| `agent.tool` | 提供 `bridge_sessions`、`bridge_ask`、`bridge_reply`、`bridge_history` |
+| `agent.inject` | 向目标会话投递提问，并把异步回复回传给原提问会话 |
+| `agent.injectTrusted` | 仅用于跨会话提问向目标普通会话投递指令。目标会话会直接按提问执行。秘书会话仍按外部数据处理。异步回传其他会话的回复不标记 trusted，宿主继续按外部数据包裹。升级时宿主会提示确认此权限。 |
+| `agent.observe` | 接收 `agent_end` 与 `session_status` |
+| `session.read` | 列出本项目会话并读取运行状态 |
+| `session.focus` | 点击会话时切换聚焦 |

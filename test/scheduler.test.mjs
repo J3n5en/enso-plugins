@@ -33,6 +33,9 @@ test('工具清单与 manifest 声明一致', async () => {
       manifest.contributes.agentTools.map((t) => t.name).sort()
     );
     assert.ok(manifest.permissions.includes('agent.tool'));
+    assert.ok(manifest.permissions.includes('agent.inject'));
+    assert.ok(manifest.permissions.includes('agent.injectTrusted'));
+    assert.equal(manifest.engines?.enso, '>=0.3.14');
   } finally {
     await rm(dataDir, { recursive: true, force: true });
   }
@@ -90,7 +93,7 @@ test('到点把提示词注入到绑定的会话，通知任务只弹通知', as
     );
     await handlers.get('runNow')({ id: promptTask.task.id }, { sessionId: 's1' });
     assert.deepEqual(injected, [
-      { sessionId: 's1', text: '继续盯', deliverAs: 'followUp', triggerTurn: true },
+      { sessionId: 's1', text: '继续盯', deliverAs: 'followUp', triggerTurn: true, trusted: true },
     ]);
 
     await tools.get('cron_create')(

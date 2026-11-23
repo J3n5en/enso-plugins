@@ -229,7 +229,7 @@ export function activate(enso) {
     const sessionId = args?.target === 'bound' ? card.boundTo : ctx?.sessionId;
     if (!sessionId) throw new Error(args?.target === 'bound' ? '卡片没有绑定会话' : '请先打开一个会话');
     try {
-      await enso.session.inject({ sessionId, text, deliverAs: 'followUp', triggerTurn: true });
+      await enso.session.inject({ sessionId, text, deliverAs: 'followUp', triggerTurn: true, trusted: true });
     } catch (error) {
       if (error?.code === 'PERMISSION_DENIED')
         throw new Error('未允许向其他会话发消息：到 设置 → 插件 → Kanban 打开“允许向任意运行中的会话发送消息”');

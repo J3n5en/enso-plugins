@@ -175,7 +175,14 @@ describe('tg_watch 处理期间显示正在输入', { concurrency: false }, () =
       await t.push(42, 5);
       await t.push(43, 6);
       await t.advance(1000);
-      assert.equal(t.injected.length, 1);
+      assert.equal(t.injected.length, 2);
+      assert.equal(t.injected[0].sender.channel, 'telegram');
+      assert.equal(t.injected[0].sender.chatId, '42');
+      assert.equal(t.injected[0].sender.userId, '42');
+      assert.equal(t.injected[0].sender.displayName, 'U42');
+      assert.equal(t.injected[1].sender.chatId, '43');
+      assert.equal(t.injected[1].sender.userId, '43');
+      assert.equal(t.injected[1].sender.displayName, 'U43');
       assert.deepEqual(t.typing().map((c) => peerId(c.peer)), ['42', '43']);
       await t.tools.get('tg_send_message')({ chat: '42', text: '只回这个' }, { sessionId: 's1' });
       await t.advance(4000);
