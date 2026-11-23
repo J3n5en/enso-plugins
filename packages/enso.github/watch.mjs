@@ -1,3 +1,5 @@
+import { AsyncResource } from 'node:async_hooks';
+
 export const EVENTS = ['pr_opened', 'pr_ready', 'pr_merged_closed', 'issue_opened', 'mention', 'ci_failed', 'pr_commented', 'issue_commented'];
 const DEFAULT_EVENTS = EVENTS.slice(0, 6);
 const CONFIG = ['repos', 'events', 'authors', 'excludeAuthors', 'labels', 'excludeNumbers', 'includeDrafts', 'branches', 'settleSec', 'debounceSec', 'minIntervalSec', 'note'];
@@ -369,6 +371,11 @@ function diffRuns(repo, rs, branch, got, facts) {
 export function createWatcher({ request, login, inject, notify, load, save, now = Date.now, setTimer = setTimeout, clearTimer = clearTimeout }) {
   let state = blankState();
   const timers = new Map();
+  /**
+   * 宿主经 AsyncLocalStorage 给 enso.* 调用带上当前调用 id，定时器会继承排它的那次调用（定时任务、工具）。
+   * 回调触发时那次调用早已结束，宿主拒绝并报 NO_INVOCATION。投递回到 activate 时的根上下文，像常驻进程一样凭跨会话授权投递。
+   */
+  const root = new AsyncResource('enso.github.watch');
   let chain = Promise.resolve();
   const locked = (fn) => {
     const p = chain.then(fn);
@@ -618,26 +625,66 @@ export function createWatcher({ request, login, inject, notify, load, save, now 
     if (!w || (!Object.keys(w.queue).length && !w.overflow)) return;
     timers.set(
       sid,
-      setTimer(() => {
-        timers.delete(sid);
-        return locked(() => flush(sid)).catch(() => {});
-      }, Math.max(0, dueAt(w) - now())),
+      setTimer(
+        () =>
+          root.runInAsyncScope(() => {
+            timers.delete(sid);
+            return locked(() => flush(sid)).catch(() => {});
+          }),
+        Math.max(0, dueAt(w) - now()),
+      ),
     );
+  }
+
+  /** 补投前按 PR 现状刷新：已关闭或又推送过的 pr_ready 作废；积压超过 30 分钟且多于 10 条时合成一条摘要 */
+  function backlog(w, t) {
+    const items = [];
+    for (const it of Object.values(w.queue)) {
+      const p = it.kind === 'pr' ? state.repos[it.repo]?.pulls[it.number] : undefined;
+      if (!p) {
+        items.push(it);
+        continue;
+      }
+      const events = { ...it.events };
+      if (events.pr_ready && (p.state !== 'open' || p.sha !== it.sha)) delete events.pr_ready;
+      if (Object.keys(events).length) items.push({ ...it, events, title: p.title ?? it.title, state: p.merged ? 'merged' : p.state, draft: p.draft, sha: p.sha ?? it.sha });
+    }
+    const plain = items.filter((it) => it.kind !== 'summary' && it.kind !== 'alert');
+    if (plain.length <= SUMMARY_AT || t - (w.queuedAt ?? t) <= GAP) return items;
+    const counts = {};
+    for (const it of plain) for (const [k, v] of Object.entries(it.events)) counts[k] = (counts[k] ?? 0) + v;
+    const lines = plain.map(lineOf);
+    return [
+      ...items.filter((it) => !plain.includes(it)),
+      {
+        kind: 'summary',
+        title: `积压 ${plain.length} 条（${stamp(w.queuedAt)} 起未能投递）：${Object.entries(counts).map(([k, v]) => `${k} ${v}`).join('、')}`,
+        details: lines.slice(0, SUMMARY_LINES),
+        more: Math.max(0, lines.length - SUMMARY_LINES),
+        events: counts,
+        ...(plain.some((it) => it.truncated) ? { truncated: true } : {}),
+      },
+    ];
   }
 
   async function flush(sid) {
     const w = state.watches[sid];
-    const items = w ? Object.values(w.queue) : [];
-    if (!items.length && !w?.overflow) return;
+    if (!w || (!Object.keys(w.queue).length && !w.overflow)) return;
     const t = now();
     if (t < dueAt(w)) return arm(sid);
+    const queued = Object.keys(w.queue).length;
+    const items = backlog(w, t);
+    if (!items.length && !w.overflow) {
+      Object.assign(w, { queue: {}, queuedAt: undefined });
+      return persist();
+    }
     try {
       await inject({ sessionId: sid, text: formatDelivery(w, items), deliverAs: 'followUp', triggerTurn: true });
       Object.assign(w, {
         queue: {},
         overflow: undefined,
         queuedAt: undefined,
-        delivered: (w.delivered ?? 0) + items.length + (w.overflow ?? 0),
+        delivered: (w.delivered ?? 0) + queued + (w.overflow ?? 0),
         lastAt: t,
         error: undefined,
         failures: 0,

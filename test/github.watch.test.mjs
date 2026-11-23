@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { AsyncLocalStorage, AsyncResource } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -53,8 +54,30 @@ function fakeGitHub(env) {
   return { repo, request };
 }
 
+/** 仿宿主：调用 id 经 AsyncLocalStorage 带进 enso.* 调用，调用结束后再用这个 id 会被拒（gate.ts NO_INVOCATION） */
+function fakeHost() {
+  const current = new AsyncLocalStorage();
+  const live = new Set();
+  return {
+    invoke: async (fn) => {
+      const inv = {};
+      live.add(inv);
+      try {
+        return await current.run(inv, fn);
+      } finally {
+        live.delete(inv);
+      }
+    },
+    check: () => {
+      const inv = current.getStore();
+      if (inv && !live.has(inv)) throw Object.assign(new Error('此接口只能在宿主发起的调用内使用'), { code: 'NO_INVOCATION' });
+    },
+  };
+}
+
 function setup() {
-  const env = { clock: T0, calls: [], injected: [], notes: [], saved: null, timers: new Set(), login: 'me' };
+  const host = fakeHost();
+  const env = { clock: T0, calls: [], injected: [], notes: [], saved: null, timers: new Set(), login: 'me', host };
   const gh = fakeGitHub(env);
   const r = gh.repo('o/r');
   const at = (t) => iso(t ?? env.clock);
@@ -126,6 +149,7 @@ function setup() {
         request: gh.request,
         login: async () => env.login,
         inject: async (input) => {
+          host.check();
           if (env.injectError) throw env.injectError;
           env.injected.push(input);
         },
@@ -135,17 +159,20 @@ function setup() {
           env.saved = JSON.stringify(state);
         },
         now: () => env.clock,
+        // 和真 setTimeout 一样，回调沿用排定时器那一刻的异步上下文
         setTimer: (fn, ms) => {
-          const t = { fn, at: env.clock + ms };
+          const t = { fn: AsyncResource.bind(fn), at: env.clock + ms };
           env.timers.add(t);
           return t;
         },
         clearTimer: (t) => env.timers.delete(t),
       }),
-    /** 按到期顺序跑掉挂着的投递定时器，时间拨到到期点 */
+    /** 按到期顺序跑掉挂着的投递定时器，时间拨到到期点；投递一直失败会无限重试，只跑到当前时刻后 10 分钟 */
     fire: async () => {
+      const until = env.clock + 10 * MIN;
       while (env.timers.size) {
         const t = [...env.timers].sort((a, b) => a.at - b.at)[0];
+        if (t.at > until) break;
         env.timers.delete(t);
         env.clock = Math.max(env.clock, t.at);
         await t.fn();
@@ -155,9 +182,10 @@ function setup() {
     lines: (text) => text.split('\n').filter((l) => l.startsWith('- ')),
   };
   s.w = s.make();
+  /** 宿主每 60 秒发起一次定时任务调用 */
   s.step = async (ms = MIN, w = s.w) => {
     env.clock += ms;
-    await w.tick();
+    await host.invoke(() => w.tick());
   };
   s.round = async (n = 1) => {
     for (let i = 0; i < n; i++) {
@@ -417,6 +445,70 @@ test('PERMISSION_DENIED 只通知一次，队列保留，授权后补投', async
   assert.equal(s.env.injected.length, 1);
   assert.match(s.texts()[0], /PR #1/);
   assert.equal((await s.w.status('s1')).pending, 0);
+});
+
+const NO_INVOCATION = () => Object.assign(new Error('此接口只能在宿主发起的调用内使用'), { code: 'NO_INVOCATION' });
+
+test('定时任务调用里排下的投递，在那次调用结束后触发也能送达', async () => {
+  const s = setup();
+  await s.env.host.invoke(() => s.w.watch('s1', { repos: ['o/r'], events: ['pr_opened'] }));
+  s.env.clock += 10_000;
+  s.openPR(1);
+  await s.step();
+  assert.equal(s.env.injected.length, 0, '还在攒 debounceSec');
+  assert.equal(s.env.timers.size, 1);
+  await s.fire();
+  assert.equal(s.env.injected.length, 1);
+  const st = await s.w.status('s1');
+  assert.deepEqual([st.delivered, st.pending, st.deliveryError], [1, 0, undefined]);
+});
+
+test('投递恢复后补发积压：同一 PR 合成一条，作废的 pr_ready 不发', async () => {
+  const s = setup();
+  await s.w.watch('s1', { repos: ['o/r'], events: ['pr_opened', 'pr_ready', 'pr_merged_closed', 'pr_commented', 'issue_opened'], settleSec: 60 });
+  s.env.injectError = NO_INVOCATION();
+  s.env.clock += 10_000;
+  s.openPR(5);
+  s.comment(5);
+  s.openPR(6);
+  s.openPR(7);
+  s.openIssue(8);
+  await s.round(2);
+  s.updatePR(6, { head: { sha: 'cccccccccc', ref: 'b6' } });
+  s.updatePR(7, { state: 'closed', merged_at: iso(s.env.clock), closed_at: iso(s.env.clock) });
+  await s.round();
+  const st = await s.w.status('s1');
+  assert.deepEqual([st.pending, st.delivered], [4, 0]);
+  assert.match(st.deliveryError, /NO_INVOCATION/);
+  s.env.injectError = null;
+  await s.fire();
+  assert.equal(s.env.injected.length, 1);
+  assert.deepEqual(s.lines(s.texts()[0]), [
+    '- o/r PR #5「PR 5」 @bob · pr_opened, pr_commented, pr_ready · head 5aaaaaa · https://github.com/o/r/pull/5',
+    '- o/r PR #6「PR 6」 @bob · pr_opened · head ccccccc · https://github.com/o/r/pull/6',
+    '- o/r PR #7「PR 7」 @bob · pr_opened, pr_merged_closed · merged · head 7aaaaaa · https://github.com/o/r/pull/7',
+    '- o/r issue #8「issue 8」 @bob · issue_opened · https://github.com/o/r/issues/8',
+  ]);
+  const after = await s.w.status('s1');
+  assert.deepEqual([after.pending, after.delivered, after.deliveryError], [0, 4, undefined]);
+});
+
+test('积压超过 30 分钟且多于 10 条时补发一条摘要', async () => {
+  const s = setup();
+  await s.w.watch('s1', { repos: ['o/r'], events: ['pr_opened'] });
+  s.env.injectError = NO_INVOCATION();
+  s.env.clock += 10_000;
+  for (let n = 1; n <= 12; n++) s.openPR(n);
+  await s.round(4);
+  s.env.injectError = null;
+  await s.fire();
+  assert.equal(s.env.injected.length, 1);
+  const text = s.texts()[0];
+  assert.equal(s.lines(text).length, 1);
+  assert.match(s.lines(text)[0], /^- 积压 12 条（.+ 起未能投递）：pr_opened 12$/);
+  assert.equal(text.split('\n').filter((l) => l.startsWith('  - o/r PR #')).length, 10);
+  assert.match(text, /另有 2 条/);
+  assert.equal((await s.w.status('s1')).delivered, 12);
 });
 
 test('投递文本把外部数据包进 untrusted，并转义结束标签', async () => {
