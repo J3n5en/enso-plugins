@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp } from 'node:fs/promises';
+import { chmod, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { activate, parseRemote, trimLog } from '../packages/enso.github/main.mjs';
 
 test('parseRemote 识别 github 远程地址', () => {
@@ -212,3 +212,45 @@ test('github_link_pr 绑上需求线程，没有线程时说明原因', async ()
   const none = await setup({ 'GET /repos/o/r/pulls/4': pr }, { threads: { bindPr: async () => null } });
   assert.deepEqual(await none.tools.github_link_pr({ repo: 'o/r', number: 4 }, { sessionId: 's9' }), { bound: false, reason: '会话没有需求线程' });
 });
+test('trimLog 剥掉 ANSI 控制序列和 BOM', () => {
+  const raw = [
+    '\uFEFF2024-01-02T03:04:05.1Z \x1b[36;1mRun npm test\x1b[0m',
+    '2024-01-02T03:04:05.2Z \x1b]8;;https://x\x07link\x1b]8;;\x07 \x1b[2K\x1b(Bok',
+    '2024-01-02T03:04:05.3Z ##[error]\x1b[31mboom\x1b[0m',
+  ].join('\n');
+  const { log } = trimLog(raw);
+  assert.equal(log, 'Run npm test\nlink ok\n##[error]boom');
+  assert.equal(/\x1b|\uFEFF/.test(log), false);
+});
+
+/** 假 gh：新版拒绝带转义序列的输出，除非传 --allow-escape-sequences；旧版不认这个参数 */
+async function fakeGh(supportsFlag) {
+  const dir = await mkdtemp(join(tmpdir(), 'gh-bin-'));
+  const script = `#!/usr/bin/env node
+const args = process.argv.slice(2);
+const flag = ${supportsFlag};
+if (args[0] === '--version') { console.log('gh version x'); process.exit(0); }
+if (args[0] === 'api' && args.includes('--help')) { console.log(flag ? '  --allow-escape-sequences   Allow printing terminal escape sequences' : '  --cache duration'); process.exit(0); }
+if (args.includes('--allow-escape-sequences')) {
+  if (!flag) { console.error('unknown flag: --allow-escape-sequences'); process.exit(1); }
+} else if (flag) { console.error('the response contains terminal escape sequences; pass --allow-escape-sequences to output it anyway'); process.exit(1); }
+process.stdout.write('2024-01-02T03:04:05.1Z \\x1b[32mok\\x1b[0m ' + (process.env.GH_TOKEN || '') + '\\n');
+`;
+  await writeFile(join(dir, 'gh'), script);
+  await chmod(join(dir, 'gh'), 0o755);
+  return dir;
+}
+
+for (const supportsFlag of [true, false]) {
+  test(`github_job_log 读到带颜色的日志并剥掉转义（gh ${supportsFlag ? '新版' : '旧版'}）`, async () => {
+    const saved = process.env.PATH;
+    process.env.PATH = `${await fakeGh(supportsFlag)}${delimiter}${saved}`;
+    try {
+      const { tools } = await setup({});
+      const r = await tools.github_job_log({ repo: 'o/r', job: 7 });
+      assert.deepEqual(r, { repo: 'o/r', job: 7, truncated: false, log: 'ok pat' });
+    } finally {
+      process.env.PATH = saved;
+    }
+  });
+}

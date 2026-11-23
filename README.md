@@ -40,7 +40,7 @@ EnsoCode 官方插件市场的源仓库 · [浏览插件](https://enso-plugins.j
 | Browse | `enso.browse` | 0.1.1 | 官方 | 接入 OpenCode Browse：官方扩展和官方中继，没装时插件可以自己下载一份，不改其它 agent。代理在后台标签里读页面、点击、输入、截图、录屏和抓包；登录、两步验证和付款交还给你。 |
 | Bugbot Review | `enso.bugbot` | 0.1.0 | 官方 | 移植自 Cursor review-bugbot 与 Agent Review：本地 Git diff 组装（自动识别默认基准分支、剔除 linguist-generated 文件、合并 .cursor/BUGBOT.md 规则与最小改动行数门禁）、只读 bugbot 审查子代理、/review-bugbot 技能以及侧栏 Findings 面板与一键 Fix in Chat。 |
 | Chat Board | `enso.chatboard` | 0.1.1 | 官方 | 跨项目会话看板：每张卡片就是一个会话（状态含 coworker），可分列、标未读、写备注，点卡片切换到该会话。 |
-| 微信 Clawbot | `enso.clawbot` | 0.2.0 | 官方 | 微信（WeChat）联系方式：扫码登录后，把扫码人的微信消息交给 EnsoCode 秘书，并把秘书的回复、图片和文件发回微信。 |
+| 微信 Clawbot | `enso.clawbot` | 0.2.1 | 官方 | 微信（WeChat）联系方式：扫码登录后，把扫码人的微信消息交给 EnsoCode 秘书，并把秘书的回复、图片和文件发回微信。 |
 | Context Window | `enso.context` | 0.1.3 | 官方 | 侧栏里看当前会话的上下文窗口：各部分占多少、还剩多少、提示词缓存命中率。 |
 | DB Studio | `enso.dbstudio` | 0.1.2 | 官方 | 在侧栏连接 PostgreSQL、MySQL/MariaDB 和 SQLite，浏览库表并运行 SQL。结果按页流式读取，可取消正在执行的查询。密码保存在插件数据目录的 vault.json。 |
 | 抖音推荐流 | `enso.douyin` | 0.1.1 | 社区 | 在侧栏里刷抖音推荐流：全屏竖划切换，直接播放。基于公开 HTTP 接口，不需要设备或登录。仅供学习研究。 |

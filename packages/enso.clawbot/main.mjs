@@ -28,6 +28,8 @@ const CHANNEL = 'wechat';
 const STATE_FILE = 'state.json';
 const BACKOFF_START_MS = 3_000;
 const BACKOFF_MAX_MS = 60_000;
+/** 连续失败超过这么多次才记 error，之前的退避重试只记 warn */
+const POLL_ERROR_AFTER = 5;
 const IDLE_MS = 5_000;
 /** 服务端没按长轮询挂住时，避免空转打满 */
 const MIN_GAP_MS = 1_000;
@@ -38,8 +40,25 @@ const UNSUPPORTED_WITH_TEXT = '暂不支持图片、文件和视频，只处理�
 const VOICE_NO_TEXT = '这条语音没能转成文字，麻烦再发一次或者打字';
 /** CDN 上传：5xx 与网络错误重试，4xx 直接失败 */
 const CDN_MAX_ATTEMPTS = 3;
+/** sendmessage 的 context_token 失效或缺失 */
+const RET_SESSION_EXPIRED = -2;
+const SESSION_EXPIRED = '微信会话已过期，请在微信给机器人发任意一条消息后恢复';
 
 let current = null;
+
+/** message 对旧宿主可读；code / userMessage 给支持结构化错误的宿主 */
+function sessionExpired() {
+  return Object.assign(new Error(SESSION_EXPIRED), { code: 'SESSION_EXPIRED', userMessage: SESSION_EXPIRED });
+}
+
+function isCancelled(error) {
+  return (
+    error?.name === 'AbortError' ||
+    error?.code === 'ABORT_ERR' ||
+    error?.code === 'ABORTED' ||
+    /abort|cancel|取消/i.test(String(error?.message ?? ''))
+  );
+}
 
 export function deactivate() {
   const prev = current;
@@ -86,8 +105,17 @@ function freshLogin() {
   return { qrcode: '', qrText: '', pollBase: DEFAULT_BASE, verifyCode: '', refreshCount: 0, needVerify: false };
 }
 
-/** options.loop=false 时不起常驻轮询，返回 tick() 供测试一步步驱动 */
-export async function activate(enso, { loop = true } = {}) {
+/** options.loop=false 时不起常驻轮询，返回 tick() 供测试一步步驱动；其余选项只给测试缩短等待 */
+export async function activate(
+  enso,
+  {
+    loop = true,
+    backoffStartMs = BACKOFF_START_MS,
+    backoffMaxMs = BACKOFF_MAX_MS,
+    minGapMs = MIN_GAP_MS,
+    pollErrorAfter = POLL_ERROR_AFTER,
+  } = {},
+) {
   deactivate();
   const self = { stopped: false, timer: null, wake: null, unregister: null, looping: false };
   current = self;
@@ -375,24 +403,33 @@ export async function activate(enso, { loop = true } = {}) {
       const parts = chunkText(input?.text, 2000);
       if (!parts.length) return;
       if (!loggedIn()) throw new Error('微信未登录');
+      const id = String(peerId);
       const gen = epoch;
       let ref;
       for (const part of parts) {
         const clientId = randomUUID();
-        const body = sendMessageBody({
-          peerId,
-          text: part,
-          contextToken: session.contexts[String(peerId)] || '',
-          clientId,
-        });
-        const res = await post(session.baseUrl, '/ilink/bot/sendmessage', body, session.botToken);
-        if (gen !== epoch) throw new Error('微信登录状态已变，消息未发送');
-        if (typeof res?.ret === 'number' && res.ret !== 0) {
-          throw new Error(`sendmessage ret=${res.ret} ${res.errmsg ?? ''}`.trim());
-        }
+        await sendMessage(gen, id, (contextToken) => sendMessageBody({ peerId: id, text: part, contextToken, clientId }));
         ref = clientId;
       }
       return { messageId: ref };
+    }
+
+    /** 没有 token 直接失败；ret=-2 时丢掉这个 token，等下一条入站消息带来新的 */
+    async function sendMessage(gen, id, build) {
+      const token = session.contexts[id];
+      if (!token) throw sessionExpired();
+      const res = await post(session.baseUrl, '/ilink/bot/sendmessage', build(token), session.botToken);
+      if (gen !== epoch) throw new Error('微信登录状态已变，消息未发送');
+      if (res?.ret === RET_SESSION_EXPIRED) {
+        if (session.contexts[id] === token) {
+          delete session.contexts[id];
+          await save();
+        }
+        throw sessionExpired();
+      }
+      if (typeof res?.ret === 'number' && res.ret !== 0) {
+        throw new Error(`sendmessage ret=${res.ret} ${res.errmsg ?? ''}`.trim());
+      }
     }
 
     /**
@@ -456,6 +493,7 @@ export async function activate(enso, { loop = true } = {}) {
       const id = String(peerId ?? '');
       const data = media?.data;
       if (!id || !data?.length) throw new Error('没有要发送的内容');
+      if (!session.contexts[id]) throw sessionExpired();
       const gen = epoch;
       const plaintext = Buffer.from(data);
       const fileName = String(media?.fileName || 'file');
@@ -468,17 +506,8 @@ export async function activate(enso, { loop = true } = {}) {
       );
       if (gen !== epoch) throw new Error('微信登录状态已变，消息未发送');
       const clientId = randomUUID();
-      const body = mediaMessageBody({
-        peerId: id,
-        item: kind === 'image' ? imageItem(uploaded) : fileItem(uploaded, fileName),
-        contextToken: session.contexts[id] || '',
-        clientId,
-      });
-      const res = await post(session.baseUrl, '/ilink/bot/sendmessage', body, session.botToken);
-      if (gen !== epoch) throw new Error('微信登录状态已变，消息未发送');
-      if (typeof res?.ret === 'number' && res.ret !== 0) {
-        throw new Error(`sendmessage ret=${res.ret} ${res.errmsg ?? ''}`.trim());
-      }
+      const item = kind === 'image' ? imageItem(uploaded) : fileItem(uploaded, fileName);
+      await sendMessage(gen, id, (contextToken) => mediaMessageBody({ peerId: id, item, contextToken, clientId }));
       return { messageId: clientId };
     }
 
@@ -505,7 +534,8 @@ export async function activate(enso, { loop = true } = {}) {
           session.botToken,
         );
       } catch (error) {
-        console.error('[微信 Clawbot] typing', error?.message ?? error);
+        if (isCancelled(error)) console.debug('[微信 Clawbot] typing 已取消');
+        else console.error('[微信 Clawbot] typing', error?.message ?? error);
       }
     }
 
@@ -526,7 +556,8 @@ export async function activate(enso, { loop = true } = {}) {
       if (!loop || self.looping || self.stopped) return;
       self.looping = true;
       void (async () => {
-        let backoff = BACKOFF_START_MS;
+        let backoff = backoffStartMs;
+        let failures = 0;
         while (!self.stopped) {
           const started = Date.now();
           try {
@@ -534,15 +565,18 @@ export async function activate(enso, { loop = true } = {}) {
             if (self.stopped) break;
             if (kind === 'idle') await sleep(IDLE_MS);
             else {
-              backoff = BACKOFF_START_MS;
-              const gap = MIN_GAP_MS - (Date.now() - started);
+              backoff = backoffStartMs;
+              failures = 0;
+              const gap = minGapMs - (Date.now() - started);
               if (gap > 0) await sleep(gap);
             }
           } catch (error) {
             if (self.stopped) break;
-            console.error('[微信 Clawbot] 轮询失败，', Math.round(backoff / 1000), '秒后重试：', error?.message ?? error);
+            failures += 1;
+            const log = failures > pollErrorAfter ? console.error : console.warn;
+            log(`[微信 Clawbot] 轮询连续失败 ${failures} 次，${Math.round(backoff / 1000)} 秒后重试：`, error?.message ?? error);
             await sleep(backoff);
-            backoff = Math.min(backoff * 2, BACKOFF_MAX_MS);
+            backoff = Math.min(backoff * 2, backoffMaxMs);
           }
         }
         self.looping = false;
