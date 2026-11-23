@@ -731,6 +731,12 @@
         setTimeout(poll, 2500);
       }
       poll();
+      // 全局侧栏页面切会话时不重载，立即刷新「当前」标记
+      if (typeof window.enso?.onSession === 'function') {
+        window.enso.onSession(() => {
+          if (!busy()) window.enso.call('sync').then((next) => next && !busy() && apply(next)).catch(() => {});
+        });
+      }
       setInterval(() => { if (model && !busy()) renderBoard(); }, 60000);
     </script>
   </body>

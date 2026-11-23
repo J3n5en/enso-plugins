@@ -1,6 +1,6 @@
 {
   "name": "box-radio",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "EnsoCode 侧栏插件：浏览、搜索、收藏并收听互联网电台。",
   "main": "main.mjs",
   "directories": {
