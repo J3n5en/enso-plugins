@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-23T07:44:14.063Z",
-  "sequence": 129,
+  "generatedAt": "2026-11-23T08:41:13.089Z",
+  "sequence": 130,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -1079,7 +1079,7 @@
     {
       "id": "enso.github",
       "name": "GitHub",
-      "description": "在侧栏查看、回复、关闭和重开当前项目的 GitHub issue 与 PR，也可查看 Actions 运行、失败原因与日志，并重跑或取消。会话里的 agent 也能调用，还能监听仓库的 PR、issue、@提及与 CI 失败，有事件才投递进会话。支持设备码登录，已登录的 gh CLI 可直接复用。侧栏可查看和停止所有会话的监听。",
+      "description": "在侧栏查看、回复、关闭和重开当前项目的 GitHub issue 与 PR，也可查看 Actions 运行、失败原因与日志，并重跑或取消。会话里的 agent 也能调用，还能监听仓库的 PR、issue、@提及与 CI 失败，有事件才投递进会话。支持设备码登录，已登录的 gh CLI 可直接复用。侧栏的「监听」页可查看和停止所有会话的监听。",
       "tier": "official",
       "tags": [
         "github",
@@ -1088,11 +1088,11 @@
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.github.svg",
       "category": "integrations",
       "readme": {
-        "path": "packages/enso.github/0.4.1.readme.md",
-        "sha256": "fcd100135c4e190132cb4da9e4e32eb76aef2086b7e09062bc71584e2fbdf310",
-        "size": 7980
+        "path": "packages/enso.github/0.4.2.readme.md",
+        "sha256": "20d836ae69bab983e279b9161095a576a12ee3249be4633342627e971ffbcc62",
+        "size": 8294
       },
-      "latest": "0.4.1",
+      "latest": "0.4.2",
       "versions": [
         {
           "version": "0.1.0",
@@ -1218,6 +1218,27 @@
           "sha256": "0374b40766ac4c7dfada7eacca01c1c7d56ef60612827a795323e0edcf9e85c1",
           "size": 132807,
           "publishedAt": "2026-11-23T07:44:14.063Z"
+        },
+        {
+          "version": "0.4.2",
+          "engines": {
+            "enso": ">=0.2.14"
+          },
+          "permissions": [
+            "agent.tool",
+            "net.fetch",
+            "ui.view",
+            "ui.openExternal",
+            "agent.inject",
+            "session.readAll",
+            "session.focus",
+            "process.background",
+            "ui.notify"
+          ],
+          "path": "packages/enso.github/0.4.2.zip",
+          "sha256": "6c69fb3fdc4039ca47255064899e4c401b66e7fad204c4d3ebe830a5bf789703",
+          "size": 133048,
+          "publishedAt": "2026-11-23T08:41:13.089Z"
         }
       ]
     },
