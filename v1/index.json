@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-23T05:48:18.673Z",
-  "sequence": 128,
+  "generatedAt": "2026-11-23T07:44:14.063Z",
+  "sequence": 129,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -1088,11 +1088,11 @@
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.github.svg",
       "category": "integrations",
       "readme": {
-        "path": "packages/enso.github/0.4.0.readme.md",
-        "sha256": "fca147272060aa802f56e13d36a47893092d3cb0a13130aeb293ad5b6a696d9c",
-        "size": 7741
+        "path": "packages/enso.github/0.4.1.readme.md",
+        "sha256": "fcd100135c4e190132cb4da9e4e32eb76aef2086b7e09062bc71584e2fbdf310",
+        "size": 7980
       },
-      "latest": "0.4.0",
+      "latest": "0.4.1",
       "versions": [
         {
           "version": "0.1.0",
@@ -1197,6 +1197,27 @@
           "sha256": "00edc0a3fba3e5d28c6700c7ae5111ec6e62bac1054bd014c688ba415bdc0c72",
           "size": 130357,
           "publishedAt": "2026-11-23T05:48:18.673Z"
+        },
+        {
+          "version": "0.4.1",
+          "engines": {
+            "enso": ">=0.2.14"
+          },
+          "permissions": [
+            "agent.tool",
+            "net.fetch",
+            "ui.view",
+            "ui.openExternal",
+            "agent.inject",
+            "session.readAll",
+            "session.focus",
+            "process.background",
+            "ui.notify"
+          ],
+          "path": "packages/enso.github/0.4.1.zip",
+          "sha256": "0374b40766ac4c7dfada7eacca01c1c7d56ef60612827a795323e0edcf9e85c1",
+          "size": 132807,
+          "publishedAt": "2026-11-23T07:44:14.063Z"
         }
       ]
     },
