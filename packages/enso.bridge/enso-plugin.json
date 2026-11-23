@@ -2,7 +2,8 @@
   "schemaVersion": 1,
   "id": "enso.bridge",
   "name": "Session Bridge",
-  "version": "1.0.2",
+  "version": "1.1.0",
+  "engines": { "enso": ">=0.3.14" },
   "icon": "icon.svg",
   "description": "跨会话桥：同项目的多个会话可在侧栏群聊室中互相提问、委托与回传结论。",
   "main": "main.mjs",
@@ -12,6 +13,7 @@
     "process.background",
     "agent.tool",
     "agent.inject",
+    "agent.injectTrusted",
     "agent.observe",
     "session.read",
     "session.focus"
