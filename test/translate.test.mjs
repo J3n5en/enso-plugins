@@ -155,9 +155,99 @@ test('未配置或未知模型时用 35B，没有 think 标记则原样 trim', a
   assert.deepEqual(calls, ['Index-Translate-35B-A3B', 'Index-Translate-35B-A3B']);
 });
 
-test('非 200 视为失败', async () => {
-  const { handlers } = fakeEnso(async () => ({ status: 503, headers: {}, body: 'nope' }));
-  await assert.rejects(handlers.translate({ text: 'Hello' }), /503/);
+const FAST = { timeoutMs: 50, delays: [1, 2], deadlineMs: 1000 };
+
+function sequence(...responses) {
+  const calls = [];
+  const { enso } = fakeEnso(async (url, init) => {
+    calls.push({ url, init });
+    const next = responses[Math.min(calls.length - 1, responses.length - 1)];
+    return typeof next === 'function' ? next() : next;
+  });
+  let configReads = 0;
+  enso.config.get = async () => {
+    configReads += 1;
+    return {};
+  };
+  return { enso, calls, configReads: () => configReads };
+}
+
+const status = (code, headers = {}) => ({ status: code, headers, body: 'nope' });
+
+test('504 自动重试，第 2 次成功则整体成功，且不重复读配置', async () => {
+  const { enso, calls, configReads } = sequence(status(504), okBody('译文'));
+  assert.deepEqual(await translate(enso, 'Hello', undefined, FAST), { text: '译文' });
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].init.body, calls[0].init.body);
+  assert.equal(configReads(), 1);
+});
+
+test('502 / 503 / 504 重试两次仍失败，提示已重试', async () => {
+  for (const code of [502, 503, 504]) {
+    const { enso, calls } = sequence(status(code));
+    await assert.rejects(translate(enso, 'Hello', undefined, FAST), {
+      message: '翻译服务超时，已重试 2 次，请稍后再试',
+    });
+    assert.equal(calls.length, 3, String(code));
+  }
+});
+
+test('400 不重试，立即失败并保留状态码', async () => {
+  const { enso, calls } = sequence(status(400), okBody('不该到这'));
+  await assert.rejects(translate(enso, 'Hello', undefined, FAST), /HTTP 400/);
+  assert.equal(calls.length, 1);
+});
+
+test('401 / 403 不重试，提示 API Key 无效或无权限', async () => {
+  for (const code of [401, 403]) {
+    const { enso, calls } = sequence(status(code));
+    await assert.rejects(translate(enso, 'Hello', undefined, FAST), /API Key 无效或无权限，请检查插件设置/);
+    assert.equal(calls.length, 1);
+  }
+});
+
+test('429 按 Retry-After 重试，仍失败提示请求过于频繁', async () => {
+  const ok = sequence(status(429, { 'retry-after': '0' }), okBody('好'));
+  assert.deepEqual(await translate(ok.enso, 'Hello', undefined, FAST), { text: '好' });
+  assert.equal(ok.calls.length, 2);
+
+  const busy = sequence(status(429));
+  await assert.rejects(translate(busy.enso, 'Hello', undefined, FAST), { message: '请求过于频繁，请稍后再试' });
+  assert.equal(busy.calls.length, 3);
+
+  const long = sequence(status(429, { 'retry-after': '3600' }));
+  await assert.rejects(translate(long.enso, 'Hello', undefined, FAST), { message: '请求过于频繁，请稍后再试' });
+  assert.equal(long.calls.length, 1);
+});
+
+test('其他非 200 不重试，保留状态码并附说明', async () => {
+  const { enso, calls } = sequence(status(500));
+  await assert.rejects(translate(enso, 'Hello', undefined, FAST), /^Error: 翻译服务出错（HTTP 500）.+/);
+  assert.equal(calls.length, 1);
+});
+
+test('请求挂住时按超时上限抛明确错误，不无限等待', async () => {
+  const { enso, calls } = sequence(() => new Promise(() => {}));
+  await assert.rejects(translate(enso, 'Hello', undefined, FAST), /翻译服务响应超时/);
+  assert.equal(calls.length, 1);
+});
+
+test('总时长预算不够时不再重试', async () => {
+  const { enso, calls } = sequence(status(504));
+  await assert.rejects(
+    translate(enso, 'Hello', undefined, { timeoutMs: 50, delays: [200, 400], deadlineMs: 100 }),
+    { message: '翻译服务超时，已重试 0 次，请稍后再试' },
+  );
+  assert.equal(calls.length, 1);
+});
+
+test('响应无法解析或结果为空属于逻辑失败，不重试', async () => {
+  const bad = sequence({ status: 200, headers: {}, body: 'not json' });
+  await assert.rejects(translate(bad.enso, 'Hello', undefined, FAST), /翻译响应无法解析/);
+  assert.equal(bad.calls.length, 1);
+  const empty = sequence(okBody('<think>x</think>  '));
+  await assert.rejects(translate(empty.enso, 'Hello', undefined, FAST), /翻译结果为空/);
+  assert.equal(empty.calls.length, 1);
 });
 
 const DEFAULTS = {
