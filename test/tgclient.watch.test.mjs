@@ -17,7 +17,7 @@ const session = (() => {
   return `1${Buffer.concat([dc, alen, addr, port, key]).toString('base64')}`;
 })();
 
-async function withWatch(t, fn, { blankId = false, forum = false, inject } = {}) {
+async function withWatch(t, fn, { blankId = false, forum = false, inject, host } = {}) {
   let dataDir;
   let timers = false;
   let failSelf = false;
@@ -63,6 +63,12 @@ async function withWatch(t, fn, { blankId = false, forum = false, inject } = {})
       if (req instanceof Api.messages.GetDialogFilters) return { filters: [] };
       return {};
     }
+    async getMessages(_entity, query = {}) {
+      const ids = query.ids;
+      const all = this.scripted ?? [];
+      if (!ids?.length) return all;
+      return all.filter((m) => ids.some((id) => String(m.id) === String(id)));
+    }
     addEventHandler(fn) { this.handlers.push(fn); }
     session = { save: () => session };
   }
@@ -76,10 +82,12 @@ async function withWatch(t, fn, { blankId = false, forum = false, inject } = {})
     tools: { register: (name, fn) => tools.set(name, fn) },
     session: {
       inject: async (input) => {
-        await inject?.(input);
+        const result = await inject?.(input);
         injected.push(input);
+        return result;
       },
     },
+    ...host,
   });
   await tools.get('tg_watch')({ debounceSec: 30, minIntervalSec: 60 }, { sessionId: 's1' });
   let n = 0;
@@ -111,6 +119,7 @@ async function withWatch(t, fn, { blankId = false, forum = false, inject } = {})
     tick,
     tools,
     dataDir,
+    client: () => clients.at(-1),
     failSelf() { failSelf = true; },
   });
 }
@@ -537,6 +546,232 @@ test('拆批中途后一组投递失败时，已成功的不重投，失败的�
     inject: async () => {
       calls += 1;
       if (calls === 2) throw Object.assign(new Error('inject down'), { code: 'SESSION_NOT_RUNNING' });
+    },
+  });
+});
+
+function memoryClaims({ owner = 's1', throwOnClaim = false, rows = [], listError = false, releaseError = false } = {}) {
+  const calls = [];
+  const renewed = [];
+  const released = [];
+  const listed = [];
+  const host = {
+    claims: {
+      async claim(input) {
+        calls.push(input);
+        if (throwOnClaim) throw new Error('claim down');
+        const ownerSessionId = typeof owner === 'function' ? owner(input) : owner;
+        return { acquired: ownerSessionId === input.sessionId, status: 'claimed', ownerSessionId };
+      },
+      async renew(key, sessionId) { renewed.push({ key, sessionId }); },
+      async list(filter) {
+        listed.push(filter);
+        if (listError) throw new Error('list down');
+        return rows;
+      },
+      async release(key, sessionId) {
+        released.push({ key, sessionId });
+        if (releaseError) throw new Error('release down');
+        return true;
+      },
+    },
+  };
+  return { host, calls, renewed, released, listed };
+}
+
+const fastWatch = (tools, sessionId) =>
+  tools.get('tg_watch')({ chat: '100', debounceSec: 1, minIntervalSec: 0 }, { sessionId });
+
+test('旧宿主两个会话都收到，inject 不带 claimKey', async (t) => {
+  await withWatch(t, async ({ injected, emit, tick, tools }) => {
+    await fastWatch(tools, 's1');
+    await fastWatch(tools, 's2');
+    await emit({ message: '两边都要' });
+    await tick(1_000);
+    assert.equal(injected.length, 2);
+    assert.deepEqual(injected.map((x) => x.sessionId).sort(), ['s1', 's2']);
+    for (const input of injected) {
+      assert.equal('claimKey' in input, false);
+      assert.equal('claimLabel' in input, false);
+      assert.equal(input.sender.userId, '7');
+    }
+  });
+});
+
+test('有认领时只投给 owner，并带上 claimKey 与 sender', async (t) => {
+  const bag = memoryClaims({ owner: 's2' });
+  await withWatch(t, async ({ injected, emit, tick, tools }) => {
+    await fastWatch(tools, 's1');
+    await fastWatch(tools, 's2');
+    await emit({ message: '只给负责人' });
+    await tick(1_000);
+    assert.equal(bag.calls.length, 1);
+    assert.deepEqual(bag.calls[0].candidates.map((c) => c.sessionId).sort(), ['s1', 's2']);
+    assert.equal(bag.calls[0].key, 'tg:100:1');
+    assert.equal(bag.calls[0].label, '群 #1');
+    assert.equal(injected.length, 1);
+    assert.equal(injected[0].sessionId, 's2');
+    assert.equal(injected[0].claimKey, 'tg:100:1');
+    assert.equal(injected[0].claimLabel, '群 #1');
+    assert.deepEqual(injected[0].sender, { channel: 'telegram', chatId: '100', userId: '7', displayName: 'Bob' });
+    await tick(120_000);
+    assert.equal(injected.length, 1);
+  }, { host: bag.host });
+});
+
+test('只有一个监听会话时照常收到并带 claimKey', async (t) => {
+  const bag = memoryClaims({ owner: 's1' });
+  await withWatch(t, async ({ injected, emit, tick, tools }) => {
+    await fastWatch(tools, 's1');
+    await emit({ message: '秘书自己的' });
+    await tick(1_000);
+    assert.equal(bag.calls.length, 1);
+    assert.deepEqual(bag.calls[0].candidates.map((c) => c.sessionId), ['s1']);
+    assert.equal(injected.length, 1);
+    assert.equal(injected[0].sessionId, 's1');
+    assert.equal(injected[0].claimKey, 'tg:100:1');
+  }, { host: bag.host });
+});
+
+test('认领抛错时回落为全部收到且不带 claimKey', async (t) => {
+  const thrown = memoryClaims({ throwOnClaim: true });
+  await withWatch(t, async ({ injected, emit, tick, tools }) => {
+    await fastWatch(tools, 's1');
+    await fastWatch(tools, 's2');
+    await emit({ message: '认领挂了' });
+    await tick(1_000);
+    assert.equal(thrown.calls.length, 1);
+    assert.deepEqual(injected.map((x) => x.sessionId).sort(), ['s1', 's2']);
+    for (const input of injected) assert.equal('claimKey' in input, false);
+  }, { host: thrown.host });
+});
+
+test('认领 owner 不在候选里时回落为全部收到且不带 claimKey', async (t) => {
+  const stale = memoryClaims({ owner: 'ghost' });
+  await withWatch(t, async ({ injected, emit, tick, tools }) => {
+    await fastWatch(tools, 's1');
+    await fastWatch(tools, 's2');
+    await emit({ message: '别人持有' });
+    await tick(1_000);
+    assert.equal(stale.calls.length, 1);
+    assert.deepEqual(injected.map((x) => x.sessionId).sort(), ['s1', 's2']);
+    for (const input of injected) assert.equal('claimKey' in input, false);
+  }, { host: stale.host });
+});
+
+test('回复消息的 claimKey 用被回复的消息 id，同批其余键会 renew', async (t) => {
+  const bag = memoryClaims({ owner: 's1' });
+  await withWatch(t, async ({ injected, emit, tick, tools }) => {
+    await fastWatch(tools, 's1');
+    await emit({ id: 4, message: '跟进甲', replyTo: { replyToMsgId: 9 } });
+    await emit({ id: 5, message: '跟进乙', replyTo: { replyToMsgId: 11 } });
+    await tick(1_000);
+    assert.deepEqual(bag.calls.map((c) => c.key), ['tg:100:9', 'tg:100:11']);
+    assert.equal(injected.length, 1);
+    assert.equal(injected[0].claimKey, 'tg:100:9');
+    assert.equal(injected[0].claimLabel, '群 #9');
+    assert.deepEqual(bag.renewed, [{ key: 'tg:100:11', sessionId: 's1' }]);
+
+    await emit({ id: 8, message: '话题根', replyTo: { forumTopic: true, replyToMsgId: 55 } });
+    await tick(1_000);
+    assert.equal(injected.at(-1).claimKey, 'tg:100:8');
+  }, { host: bag.host });
+});
+
+test('替换监听和 tg_unwatch 释放 tg: 认领，释放失败也不影响停止', async (t) => {
+  const bag = memoryClaims({ rows: [{ key: 'tg:100:3' }, { key: 'tg:100:4' }] });
+  await withWatch(t, async ({ tools }) => {
+    await fastWatch(tools, 's1');
+    assert.deepEqual(bag.listed, [{ prefix: 'tg:', sessionId: 's1' }]);
+    assert.deepEqual(bag.released, [
+      { key: 'tg:100:3', sessionId: 's1' },
+      { key: 'tg:100:4', sessionId: 's1' },
+    ]);
+    bag.released.length = 0;
+    bag.listed.length = 0;
+    const stopped = await tools.get('tg_unwatch')({}, { sessionId: 's1' });
+    assert.equal(stopped.ok, true);
+    assert.deepEqual(bag.listed, [{ prefix: 'tg:', sessionId: 's1' }]);
+    assert.equal(bag.released.length, 2);
+  }, { host: bag.host });
+});
+
+test('认领列表失败时替换监听和 tg_unwatch 仍然成功', async (t) => {
+  const bad = memoryClaims({ rows: [{ key: 'tg:100:1' }], listError: true, releaseError: true });
+  await withWatch(t, async ({ tools }) => {
+    const replaced = await fastWatch(tools, 's1');
+    assert.equal(replaced.watching.chat.includes('100'), true);
+    const stopped = await tools.get('tg_unwatch')({}, { sessionId: 's1' });
+    assert.equal(stopped.ok, true);
+    assert.equal(bad.released.length, 0);
+  }, { host: bad.host });
+});
+
+test('tg_track_demand 的 senderId 来自消息，旧宿主返回 tracked:false', async (t) => {
+  await withWatch(t, async ({ tools }) => {
+    assert.deepEqual(
+      await tools.get('tg_track_demand')({ chat: '100', messageId: '15', senderId: '999' }, { sessionId: 's1' }),
+      { tracked: false, reason: '宿主不支持需求线程' },
+    );
+  });
+});
+
+test('tg_track_demand 用消息里的 senderId 登记需求线程', async (t) => {
+  const opened = [];
+  const text = '请把登录改成扫码';
+  await withWatch(t, async ({ tools, client }) => {
+    client().scripted = [{
+      id: 15,
+      date: 1_700_000_000,
+      out: false,
+      chatId: 100,
+      senderId: 7,
+      message: text,
+      sender: new Api.User({ id: 7, firstName: 'Bob' }),
+      getChat: async () => new Api.Chat({ id: 100, title: '群' }),
+      replyTo: { forumTopic: true, replyToTopId: 55, replyToMsgId: 90 },
+    }, {
+      id: 16,
+      date: 1_700_000_000,
+      out: false,
+      chatId: 100,
+      senderId: 7,
+      message: '长'.repeat(600),
+      sender: new Api.User({ id: 7, firstName: 'Bob' }),
+      getChat: async () => new Api.Chat({ id: 100, title: '群' }),
+    }];
+    const tracked = await tools.get('tg_track_demand')(
+      { chat: '100', messageId: '15', senderId: '999', senderName: 'Mallory' },
+      { sessionId: 's1' },
+    );
+    assert.deepEqual(tracked, { tracked: true, threadId: 'th1', status: 'open', requesterIsOwner: false });
+    assert.equal(opened[0].sessionId, 's1');
+    assert.deepEqual(opened[0].source, {
+      channel: 'telegram',
+      chatId: '100',
+      messageId: '15',
+      topicId: '55',
+      senderId: '7',
+      senderName: 'Bob',
+      summary: text,
+    });
+    await tools.get('tg_track_demand')({ chat: '100', messageId: '16', sessionId: 's9' }, { sessionId: 's1' });
+    assert.equal(opened[1].sessionId, 's9');
+    assert.equal(opened[1].source.summary, '长'.repeat(500));
+    assert.equal(opened[1].source.senderId, '7');
+    assert.equal('topicId' in opened[1].source, false);
+    await assert.rejects(
+      () => tools.get('tg_track_demand')({ chat: '100', messageId: '99' }, { sessionId: 's1' }),
+      /消息不存在/,
+    );
+  }, {
+    host: {
+      threads: {
+        open: async (input) => {
+          opened.push(input);
+          return { id: 'th1', status: 'open', requesterIsOwner: false };
+        },
+      },
     },
   });
 });

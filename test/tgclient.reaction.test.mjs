@@ -62,11 +62,12 @@ function incomingMessage(id, chatId, text, out = false) {
   return m;
 }
 
-async function setup({ reactError, status = 'idle' } = {}) {
+async function setup({ reactError, status = 'idle', injectResult } = {}) {
   const dataDir = await mkdtemp(join(tmpdir(), 'tgreact-'));
   const clk = clock();
   const order = [];
   const reacts = [];
+  const typings = [];
   const injected = [];
   const handlers = [];
   const listeners = [];
@@ -99,6 +100,10 @@ async function setup({ reactError, status = 'idle' } = {}) {
         if (err) throw err;
         return { updates: [] };
       }
+      if (req.className === 'messages.SetTyping') {
+        typings.push({ chat: peerId(req.peer) });
+        return true;
+      }
       if (req.className === 'messages.GetDialogFilters') return { filters: [] };
       return true;
     },
@@ -110,7 +115,7 @@ async function setup({ reactError, status = 'idle' } = {}) {
     renderer: { handle: () => {} },
     tools: { register: (name, fn) => tools.set(name, fn) },
     session: {
-      inject: async (input) => { order.push('inject'); injected.push(input); },
+      inject: async (input) => { order.push('inject'); injected.push(input); return injectResult; },
       onTurnEnd: (fn) => { listeners.push(fn); return () => {}; },
       status: async (sessionId) => ({ sessionId, state: typeof status === 'function' ? status() : status }),
     },
@@ -131,7 +136,7 @@ async function setup({ reactError, status = 'idle' } = {}) {
     listeners[0]({ sessionId });
     await tick();
   };
-  return { ...clk, order, reacts, injected, tools, dataDir, watch, push, deliver, turnEnd, holdSend };
+  return { ...clk, order, reacts, typings, injected, tools, dataDir, watch, push, deliver, turnEnd, holdSend };
 }
 
 async function run(opts, fn) {
@@ -145,12 +150,12 @@ async function run(opts, fn) {
 }
 
 describe('tg_watch 处理状态表情', { concurrency: false }, () => {
-  test('投递前给原消息点 ⚡，回合结束换成 ✅', () =>
+  test('投递成功后给原消息点 ⚡，回合结束换成 ✅', () =>
     run({}, async (t) => {
       const r = await t.watch({ chat: '42' });
       assert.equal(r.watching.reactions, true);
       await t.deliver(42, 5);
-      assert.deepEqual(t.order, ['react:⚡', 'inject']);
+      assert.deepEqual(t.order, ['inject', 'react:⚡']);
       assert.equal(t.reacts[0].chat, '42');
       assert.equal(t.reacts[0].msgId, 5);
       await t.advance(5000);
@@ -268,5 +273,19 @@ describe('tg_watch 处理状态表情', { concurrency: false }, () => {
       assert.equal(t.reacts.length, 0);
       release();
       await sent;
+    }));
+
+  test('宿主拒收（delivered:false）时不点表情、不发正在输入、不重试', () =>
+    run({ injectResult: { delivered: false, ownerSessionId: 's1', status: 'held-by-other' } }, async (t) => {
+      await t.watch({ chat: '42' });
+      await t.deliver(42, 5);
+      assert.equal(t.injected.length, 1);
+      assert.equal(t.reacts.length, 0);
+      assert.equal(t.typings.length, 0);
+      assert.deepEqual(t.order, ['inject']);
+      await t.advance(300_000);
+      assert.equal(t.injected.length, 1);
+      assert.equal(t.reacts.length, 0);
+      assert.equal(t.typings.length, 0);
     }));
 });

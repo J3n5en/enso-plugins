@@ -86,7 +86,14 @@ test('未登录时停在登录页，校验参数，轮询立即返回状态', as
     await assert.rejects(handlers.get('open')({ url: 'file:///etc/passwd' }));
     const manifest = JSON.parse(await readFile(new URL('../packages/enso.tgclient/enso-plugin.json', import.meta.url), 'utf8'));
     assert.deepEqual([...tools.keys()].sort(), manifest.contributes.agentTools.map((t) => t.name).sort());
-    for (const [name, fn] of tools) if (name !== 'tg_unwatch') await assert.rejects(fn({ chat: 'me', query: 'x', text: 'x' }), /请先登录/);
+    for (const [name, fn] of tools) {
+      if (name === 'tg_unwatch') continue;
+      if (name === 'tg_track_demand') {
+        assert.deepEqual(await fn({ chat: 'me', messageId: '1' }, { sessionId: 's1' }), { tracked: false, reason: '宿主不支持需求线程' });
+        continue;
+      }
+      await assert.rejects(fn({ chat: 'me', query: 'x', text: 'x' }), /请先登录/);
+    }
     assert.deepEqual(await tools.get('tg_unwatch')({}, { sessionId: 's1' }), { ok: true, watching: null });
   } finally {
     await deactivate();
