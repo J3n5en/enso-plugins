@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-22T10:44:24.622Z",
-  "sequence": 126,
+  "generatedAt": "2026-11-23T04:44:07.982Z",
+  "sequence": 127,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -1079,7 +1079,7 @@
     {
       "id": "enso.github",
       "name": "GitHub",
-      "description": "在侧栏查看、回复、关闭和重开当前项目的 GitHub issue 与 PR，也可查看 Actions 运行、失败原因与日志，并重跑或取消。会话里的 agent 也能调用。支持设备码登录，已登录的 gh CLI 可直接复用。",
+      "description": "在侧栏查看、回复、关闭和重开当前项目的 GitHub issue 与 PR，也可查看 Actions 运行、失败原因与日志，并重跑或取消。会话里的 agent 也能调用，还能监听仓库的 PR、issue、@提及与 CI 失败，有事件才投递进会话。支持设备码登录，已登录的 gh CLI 可直接复用。",
       "tier": "official",
       "tags": [
         "github",
@@ -1088,11 +1088,11 @@
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.github.svg",
       "category": "integrations",
       "readme": {
-        "path": "packages/enso.github/0.2.1.readme.md",
-        "sha256": "d1e8663fd1b7af0247f10d25aefefa90f2b50bc776fdecd261182e10166e6300",
-        "size": 2735
+        "path": "packages/enso.github/0.3.0.readme.md",
+        "sha256": "51c9bb18aeddb2f400938d72b93cb48bf3f7cc09dfedaa74e5b0ea568c05cbc5",
+        "size": 7078
       },
-      "latest": "0.2.1",
+      "latest": "0.3.0",
       "versions": [
         {
           "version": "0.1.0",
@@ -1157,6 +1157,25 @@
           "sha256": "ca3e413104453b8adcd4b4833fc9098171defeb71785676a9b1e5ecaf74c1b1d",
           "size": 72134,
           "publishedAt": "2026-11-12T02:14:49.675Z"
+        },
+        {
+          "version": "0.3.0",
+          "engines": {
+            "enso": ">=0.2.14"
+          },
+          "permissions": [
+            "agent.tool",
+            "net.fetch",
+            "ui.view",
+            "ui.openExternal",
+            "agent.inject",
+            "process.background",
+            "ui.notify"
+          ],
+          "path": "packages/enso.github/0.3.0.zip",
+          "sha256": "a2e5c0f57bcd615efe9ddf71a2aaf04848a60933ee296dada70e05a3cec5706b",
+          "size": 113491,
+          "publishedAt": "2026-11-23T04:44:07.982Z"
         }
       ]
     },
