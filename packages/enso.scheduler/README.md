@@ -41,5 +41,6 @@
 | `ui.view` | 打开侧栏页面 |
 | `process.background` | 后台定时检查任务 |
 | `agent.inject` | 到点向会话发送提示词 |
+| `agent.injectTrusted` | 仅用于 `action=prompt` 的定时任务提示词。到点向普通会话发送你设定的提示词时，宿主不再把它标为外部不可信数据，模型会直接按任务执行。秘书会话仍按外部数据处理。升级时宿主会提示确认此权限。 |
 | `ui.notify` | 弹出系统通知 |
 | `agent.tool` | 提供给 Agent 的 `cron_create` / `cron_list` / `cron_delete` |
