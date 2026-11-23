@@ -43,9 +43,9 @@
           excludeNumbers: '排除编号',
           branches: '分支',
           drafts: '包含草稿',
-          settle: '静默',
-          debounce: '合并',
-          gap: '间隔',
+          settle: '就绪静默',
+          debounce: '攒批',
+          gap: '最小间隔',
           since: '开始',
           pending: '待投递',
           waiting: '等待静默的 PR',
@@ -55,7 +55,7 @@
           next: '下次轮询',
           failures: '连续失败',
           subs: '订阅',
-          sec: '秒',
+          sec: ' 秒',
           justNow: '刚刚',
           rel: (n, future, unit) => (future ? `${n} ${unit}后` : `${n} ${unit}前`),
           units: ['分钟', '小时', '天'],
@@ -169,7 +169,7 @@
           <div class="m">${esc(L.settle)} ${w.settleSec}${esc(L.sec)} · ${esc(L.debounce)} ${w.debounceSec}${esc(L.sec)} · ${esc(L.gap)} ${w.minIntervalSec}${esc(L.sec)} · ${esc(L.since)} ${esc(when(w.since) || local(w.since))}</div>
           ${noteOf(w.note)}
           <div class="m">${esc(stats)}</div>
-          ${w.deliveryError ? `<div class="err">${esc(w.deliveryError)}</div>` : ''}
+          ${w.deliveryError && !w.denied ? `<div class="err">${esc(w.deliveryError)}</div>` : ''}
         </div>`;
       }
       function repoCard(repos) {
@@ -178,10 +178,10 @@
         const rows = names.map((name) => {
           const r = repos[name];
           const fail = (r.failures ?? 0) > 0;
-          return `<div class="row"><b class="ui-mono ellipsis">${esc(name)}</b>
-            <span class="m grow">${esc(L.polled)} ${esc(when(r.lastPollAt) || '—')} · ${esc(L.next)} ${esc(when(r.nextPollAt) || local(r.nextPollAt) || '—')}</span>
+          return `<div class="row"><b class="ui-mono ellipsis grow">${esc(name)}</b>
             <span class="${fail ? 'err' : 'm'}">${esc(L.failures)} ${r.failures ?? 0}</span>
             <span class="m">${esc(L.subs)} ${r.watchers ?? 0}</span></div>
+            <div class="m">${esc(L.polled)} ${esc(when(r.lastPollAt) || '—')} · ${esc(L.next)} ${esc(when(r.nextPollAt) || local(r.nextPollAt) || '—')}</div>
             ${r.error ? `<div class="err">${esc(r.error)}</div>` : ''}`;
         }).join('');
         return `<div class="ui-card card"><h2>${esc(L.repos)}</h2>${rows}</div>`;
