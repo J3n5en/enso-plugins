@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-23T04:44:07.982Z",
-  "sequence": 127,
+  "generatedAt": "2026-11-23T05:48:18.673Z",
+  "sequence": 128,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -1079,7 +1079,7 @@
     {
       "id": "enso.github",
       "name": "GitHub",
-      "description": "在侧栏查看、回复、关闭和重开当前项目的 GitHub issue 与 PR，也可查看 Actions 运行、失败原因与日志，并重跑或取消。会话里的 agent 也能调用，还能监听仓库的 PR、issue、@提及与 CI 失败，有事件才投递进会话。支持设备码登录，已登录的 gh CLI 可直接复用。",
+      "description": "在侧栏查看、回复、关闭和重开当前项目的 GitHub issue 与 PR，也可查看 Actions 运行、失败原因与日志，并重跑或取消。会话里的 agent 也能调用，还能监听仓库的 PR、issue、@提及与 CI 失败，有事件才投递进会话。支持设备码登录，已登录的 gh CLI 可直接复用。侧栏可查看和停止所有会话的监听。",
       "tier": "official",
       "tags": [
         "github",
@@ -1088,11 +1088,11 @@
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.github.svg",
       "category": "integrations",
       "readme": {
-        "path": "packages/enso.github/0.3.0.readme.md",
-        "sha256": "51c9bb18aeddb2f400938d72b93cb48bf3f7cc09dfedaa74e5b0ea568c05cbc5",
-        "size": 7078
+        "path": "packages/enso.github/0.4.0.readme.md",
+        "sha256": "fca147272060aa802f56e13d36a47893092d3cb0a13130aeb293ad5b6a696d9c",
+        "size": 7741
       },
-      "latest": "0.3.0",
+      "latest": "0.4.0",
       "versions": [
         {
           "version": "0.1.0",
@@ -1176,6 +1176,27 @@
           "sha256": "a2e5c0f57bcd615efe9ddf71a2aaf04848a60933ee296dada70e05a3cec5706b",
           "size": 113491,
           "publishedAt": "2026-11-23T04:44:07.982Z"
+        },
+        {
+          "version": "0.4.0",
+          "engines": {
+            "enso": ">=0.2.14"
+          },
+          "permissions": [
+            "agent.tool",
+            "net.fetch",
+            "ui.view",
+            "ui.openExternal",
+            "agent.inject",
+            "session.readAll",
+            "session.focus",
+            "process.background",
+            "ui.notify"
+          ],
+          "path": "packages/enso.github/0.4.0.zip",
+          "sha256": "00edc0a3fba3e5d28c6700c7ae5111ec6e62bac1054bd014c688ba415bdc0c72",
+          "size": 130357,
+          "publishedAt": "2026-11-23T05:48:18.673Z"
         }
       ]
     },
