@@ -288,3 +288,56 @@ test('会话没运行时消息排队，会话有动静或重试时补投并回�
   await t.handlers.events.agent_end({ text: '处理完了' }, { sessionId: 's1', agent: null });
   assert.equal(t.of('editMessageText').at(-1).body.text, '处理完了');
 });
+
+const assertSender = (sender, expected) => {
+  assert.deepEqual(sender, expected);
+  for (const key of ['owner', 'isOwner', 'role', 'trusted']) assert.equal(Object.hasOwn(sender, key), false);
+};
+
+test('正常消息、插话、图片、群聊和排队重试都把 sender 传给 inject', async () => {
+  const t = await setup();
+  await t.pair();
+  const privateSender = { channel: 'telegram', chatId: '42', userId: '7', displayName: '@al' };
+
+  t.message('普通');
+  await runPoll(t);
+  assertSender(t.injected.at(-1).sender, privateSender);
+
+  t.message('/steer 插一句');
+  await runPoll(t);
+  assert.equal(t.injected.at(-1).deliverAs, 'steer');
+  assertSender(t.injected.at(-1).sender, privateSender);
+
+  t.message(undefined, { photo: [{ file_id: 'F2', file_size: 100 }], caption: '图' });
+  await runPoll(t);
+  assert.deepEqual(t.injected.at(-1).images, [{ data: 'iVBORw0K', mimeType: 'image/jpeg' }]);
+  assertSender(t.injected.at(-1).sender, privateSender);
+
+  const paired = await t.handlers.renderer.pair({}, { sessionId: 's1' });
+  const chat = { id: -100, type: 'supergroup', title: 'G' };
+  t.message(`/start@enso_bot ${paired.pairing.code}`, { chat });
+  t.message('@enso_bot 群里', { chat });
+  await runPoll(t);
+  assert.match(t.injected.at(-1).text, /群里$/);
+  assertSender(t.injected.at(-1).sender, {
+    channel: 'telegram',
+    chatId: '-100',
+    userId: '7',
+    displayName: '@al',
+  });
+
+  const q = await setup();
+  await q.pair();
+  const realInject = q.enso.session.inject;
+  q.enso.session.inject = async () => {
+    throw Object.assign(new Error('会话不在运行'), { code: 'INJECT_FAILED' });
+  };
+  q.message('排队');
+  await runPoll(q);
+  assert.equal(q.injected.length, 0);
+  q.enso.session.inject = realInject;
+  await q.flush();
+  assert.equal(q.injected.at(-1).deliverAs, 'followUp');
+  assert.match(q.injected.at(-1).text, /排队$/);
+  assertSender(q.injected.at(-1).sender, privateSender);
+});

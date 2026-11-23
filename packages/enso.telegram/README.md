@@ -2,7 +2,9 @@
 
 用 Telegram Bot 远程使用 EnsoCode 会话。配对后在 Telegram 发消息就进入会话，执行进度原位更新，最终回复以富文本发回。
 
-需要 EnsoCode 0.2.14 及以上。
+需要 EnsoCode 0.3.14 及以上。
+
+投递到会话的每条消息都带 `sender`。`channel` 是 `telegram`。有值时还带 `chatId`、`userId` 和 `displayName`。宿主用这些字段核对联系人绑定，判断 owner，并区分外部投递。群匿名管理员不带 `userId`。
 
 ## 准备
 
