@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "id": "enso.github",
   "name": "GitHub",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "icon": "icon.svg",
   "description": "在侧栏查看、回复、关闭和重开当前项目的 GitHub issue 与 PR，也可查看 Actions 运行、失败原因与日志，并重跑或取消。会话里的 agent 也能调用，还能监听仓库的 PR、issue、@提及与 CI 失败，有事件才投递进会话。支持设备码登录，已登录的 gh CLI 可直接复用。侧栏的「监听」页可查看和停止所有会话的监听。",
   "engines": {
-    "enso": ">=0.2.14"
+    "enso": ">=0.3.14"
   },
   "main": "main.mjs",
   "permissions": ["agent.tool", "net.fetch", "ui.view", "ui.openExternal", "agent.inject", "session.readAll", "session.focus", "process.background", "ui.notify"],

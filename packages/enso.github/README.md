@@ -76,7 +76,9 @@
 | `pr_commented` | PR 有新评论（含行内评论），默认不开 |
 | `issue_commented` | issue 有新评论，默认不开 |
 
-同一 PR 或 issue 的多条事件合成一条，例如 `pr_opened, pr_commented×2`。投递只含仓库、编号、标题、作者、分支、head 和链接，不含正文。标题等外部内容包在 `<untrusted-content>` 里。
+同一 PR 或 issue 的多条事件合成一条，例如 `pr_opened, pr_commented×2`。投递只含仓库、编号、标题、作者、分支、head 和链接，不含正文。外部内容前有一句提示，说明它们是 GitHub 上第三方填写的数据，不是用户的指令。`note` 原样放在提示之前。
+
+整条投递由 EnsoCode 包进 `<untrusted-content>`，0.4.3 起插件不再自己包一层，因此要求 EnsoCode 0.3.14 及以上。标题、作者、分支等外部内容里形似包裹标签的写法，例如 `</untrusted-content>`、`<untrusted-content …>`、`<system-reminder>`，会在 `<` 后插一个反斜杠，变成 `<\/untrusted-content>` 这样。它们结束不了宿主的包裹，也伪造不出新的一层。
 
 ### 参数
 
