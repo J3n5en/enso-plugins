@@ -51,15 +51,20 @@
       .md summary { cursor: pointer; }
       textarea.ui-input { height: auto; min-height: 72px; padding: 6px 8px; resize: vertical; font: inherit; }
       .actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
-      .head { position: relative; }
       .ui-tooltip { white-space: normal; max-width: min(320px, calc(100vw - 8px)); }
-      .pop { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 10; padding: 10px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 6px 24px rgb(0 0 0 / 0.18); max-height: 60vh; overflow: auto; }
-      .pop .w { display: flex; flex-direction: column; gap: 2px; border-top: 1px solid var(--border); padding-top: 6px; }
+      #watch { display: flex; flex-direction: column; gap: 8px; }
+      #watch[hidden], #app[hidden] { display: none; }
+      #watch .card { padding: 10px; gap: 6px; }
+      #watch .row { flex-wrap: wrap; }
+      #watch .name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      #watch .bad { border-color: var(--destructive); }
     </style>
   </head>
   <body>
     <div id="app"><div class="ui-card card"><div class="ui-skeleton" style="height: 14px; width: 60%"></div></div></div>
+    <div id="watch" hidden></div>
     <script src="enso-ui.js"></script>
+    <script src="watch-page.js"></script>
     <script>
       const app = document.getElementById('app');
       const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -96,11 +101,6 @@
         return s % 60 ? `${m} 分 ${s % 60} 秒` : `${m} 分`;
       };
       const SOURCES = { device: '设备码登录', config: 'PAT', env: '环境变量', gh: 'gh CLI' };
-      const EVENT_LABEL = {
-        pr_opened: '新 PR', pr_ready: 'PR 稳定可处理', pr_merged_closed: '合并/关闭', issue_opened: '新 issue',
-        mention: '提及', ci_failed: 'CI 失败', pr_commented: 'PR 评论', issue_commented: 'issue 评论',
-      };
-      const PANEL_WHERE = '右侧栏标签栏的「+ 新建标签页」里选「GitHub 监听」';
       // body_html 已经由 GitHub 过滤过，这里再去掉脚本类元素和事件属性兜底
       const md = (html, raw) => {
         if (!html) return raw ? `<div class="body">${esc(raw)}</div>` : '<span class="m">没有描述</span>';
@@ -111,11 +111,26 @@
         });
         return `<div class="md">${doc.body.innerHTML}</div>`;
       };
-      const ui = { auth: null, repo: '', kind: 'issue', state: 'open', items: null, detail: null, logs: {}, error: '', busy: false, pop: null };
+      const ui = { auth: null, repo: '', kind: 'issue', state: 'open', items: null, detail: null, logs: {}, error: '', busy: false };
       let typedRepo = false;
       ensoUI.tooltip();
 
       const call = (m, a) => window.enso.call(m, a ?? {});
+      const watchRoot = document.getElementById('watch');
+      const watchPage = GithubWatch.mount({
+        root: watchRoot,
+        call,
+        onBack: () => {
+          watchRoot.hidden = true;
+          app.hidden = false;
+          refreshAuth();
+        },
+      });
+      function openWatch() {
+        app.hidden = true;
+        watchRoot.hidden = false;
+        watchPage.open();
+      }
       async function act(fn) {
         if (ui.busy) return;
         ui.busy = true;
@@ -137,34 +152,6 @@
         ui.items = r.items;
       });
       const loadDetail = (number) => act(async () => (ui.detail = await call('view', { ...repoArg(), number })));
-      // 面板打不开时退回浮层，就地列出订阅
-      async function openPanel() {
-        try {
-          await call('openWatchPanel');
-          ui.pop = null;
-        } catch (e) {
-          const why = e?.message ?? String(e);
-          ui.pop = await call('watches').then((r) => ({ why, watches: r.watches }), (e2) => ({ why: `${why}；${e2?.message ?? e2}`, watches: null }));
-        }
-        render();
-      }
-      function popView() {
-        const p = ui.pop;
-        if (!p) return '';
-        const rows = p.watches == null
-          ? '<div class="err">读取订阅失败</div>'
-          : p.watches.length
-            ? p.watches.map((w) => `<div class="w">
-                <div class="ellipsis"><b>${esc(w.session?.title || w.sessionId.slice(0, 8))}</b>${w.orphan ? ' <span class="ui-badge">会话已删除</span>' : ''}${w.session?.projectName ? ` <span class="m">${esc(w.session.projectName)}</span>` : ''}</div>
-                <div class="m">仓库 ${esc((w.repos ?? []).join(', '))}</div>
-                <div class="m">事件 ${esc((w.events ?? []).map((e) => EVENT_LABEL[e] ?? e).join('、'))}</div></div>`).join('')
-            : '<div class="m">当前没有订阅</div>';
-        return `<div class="ui-card pop ui-enter" data-pop>
-          <div class="row"><b class="grow">GitHub 监听</b><button class="ui-btn ui-btn--sm" data-pop-close>关闭</button></div>
-          <div class="err">没能打开监听面板：${esc(p.why)}</div>
-          <div class="m">也可以在${PANEL_WHERE}打开完整面板，查看轮询状态并停止订阅。</div>
-          ${rows}</div>`;
-      }
       const loadRun = (id) => act(async () => {
         if (ui.detail?.run?.id !== id) ui.logs = {};
         ui.detail = { kind: 'run', run: await call('run', { ...repoArg(), id }) };
@@ -274,10 +261,10 @@
         const account = a.source
           ? `<span class="ui-badge" data-tip="${SOURCES[a.source]}">${esc(a.login ?? SOURCES[a.source])}</span>${a.source === 'device' ? '<button class="ui-btn ui-btn--sm" data-logout>退出</button>' : ''}`
           : '';
-        const panelTip = `打开「GitHub 监听」面板：查看所有会话的仓库监听（${a.watches ? `当前 ${a.watches} 个` : '当前没有'}）、轮询状态，并可停止订阅`;
-        const head = `<div class="row head"><input class="ui-input grow ui-mono" id="repo" placeholder="owner/name" value="${esc(ui.repo)}" />
-          <button class="ui-btn ui-btn--sm" data-panel data-tip="${esc(panelTip)}" aria-label="${esc(panelTip)}">${a.watches ? `监听 ${a.watches}` : '监听'}</button>
-          <button class="ui-btn ui-btn--sm" data-reload ${ui.busy ? 'disabled' : ''}>${ui.busy ? '…' : '刷新'}</button>${account}${popView()}</div>`;
+        const watchTip = `查看所有会话的仓库监听（${a.watches ? `当前 ${a.watches} 个` : '当前没有'}）、轮询状态，并可停止订阅`;
+        const head = `<div class="row"><input class="ui-input grow ui-mono" id="repo" placeholder="owner/name" value="${esc(ui.repo)}" />
+          <button class="ui-btn ui-btn--sm" data-watch data-tip="${esc(watchTip)}" aria-label="${esc(watchTip)}">${a.watches ? `监听 ${a.watches}` : '监听'}</button>
+          <button class="ui-btn ui-btn--sm" data-reload ${ui.busy ? 'disabled' : ''}>${ui.busy ? '…' : '刷新'}</button>${account}</div>`;
         const body = !a.source ? authView(a) : ui.detail?.kind === 'run' ? runView(ui.detail.run) : ui.detail ? detailView(ui.detail) : listView();
         app.innerHTML = head + body + (ui.error ? `<div class="err">${esc(ui.error)}</div>` : '');
         const reply = document.getElementById('reply');
@@ -300,8 +287,7 @@
         if ('login' in d) act(async () => { await call('login'); await refreshAuth(); });
         else if ('cancel' in d) act(async () => { await call('cancelLogin'); await refreshAuth(); });
         else if ('logout' in d) act(async () => { await call('logout'); ui.items = null; ui.detail = null; ui.logs = {}; await refreshAuth(); });
-        else if ('panel' in d) openPanel();
-        else if ('popClose' in d) { ui.pop = null; render(); }
+        else if ('watch' in d) openWatch();
         else if (d.open) call('open', { url: d.open });
         else if ('reload' in d) ui.detail?.kind === 'run' ? loadRun(ui.detail.run.id) : ui.detail ? loadDetail(ui.detail.number) : loadList();
         else if ('back' in d) { ui.detail = null; ui.logs = {}; loadList(); }

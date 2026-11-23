@@ -4,7 +4,7 @@
   "name": "GitHub",
   "version": "0.4.2",
   "icon": "icon.svg",
-  "description": "在侧栏查看、回复、关闭和重开当前项目的 GitHub issue 与 PR，也可查看 Actions 运行、失败原因与日志，并重跑或取消。会话里的 agent 也能调用，还能监听仓库的 PR、issue、@提及与 CI 失败，有事件才投递进会话。支持设备码登录，已登录的 gh CLI 可直接复用。侧栏可查看和停止所有会话的监听。",
+  "description": "在侧栏查看、回复、关闭和重开当前项目的 GitHub issue 与 PR，也可查看 Actions 运行、失败原因与日志，并重跑或取消。会话里的 agent 也能调用，还能监听仓库的 PR、issue、@提及与 CI 失败，有事件才投递进会话。支持设备码登录，已登录的 gh CLI 可直接复用。侧栏的「监听」页可查看和停止所有会话的监听。",
   "engines": {
     "enso": ">=0.2.14"
   },
@@ -23,8 +23,7 @@
       }
     ],
     "views": [
-      { "id": "github", "title": "GitHub", "entry": "view.html" },
-      { "id": "watch", "title": "GitHub 监听", "entry": "watch.html", "scope": "global" }
+      { "id": "github", "title": "GitHub", "entry": "view.html" }
     ],
     "schedules": [{ "id": "watch", "intervalSeconds": 60, "timeoutMs": 120000 }],
     "methods": [
@@ -40,8 +39,7 @@
       { "name": "runAction", "timeoutMs": 30000 },
       { "name": "watches", "timeoutMs": 15000 },
       { "name": "stopWatch", "timeoutMs": 15000 },
-      { "name": "focusSession", "timeoutMs": 15000 },
-      { "name": "openWatchPanel", "timeoutMs": 15000 }
+      { "name": "focusSession", "timeoutMs": 15000 }
     ],
     "agentTools": [
       {

@@ -1,9 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { access, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import vm from 'node:vm';
 import { activate } from '../packages/enso.github/main.mjs';
 import { attachSessions, createWatcher, EVENTS } from '../packages/enso.github/watch.mjs';
 
@@ -212,7 +213,7 @@ test('watches 只读本地状态，stopWatch 卸下订阅和独占仓库', async
   gh.repo('o/b');
   gh.repo('o/c');
   const fetches = [];
-  const gate = { error: null, focused: [], opened: [], viewError: null };
+  const gate = { error: null, focused: [] };
   const listed = {
     current: 's1',
     sessions: [{ id: 's1', title: '甲', projectId: 'p1', projectName: 'proj' }],
@@ -231,17 +232,7 @@ test('watches 只读本地状态，stopWatch 卸下订阅和独占仓库', async
         return { status: res.status, headers: res.headers, body: res.data == null ? '' : JSON.stringify(res.data) };
       },
     },
-    ui: {
-      openExternal: async () => {},
-      notify: async () => {},
-      view: {
-        open: async (id) => {
-          if (gate.viewError) throw gate.viewError;
-          gate.opened.push(id);
-          return null;
-        },
-      },
-    },
+    ui: { openExternal: async () => {}, notify: async () => {} },
     session: {
       inject: async () => {},
       list: async () => {
@@ -278,12 +269,7 @@ test('watches 只读本地状态，stopWatch 卸下订阅和独占仓库', async
   await handlers.focusSession({ sessionId: 's1' });
   assert.deepEqual(gate.focused, ['s1']);
 
-  const before = fetches.length;
-  await handlers.openWatchPanel();
-  assert.deepEqual(gate.opened, ['watch']);
-  assert.equal(fetches.length, before);
-  gate.viewError = Object.assign(new Error('当前环境不能操作会话'), { code: 'UNSUPPORTED' });
-  await assert.rejects(() => handlers.openWatchPanel(), /不能操作会话/);
+  assert.equal(handlers.openWatchPanel, undefined);
 
   const stopped = await handlers.stopWatch({ sessionId: 's2' });
   assert.equal(stopped.ok, true);
@@ -309,26 +295,69 @@ test('watches 只读本地状态，stopWatch 卸下订阅和独占仓库', async
   assert.equal(blind.watches[0].session, null);
 });
 
-test('清单声明全局监听页、新方法和会话权限', async () => {
-  const manifest = JSON.parse(await readFile(new URL('../packages/enso.github/enso-plugin.json', import.meta.url), 'utf8'));
-  const view = manifest.contributes.views.find((v) => v.id === 'watch');
-  assert.equal(view.scope, 'global');
-  assert.equal(view.entry, 'watch.html');
-  assert.equal(view.title, 'GitHub 监听');
+test('清单只留一个 GitHub 侧栏，监听做成侧栏内子页面', async () => {
+  const pkg = (f) => new URL(`../packages/enso.github/${f}`, import.meta.url);
+  const manifest = JSON.parse(await readFile(pkg('enso-plugin.json'), 'utf8'));
+  assert.deepEqual(manifest.contributes.views, [{ id: 'github', title: 'GitHub', entry: 'view.html' }]);
   const names = manifest.contributes.methods.map((m) => m.name);
-  assert.ok(names.includes('watches'));
-  assert.ok(names.includes('stopWatch'));
-  assert.ok(names.includes('focusSession'));
-  assert.ok(names.includes('openWatchPanel'));
-  assert.ok(manifest.permissions.includes('ui.view'));
-  assert.ok(manifest.permissions.includes('session.readAll'));
-  assert.ok(manifest.permissions.includes('session.focus'));
+  for (const m of ['watches', 'stopWatch', 'focusSession']) assert.ok(names.includes(m), m);
+  assert.ok(!names.includes('openWatchPanel'));
+  for (const p of ['ui.view', 'session.readAll', 'session.focus']) assert.ok(manifest.permissions.includes(p), p);
+  await assert.rejects(() => access(pkg('watch.html')));
+  await access(pkg('watch-page.js'));
+  const main = await readFile(pkg('main.mjs'), 'utf8');
+  assert.doesNotMatch(main, /ui\.view\.open|openWatchPanel/);
+});
+
+const loadWatchPage = async (language = 'zh-CN') => {
+  const ctx = { navigator: { language } };
+  vm.runInNewContext(await readFile(new URL('../packages/enso.github/watch-page.js', import.meta.url), 'utf8'), ctx);
+  return ctx.GithubWatch;
+};
+const NOW = Date.parse('2025-03-01T00:00:00Z');
+const sample = () => ({
+  rate: { remaining: 4731, limit: 5000, resetAt: iso(NOW + 30 * MIN) },
+  repos: {
+    'o/a': { failures: 3, watchers: 1, lastPollAt: iso(NOW - 2 * MIN), nextPollAt: iso(NOW + 3 * MIN), error: 'HTTP 502' },
+    'o/b': { failures: 0, watchers: 2, lastPollAt: iso(NOW - MIN), nextPollAt: iso(NOW + MIN) },
+  },
+  watches: [
+    {
+      sessionId: 's1', session: { title: '甲', projectName: 'proj', archived: false }, orphan: false, canFocus: true,
+      repos: ['o/a', 'o/b'], events: ['pr_opened', 'ci_failed'], settleSec: 900, debounceSec: 3, minIntervalSec: 0,
+      since: iso(NOW - 60 * MIN), note: 'n'.repeat(100), pending: 2, waitingReady: 1, delivered: 5, denied: true, deliveryError: 'hidden-when-denied',
+    },
+    {
+      sessionId: '9f3c2a71-dead', session: null, orphan: true, canFocus: false, repos: ['o/b'], events: ['mention'],
+      settleSec: 900, debounceSec: 3, minIntervalSec: 0, since: iso(NOW), deliveryError: 'boom <x>',
+    },
+  ],
+});
+
+test('监听子页面：保留订阅卡片、仓库轮询、投递红框、孤儿标记与 rate limit', async () => {
+  const GW = await loadWatchPage();
+  const html = GW.render(sample(), { lang: 'zh', now: NOW });
+  assert.match(html, /<button class="ui-btn ui-btn--sm" data-back>← 返回<\/button>/);
+  for (const part of [
+    '2 个监听', '剩余 4731/5000', 'data-denied', '跨会话投递没打开', 'card bad', 'data-focus="s1"', '>甲<',
+    '新 PR、CI 失败', '就绪静默 900 秒', '待投递 2', '等待静默的 PR 1', '已投递 5', `${'n'.repeat(80)}…`,
+    '会话已删除', 'data-stop="9f3c2a71-dead"', 'boom &lt;x&gt;', '连续失败 3', 'HTTP 502', '订阅 2', '上次轮询 2 分钟前', '下次轮询 3 分钟后',
+  ]) assert.ok(html.includes(part), part);
+  assert.ok(!html.includes('hidden-when-denied'));
+  assert.ok(!html.includes('确认停止'));
+  assert.ok(GW.render(sample(), { lang: 'zh', now: NOW, confirming: new Map([['s1', 1]]) }).includes('确认停止'));
+  const en = GW.render(sample(), { lang: 'en', now: NOW });
+  for (const part of ['← Back', '2 watches', 'Session deleted', 'New PR, CI failed', '2 minutes ago']) assert.ok(en.includes(part), part);
+  const loading = GW.render(null, { lang: 'zh' });
+  assert.ok(loading.includes('data-back') && loading.includes('ui-skeleton'));
+  assert.ok(GW.render(null, { lang: 'zh', error: 'down' }).includes('<div class="err">down</div>'));
+  assert.ok(GW.render({ watches: [], repos: {} }, { lang: 'zh' }).includes('还没有会话在监听'));
+  assert.equal((await loadWatchPage('en-US')).render(null).includes('← Back'), true);
 });
 
 test('监听页把事件原名翻成中英文说法', async () => {
-  const html = await readFile(new URL('../packages/enso.github/watch.html', import.meta.url), 'utf8');
-  const DICT = new Function(`return ${html.match(/const DICT = (\{[\s\S]*?\n {6}\});/)[1]}`)();
-  assert.deepEqual(DICT.zh.ev, {
+  const { DICT } = await loadWatchPage();
+  assert.deepEqual({ ...DICT.zh.ev }, {
     pr_opened: '新 PR',
     pr_ready: 'PR 稳定可处理',
     pr_merged_closed: '合并/关闭',
@@ -342,22 +371,73 @@ test('监听页把事件原名翻成中英文说法', async () => {
     assert.deepEqual(Object.keys(DICT[lang].ev).sort(), [...EVENTS].sort());
     for (const e of EVENTS) assert.ok(DICT[lang].ev[e] && !DICT[lang].ev[e].includes('_'), `${lang}.${e}`);
   }
-  assert.match(html, /\(w\.events \?\? \[\]\)\.map\(\(e\) => L\.ev\[e\] \?\? e\)/);
 });
 
-test('GitHub 侧栏的「监听 N」经主进程 ui.view.open 打开监听页，失败时退回浮层', async () => {
+test('监听子页面：打开才读、每 5 秒刷新、停止要点两次、返回时停掉计时器', async () => {
+  const GW = await loadWatchPage();
+  const root = { innerHTML: '', listeners: [], addEventListener(type, fn) { if (type === 'click') this.listeners.push(fn); } };
+  const click = (dataset) => root.listeners[0]({ target: { closest: () => ({ disabled: false, dataset }) } });
+  const timers = {
+    intervals: [], timeouts: [],
+    setInterval(fn, ms) { return this.intervals.push({ fn, ms, live: true }); },
+    clearInterval(id) { if (id) this.intervals[id - 1].live = false; },
+    setTimeout(fn, ms) { return this.timeouts.push({ fn, ms, live: true }); },
+    clearTimeout(id) { if (id) this.timeouts[id - 1].live = false; },
+  };
+  const calls = [];
+  const call = async (m, a) => (calls.push([m, a && { ...a }]), m === 'watches' ? sample() : { ok: true });
+  const flush = () => new Promise((r) => setImmediate(r));
+  let backs = 0;
+  const page = GW.mount({ root, call, onBack: () => backs++, lang: 'zh', timers });
+  await flush();
+  assert.deepEqual(calls, []);
+  page.open();
+  await flush();
+  assert.deepEqual(calls.map((c) => c[0]), ['watches']);
+  assert.equal(timers.intervals[0].ms, 5000);
+  assert.ok(root.innerHTML.includes('2 个监听'));
+  timers.intervals[0].fn();
+  await flush();
+  assert.equal(calls.filter((c) => c[0] === 'watches').length, 2);
+
+  click({ stop: '9f3c2a71-dead' });
+  assert.ok(root.innerHTML.includes('确认停止'));
+  assert.equal(timers.timeouts[0].ms, 3000);
+  timers.timeouts[0].fn();
+  assert.ok(!root.innerHTML.includes('确认停止'));
+  assert.ok(!calls.some((c) => c[0] === 'stopWatch'));
+  click({ stop: '9f3c2a71-dead' });
+  click({ stop: '9f3c2a71-dead' });
+  await flush();
+  assert.deepEqual(calls.filter((c) => c[0] === 'stopWatch'), [['stopWatch', { sessionId: '9f3c2a71-dead' }]]);
+  assert.equal(calls.at(-1)[0], 'watches');
+
+  click({ focus: 's1' });
+  await flush();
+  assert.deepEqual(calls.at(-1), ['focusSession', { sessionId: 's1' }]);
+
+  click({ stop: 's1' });
+  click({ back: '' });
+  assert.equal(backs, 1);
+  assert.equal(page.isOpen, false);
+  assert.equal(timers.intervals[0].live, false);
+  assert.equal(timers.timeouts.at(-1).live, false);
+  page.open();
+  assert.equal(timers.intervals.length, 2);
+  assert.ok(!root.innerHTML.includes('确认停止'));
+});
+
+test('GitHub 侧栏的「监听 N」在侧栏内切到监听子页面，不再开独立视图', async () => {
   const html = await readFile(new URL('../packages/enso.github/view.html', import.meta.url), 'utf8');
-  // 侧栏页面的 window.enso 没有 views.open，旧实现在这里静默什么都不做
-  assert.doesNotMatch(html, /enso\.views/);
-  assert.match(html, /else if \('panel' in d\) openPanel\(\);/);
-  const fn = html.match(/async function openPanel\(\) \{[\s\S]*?\n {6}\}/)[0];
-  assert.match(fn, /call\('openWatchPanel'\)/);
-  assert.match(fn, /catch \(e\)[\s\S]*call\('watches'\)/);
-  const btn = html.match(/<button[^>]*data-panel[^>]*>/)[0];
-  assert.match(btn, /data-tip="\$\{esc\(panelTip\)\}"/);
-  assert.match(html, /const panelTip = `打开「GitHub 监听」面板/);
-  const pop = html.match(/function popView\(\) \{[\s\S]*?\n {6}\}/)[0];
-  for (const part of ['w.session?.title', 'w.repos', 'EVENT_LABEL', 'PANEL_WHERE', '会话已删除', 'data-pop-close']) assert.ok(pop.includes(part), part);
-  const label = new Function(`return ${html.match(/const EVENT_LABEL = (\{[\s\S]*?\});/)[1]}`)();
-  assert.deepEqual(Object.keys(label).sort(), [...EVENTS].sort());
+  assert.match(html, /<script src="enso-ui\.js"><\/script>\s*<script src="watch-page\.js"><\/script>/);
+  assert.match(html, /<div id="watch" hidden><\/div>/);
+  for (const gone of ['enso.views', 'openWatchPanel', 'popView', 'data-panel', 'GitHub 监听']) assert.ok(!html.includes(gone), gone);
+  const btn = html.match(/<button[^>]*data-watch[^>]*>/)[0];
+  assert.match(btn, /data-tip="\$\{esc\(watchTip\)\}"/);
+  assert.match(html, /const watchTip = `查看所有会话的仓库监听/);
+  assert.match(html, /else if \('watch' in d\) openWatch\(\);/);
+  const open = html.match(/function openWatch\(\) \{[\s\S]*?\n {6}\}/)[0];
+  assert.match(open, /app\.hidden = true;\s*watchRoot\.hidden = false;\s*watchPage\.open\(\);/);
+  const mount = html.match(/GithubWatch\.mount\(\{[\s\S]*?\n {6}\}\);/)[0];
+  assert.match(mount, /onBack: \(\) => \{\s*watchRoot\.hidden = true;\s*app\.hidden = false;\s*refreshAuth\(\);/);
 });
