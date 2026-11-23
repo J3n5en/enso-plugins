@@ -115,10 +115,9 @@ git clone https://github.com/J3n5en/enso-hongguo.git
 ## 实现说明
 
 - 数据来自 [openhongguo](https://github.com/beilunyang/openhongguo)（Apache-2.0），以匿名设备身份访问。
-- 这里用的是 `vendor/openhongguo` 里自己编译的 wasm：npm 上的 0.4.0 还在请求已下线的
-  `/novel/player/multi_video_model/player/v1`。本地 wasm 带 V5 新路径
-  （`/novel/player/multi_video_model/v1/`）以及空响应时的 `video_tab` 回退，
-  上游发布新版后可以改回 npm 依赖。
+- 这里用的是 `vendor/openhongguo` 里自己编译的 wasm，基于上游 0.4.1：那一版把 x-medusa
+  的签名改成和真实设备一致，取播放地址不会再被服务端判成空响应；同时带着首页瀑布流字段
+  （`vid` / 封面 / 摘要 / 热度）的改动。上游合并那部分之后可以改回 npm 依赖。
 - 侧栏页面跑在沙盒 iframe 里，不能直接访问外网，也不能用 `http(s)` 地址播放媒体。所以视频由插件后台进程下载，在本机转成分段 MP4，再分块传给页面里的 MediaSource 播放。
 - 视频流本身是加密的（cenc-aes-ctr），`remux.mjs` 在本机用 Node 自带的 `crypto` 解密并重新封装，不依赖 ffmpeg。
 
