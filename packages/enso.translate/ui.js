@@ -444,6 +444,12 @@ function publish(key) {
   for (const fn of listeners.get(key) ?? []) fn(entry);
 }
 
+export function failureText(error) {
+  const message = typeof error?.message === 'string' ? error.message.trim() : '';
+  if (message.startsWith('插件调用超时')) return '翻译超时，请稍后再试';
+  return message || '翻译失败';
+}
+
 function load(key, text, target, dispatch) {
   if (cache.has(key)) return;
   cache.set(key, { status: 'pending' });
@@ -455,8 +461,8 @@ function load(key, text, target, dispatch) {
         if (!translated) throw new Error('翻译结果为空');
         cache.set(key, { status: 'done', text: translated });
       })
-      .catch(() => {
-        cache.set(key, { status: 'error' });
+      .catch((error) => {
+        cache.set(key, { status: 'error', message: failureText(error) });
       })
       .finally(() => publish(key)),
   );
@@ -483,13 +489,14 @@ const pendingStyle = {
 const retryStyle = {
   background: 'transparent',
   border: 'none',
-  padding: '4px 0 0 8px',
+  padding: 0,
   margin: 0,
-  color: 'var(--muted-foreground)',
+  color: 'inherit',
   cursor: 'pointer',
   font: 'inherit',
   textDecoration: 'underline',
 };
+const failureStyle = { color: 'var(--muted-foreground)', display: 'block', marginTop: 4, paddingLeft: 8 };
 const actionStyle = {
   background: 'transparent',
   border: 'none',
@@ -557,16 +564,21 @@ export function onLoad(enso) {
     }
     if (entry?.status === 'error') {
       return h(
-        'button',
-        {
-          type: 'button',
-          style: retryStyle,
-          onClick: () => {
-            cache.delete(key);
-            load(key, cacheText, target, enso.dispatch);
+        'div',
+        { style: failureStyle },
+        `${entry.message ?? '翻译失败'} · `,
+        h(
+          'button',
+          {
+            type: 'button',
+            style: retryStyle,
+            onClick: () => {
+              cache.delete(key);
+              load(key, cacheText, target, enso.dispatch);
+            },
           },
-        },
-        '重试',
+          '重试',
+        ),
       );
     }
     if (entry?.status === 'pending') return h('div', { style: pendingStyle }, '翻译中…');
