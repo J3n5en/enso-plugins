@@ -4,6 +4,7 @@ import { activate, normalizeSettings, translate } from '../packages/enso.transla
 import {
   createMessageVisibility,
   createQueue,
+  failureText,
   isUnchanged,
   leafPlan,
   prepareSource,
@@ -182,11 +183,11 @@ test('504 自动重试，第 2 次成功则整体成功，且不重复读配置'
   assert.equal(configReads(), 1);
 });
 
-test('502 / 503 / 504 重试两次仍失败，提示已重试', async () => {
-  for (const code of [502, 503, 504]) {
+test('500 / 502 / 503 / 504 重试两次仍失败，提示已重试并保留状态码', async () => {
+  for (const code of [500, 502, 503, 504]) {
     const { enso, calls } = sequence(status(code));
     await assert.rejects(translate(enso, 'Hello', undefined, FAST), {
-      message: '翻译服务超时，已重试 2 次，请稍后再试',
+      message: `翻译服务暂时不可用（HTTP ${code}），已重试 2 次，请稍后再试`,
     });
     assert.equal(calls.length, 3, String(code));
   }
@@ -198,10 +199,14 @@ test('400 不重试，立即失败并保留状态码', async () => {
   assert.equal(calls.length, 1);
 });
 
-test('401 / 403 不重试，提示 API Key 无效或无权限', async () => {
+test('401 / 403 不重试；插件没有 API Key 设置，不能让用户去查', async () => {
   for (const code of [401, 403]) {
     const { enso, calls } = sequence(status(code));
-    await assert.rejects(translate(enso, 'Hello', undefined, FAST), /API Key 无效或无权限，请检查插件设置/);
+    await assert.rejects(translate(enso, 'Hello', undefined, FAST), (error) => {
+      assert.match(error.message, new RegExp(`翻译服务拒绝访问（HTTP ${code}）`));
+      assert.doesNotMatch(error.message, /API Key|插件设置/);
+      return true;
+    });
     assert.equal(calls.length, 1);
   }
 });
@@ -221,9 +226,73 @@ test('429 按 Retry-After 重试，仍失败提示请求过于频繁', async () 
 });
 
 test('其他非 200 不重试，保留状态码并附说明', async () => {
-  const { enso, calls } = sequence(status(500));
-  await assert.rejects(translate(enso, 'Hello', undefined, FAST), /^Error: 翻译服务出错（HTTP 500）.+/);
+  const { enso, calls } = sequence(status(501));
+  await assert.rejects(translate(enso, 'Hello', undefined, FAST), /^Error: 翻译服务出错（HTTP 501）.+/);
   assert.equal(calls.length, 1);
+});
+
+const hostError = (code, message = 'fetch failed') => () => Promise.reject(Object.assign(new Error(message), { code }));
+
+test('网络错误（宿主 HOST_ERROR）自动重试，仍失败提示检查网络', async () => {
+  const ok = sequence(hostError('HOST_ERROR'), okBody('好'));
+  assert.deepEqual(await translate(ok.enso, 'Hello', undefined, FAST), { text: '好' });
+  assert.equal(ok.calls.length, 2);
+
+  const down = sequence(hostError('HOST_ERROR', 'net::ERR_CONNECTION_RESET'));
+  await assert.rejects(translate(down.enso, 'Hello', undefined, FAST), {
+    message: '网络连接失败，已重试 2 次，请检查网络后再试',
+  });
+  assert.equal(down.calls.length, 3);
+});
+
+test('宿主拒绝（权限、取消）不重试，原样抛出', async () => {
+  for (const code of ['PERMISSION_DENIED', 'ABORTED']) {
+    const { enso, calls } = sequence(hostError(code, code));
+    await assert.rejects(translate(enso, 'Hello', undefined, FAST), { code });
+    assert.equal(calls.length, 1, code);
+  }
+});
+
+test('取消后中止：退避期间取消不再发下一次请求', async () => {
+  const controller = new AbortController();
+  const { enso, calls } = sequence(() => {
+    setTimeout(() => controller.abort(), 5);
+    return status(504);
+  });
+  const started = Date.now();
+  await assert.rejects(
+    translate(enso, 'Hello', undefined, { timeoutMs: 1000, delays: [2000, 2000], deadlineMs: 10_000 }, controller.signal),
+    { code: 'ABORTED' },
+  );
+  assert.ok(Date.now() - started < 1000);
+  assert.equal(calls.length, 1);
+});
+
+test('取消后中止：请求挂住时立刻返回，已取消的不再发请求', async () => {
+  const controller = new AbortController();
+  const { enso, calls } = sequence(() => new Promise(() => {}));
+  const pending = translate(enso, 'Hello', undefined, { timeoutMs: 5000, delays: [1], deadlineMs: 10_000 }, controller.signal);
+  setTimeout(() => controller.abort(), 5);
+  const started = Date.now();
+  await assert.rejects(pending, { code: 'ABORTED' });
+  assert.ok(Date.now() - started < 1000);
+  assert.equal(calls.length, 1);
+
+  const again = sequence(okBody('不该到这'));
+  await assert.rejects(translate(again.enso, 'Hello', undefined, FAST, controller.signal), { code: 'ABORTED' });
+  assert.equal(again.calls.length, 0);
+});
+
+test('translate 方法把宿主调用的 signal 传下去', async () => {
+  const controller = new AbortController();
+  controller.abort();
+  let fetched = 0;
+  const { handlers } = fakeEnso(async () => {
+    fetched += 1;
+    return okBody('x');
+  });
+  await assert.rejects(handlers.translate({ text: 'Hello' }, { signal: controller.signal }), { code: 'ABORTED' });
+  assert.equal(fetched, 0);
 });
 
 test('请求挂住时按超时上限抛明确错误，不无限等待', async () => {
@@ -236,7 +305,7 @@ test('总时长预算不够时不再重试', async () => {
   const { enso, calls } = sequence(status(504));
   await assert.rejects(
     translate(enso, 'Hello', undefined, { timeoutMs: 50, delays: [200, 400], deadlineMs: 100 }),
-    { message: '翻译服务超时，已重试 0 次，请稍后再试' },
+    { message: '翻译服务暂时不可用（HTTP 504），请稍后再试' },
   );
   assert.equal(calls.length, 1);
 });
@@ -292,6 +361,13 @@ test('settings 返回规范化配置', async () => {
     targetLanguage: '韩文',
     model: 'Index-Translate-9B',
   });
+});
+
+test('失败时显示插件给出的原因，宿主超时换成人话', () => {
+  assert.equal(failureText(new Error('网络连接失败，已重试 2 次，请检查网络后再试')), '网络连接失败，已重试 2 次，请检查网络后再试');
+  assert.equal(failureText(new Error('插件调用超时（120000ms）')), '翻译超时，请稍后再试');
+  assert.equal(failureText(new Error('')), '翻译失败');
+  assert.equal(failureText(undefined), '翻译失败');
 });
 
 test('队列并发不超过上限', async () => {
