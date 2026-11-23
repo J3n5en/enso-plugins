@@ -407,6 +407,8 @@ export function activate(enso) {
       await writeFile(`${watchFile}.tmp`, JSON.stringify(state));
       await rename(`${watchFile}.tmp`, watchFile);
     },
+    claims: enso.claims,
+    threads: enso.threads,
   });
   enso.tools.register('github_watch', async (args, ctx) => {
     if (!ctx?.sessionId) throw new Error('只能在会话里调用');
@@ -416,6 +418,23 @@ export function activate(enso) {
   });
   enso.tools.register('github_unwatch', (_args, ctx) => watcher.unwatch(ctx?.sessionId));
   enso.tools.register('github_watch_status', (_args, ctx) => watcher.status(ctx?.sessionId));
+  enso.tools.register('github_link_pr', async (args, ctx) => {
+    if (typeof enso.threads?.bindPr !== 'function') return { bound: false, reason: '宿主不支持需求线程' };
+    if (!ctx?.sessionId) throw new Error('只能在会话里调用');
+    const repo = await repoOf(args, ctx);
+    const n = num(args?.number);
+    const p = await call('GET', `/repos/${repo}/pulls/${n}`);
+    const pr = {
+      repo,
+      number: n,
+      ...(p.html_url ? { url: String(p.html_url).slice(0, 500) } : {}),
+      ...(p.title ? { title: String(p.title).replace(/\s+/g, ' ').trim().slice(0, 300) } : {}),
+      ...(p.head?.sha ? { headSha: String(p.head.sha).slice(0, 64) } : {}),
+    };
+    const view = await enso.threads.bindPr({ sessionId: ctx.sessionId }, pr);
+    if (!view) return { bound: false, reason: '会话没有需求线程' };
+    return { bound: true, threadId: view.id, status: view.status };
+  });
   enso.schedules?.register('watch', () => watcher.tick());
 
   enso.renderer.handle('state', async (_args, ctx) => {

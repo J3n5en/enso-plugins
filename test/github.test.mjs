@@ -12,7 +12,7 @@ test('parseRemote 识别 github 远程地址', () => {
   assert.equal(parseRemote('https://gitlab.com/a/b.git'), null);
 });
 
-async function setup(routes) {
+async function setup(routes, extra = {}) {
   const calls = [];
   const tools = {};
   const handlers = {};
@@ -30,6 +30,8 @@ async function setup(routes) {
     ui: { openExternal: async () => {} },
     tools: { register: (n, fn) => (tools[n] = fn) },
     renderer: { handle: (n, fn) => (handlers[n] = fn) },
+    session: extra.session,
+    threads: extra.threads,
   });
   return { calls, tools, handlers };
 }
@@ -186,4 +188,27 @@ test('trimLog 去掉时间戳，合并 error 上下文，否则取尾部', () =>
   assert.equal(tail.log, 'L15\nL16\nL17\nL18\nL19');
   assert.equal(tail.truncated, true);
   assert.equal(trimLog('only', 10).truncated, false);
+});
+
+test('github_link_pr 旧宿主返回未绑定', async () => {
+  const { tools } = await setup({});
+  const r = await tools.github_link_pr({ repo: 'o/r', number: 4 }, { sessionId: 's1' });
+  assert.deepEqual(r, { bound: false, reason: '宿主不支持需求线程' });
+});
+
+test('github_link_pr 绑上需求线程，没有线程时说明原因', async () => {
+  const seen = [];
+  const pr = { number: 4, html_url: 'https://github.com/o/r/pull/4', title: 'feat', head: { sha: 'a'.repeat(80) } };
+  const bound = await setup({ 'GET /repos/o/r/pulls/4': pr }, {
+    threads: { bindPr: async (target, body) => (seen.push({ target, body }), { id: 'th1', status: 'pr_opened' }) },
+  });
+  assert.deepEqual(await bound.tools.github_link_pr({ repo: 'o/r', number: 4 }, { sessionId: 's9' }), { bound: true, threadId: 'th1', status: 'pr_opened' });
+  assert.deepEqual(seen[0].target, { sessionId: 's9' });
+  assert.equal(seen[0].body.repo, 'o/r');
+  assert.equal(seen[0].body.number, 4);
+  assert.equal(seen[0].body.headSha.length, 64);
+  assert.equal(bound.calls[0].url.endsWith('/repos/o/r/pulls/4'), true);
+
+  const none = await setup({ 'GET /repos/o/r/pulls/4': pr }, { threads: { bindPr: async () => null } });
+  assert.deepEqual(await none.tools.github_link_pr({ repo: 'o/r', number: 4 }, { sessionId: 's9' }), { bound: false, reason: '会话没有需求线程' });
 });

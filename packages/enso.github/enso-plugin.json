@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "enso.github",
   "name": "GitHub",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "icon": "icon.svg",
   "description": "在侧栏查看、回复、关闭和重开当前项目的 GitHub issue 与 PR，也可查看 Actions 运行、失败原因与日志，并重跑或取消。会话里的 agent 也能调用，还能监听仓库的 PR、issue、@提及与 CI 失败，有事件才投递进会话。支持设备码登录，已登录的 gh CLI 可直接复用。侧栏的「监听」页可查看和停止所有会话的监听。",
   "engines": {
@@ -160,7 +160,7 @@
             "events": {
               "type": "array",
               "items": { "type": "string", "enum": ["pr_opened", "pr_ready", "pr_merged_closed", "issue_opened", "mention", "ci_failed", "pr_commented", "issue_commented"] },
-              "description": "Default pr_opened, pr_ready, pr_merged_closed, issue_opened, mention, ci_failed. pr_ready fires when a PR has had no new pushes for settleSec. mention covers @you, comments or reviews on your PRs/issues, and review requests"
+              "description": "Default pr_opened, pr_ready, pr_merged_closed, issue_opened, mention, ci_failed. pr_ready fires when a PR has had no new pushes for settleSec. mention covers @you, comments or reviews on your PRs/issues, and review requests. ci_failed is once per commit, after every run for that sha has finished and at least one failed"
             },
             "authors": { "type": "array", "items": { "type": "string" }, "description": "Only PRs/issues (or CI runs) by these logins" },
             "excludeAuthors": { "type": "array", "items": { "type": "string" }, "description": "Skip when the PR/issue author or the commenter/reviewer is one of these logins, e.g. dependabot[bot]" },
@@ -186,6 +186,18 @@
         "readOnly": true,
         "description": "Show this session's github_watch: its settings, each repository's last and next poll, failures and errors, pending and delivered counts, the last delivery error, and the GitHub rate limit.",
         "parameters": { "type": "object", "properties": {} }
+      },
+      {
+        "name": "github_link_pr",
+        "description": "Bind a pull request to this session's demand thread right after you open it for a request that came from a chat. Later comments, CI, and the merge for that PR are delivered only to this session; EnsoCode replies to the original message at milestones.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "repo": { "type": "string", "description": "owner/name; omit to use the current project's GitHub origin" },
+            "number": { "type": "integer", "description": "Pull request number" }
+          },
+          "required": ["number"]
+        }
       }
     ]
   }
