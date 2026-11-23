@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-23T17:15:57.087Z",
-  "sequence": 133,
+  "generatedAt": "2026-11-23T17:20:42.739Z",
+  "sequence": 134,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -343,11 +343,11 @@
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.bridge.svg",
       "category": "agent",
       "readme": {
-        "path": "packages/enso.bridge/1.0.2.readme.md",
-        "sha256": "737fe30a22f69c2ec2bdb28871c4b37939717d3b37bf0ebdc6565b99f8ecdbf8",
-        "size": 1434
+        "path": "packages/enso.bridge/1.1.0.readme.md",
+        "sha256": "18bf7368e715cac5298e58bf7b357713e88243bd2b29218e42da5bc390935b66",
+        "size": 2260
       },
-      "latest": "1.0.2",
+      "latest": "1.1.0",
       "versions": [
         {
           "version": "1.0.0",
@@ -396,6 +396,26 @@
           "sha256": "f06c7efaea33439e894bc7df6463fa63ab0483ffbd6b0f1e943df2a393ab3bb8",
           "size": 76809,
           "publishedAt": "2026-11-12T02:14:49.675Z"
+        },
+        {
+          "version": "1.1.0",
+          "engines": {
+            "enso": ">=0.3.14"
+          },
+          "permissions": [
+            "ui.view",
+            "process.background",
+            "agent.tool",
+            "agent.inject",
+            "agent.injectTrusted",
+            "agent.observe",
+            "session.read",
+            "session.focus"
+          ],
+          "path": "packages/enso.bridge/1.1.0.zip",
+          "sha256": "4724db0f28a7b9a09deb7a04c891ee831a0cf6c2325ae6df78405ff6f12a65df",
+          "size": 77724,
+          "publishedAt": "2026-11-23T17:20:42.739Z"
         }
       ]
     },
@@ -1476,11 +1496,11 @@
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.kanban.svg",
       "category": "productivity",
       "readme": {
-        "path": "packages/enso.kanban/1.0.4.readme.md",
-        "sha256": "3bb3d476b2bc99e56a7a37fa1ae3794c3626401142ebd45da1982c3a4b4f39d0",
-        "size": 1724
+        "path": "packages/enso.kanban/1.1.0.readme.md",
+        "sha256": "8581a8585d6ad26558eb9d5a9a3fcd25b4463b7ff1575a89aa72ebb56950fc9d",
+        "size": 2125
       },
-      "latest": "1.0.4",
+      "latest": "1.1.0",
       "versions": [
         {
           "version": "1.0.0",
@@ -1561,6 +1581,26 @@
           "sha256": "f29e318a2988d79023e40af94c3731561e29bbf4f814ee002d233b745185aef5",
           "size": 72236,
           "publishedAt": "2026-11-12T02:14:49.675Z"
+        },
+        {
+          "version": "1.1.0",
+          "engines": {
+            "enso": ">=0.3.14"
+          },
+          "permissions": [
+            "ui.view",
+            "agent.tool",
+            "agent.inject",
+            "agent.injectTrusted",
+            "composer.draft",
+            "session.read",
+            "session.focus",
+            "session.create"
+          ],
+          "path": "packages/enso.kanban/1.1.0.zip",
+          "sha256": "5f353e34d3fd525233d80b08a2bafa53f0e2f1c4493c82e7ac13985d762bdb02",
+          "size": 72712,
+          "publishedAt": "2026-11-23T17:20:42.739Z"
         }
       ]
     },
@@ -1975,11 +2015,11 @@
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.scheduler.svg",
       "category": "productivity",
       "readme": {
-        "path": "packages/enso.scheduler/1.1.1.readme.md",
-        "sha256": "b2a007615245579412a7c11a0fc0e3c9b84d936a9a5af51a051879e9f09f2921",
-        "size": 2168
+        "path": "packages/enso.scheduler/1.2.0.readme.md",
+        "sha256": "89a941a8e6d8d661212741e53a78f60f4c900b84c1222a4b89ac5fcdd5a63ff4",
+        "size": 2466
       },
-      "latest": "1.1.1",
+      "latest": "1.2.0",
       "versions": [
         {
           "version": "1.0.0",
@@ -2060,6 +2100,24 @@
           "sha256": "962645101d2a5972da3ac8075625e9d59741c3e2df8389e529e56ccc1bb5c0b3",
           "size": 70052,
           "publishedAt": "2026-11-12T02:14:49.675Z"
+        },
+        {
+          "version": "1.2.0",
+          "engines": {
+            "enso": ">=0.3.14"
+          },
+          "permissions": [
+            "agent.tool",
+            "ui.view",
+            "process.background",
+            "agent.inject",
+            "agent.injectTrusted",
+            "ui.notify"
+          ],
+          "path": "packages/enso.scheduler/1.2.0.zip",
+          "sha256": "4acb486537d1eca930eabe77ec0699a98fd1ffff009306e1d15f7fcdf4fdd9eb",
+          "size": 70433,
+          "publishedAt": "2026-11-23T17:20:42.739Z"
         }
       ]
     },
