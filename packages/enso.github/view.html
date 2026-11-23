@@ -51,11 +51,20 @@
       .md summary { cursor: pointer; }
       textarea.ui-input { height: auto; min-height: 72px; padding: 6px 8px; resize: vertical; font: inherit; }
       .actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+      .ui-tooltip { white-space: normal; max-width: min(320px, calc(100vw - 8px)); }
+      #watch { display: flex; flex-direction: column; gap: 8px; }
+      #watch[hidden], #app[hidden] { display: none; }
+      #watch .card { padding: 10px; gap: 6px; }
+      #watch .row { flex-wrap: wrap; }
+      #watch .name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      #watch .bad { border-color: var(--destructive); }
     </style>
   </head>
   <body>
     <div id="app"><div class="ui-card card"><div class="ui-skeleton" style="height: 14px; width: 60%"></div></div></div>
+    <div id="watch" hidden></div>
     <script src="enso-ui.js"></script>
+    <script src="watch-page.js"></script>
     <script>
       const app = document.getElementById('app');
       const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -107,6 +116,21 @@
       ensoUI.tooltip();
 
       const call = (m, a) => window.enso.call(m, a ?? {});
+      const watchRoot = document.getElementById('watch');
+      const watchPage = GithubWatch.mount({
+        root: watchRoot,
+        call,
+        onBack: () => {
+          watchRoot.hidden = true;
+          app.hidden = false;
+          refreshAuth();
+        },
+      });
+      function openWatch() {
+        app.hidden = true;
+        watchRoot.hidden = false;
+        watchPage.open();
+      }
       async function act(fn) {
         if (ui.busy) return;
         ui.busy = true;
@@ -237,8 +261,9 @@
         const account = a.source
           ? `<span class="ui-badge" data-tip="${SOURCES[a.source]}">${esc(a.login ?? SOURCES[a.source])}</span>${a.source === 'device' ? '<button class="ui-btn ui-btn--sm" data-logout>退出</button>' : ''}`
           : '';
+        const watchTip = `查看所有会话的仓库监听（${a.watches ? `当前 ${a.watches} 个` : '当前没有'}）、轮询状态，并可停止订阅`;
         const head = `<div class="row"><input class="ui-input grow ui-mono" id="repo" placeholder="owner/name" value="${esc(ui.repo)}" />
-          <button class="ui-btn ui-btn--sm" data-panel>${a.watches ? `监听 ${a.watches}` : '监听'}</button>
+          <button class="ui-btn ui-btn--sm" data-watch data-tip="${esc(watchTip)}" aria-label="${esc(watchTip)}">${a.watches ? `监听 ${a.watches}` : '监听'}</button>
           <button class="ui-btn ui-btn--sm" data-reload ${ui.busy ? 'disabled' : ''}>${ui.busy ? '…' : '刷新'}</button>${account}</div>`;
         const body = !a.source ? authView(a) : ui.detail?.kind === 'run' ? runView(ui.detail.run) : ui.detail ? detailView(ui.detail) : listView();
         app.innerHTML = head + body + (ui.error ? `<div class="err">${esc(ui.error)}</div>` : '');
@@ -262,10 +287,7 @@
         if ('login' in d) act(async () => { await call('login'); await refreshAuth(); });
         else if ('cancel' in d) act(async () => { await call('cancelLogin'); await refreshAuth(); });
         else if ('logout' in d) act(async () => { await call('logout'); ui.items = null; ui.detail = null; ui.logs = {}; await refreshAuth(); });
-        else if ('panel' in d) {
-          const open = window.enso.views && window.enso.views.open;
-          if (typeof open === 'function') open('watch');
-        }
+        else if ('watch' in d) openWatch();
         else if (d.open) call('open', { url: d.open });
         else if ('reload' in d) ui.detail?.kind === 'run' ? loadRun(ui.detail.run.id) : ui.detail ? loadDetail(ui.detail.number) : loadList();
         else if ('back' in d) { ui.detail = null; ui.logs = {}; loadList(); }
