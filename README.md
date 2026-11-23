@@ -36,7 +36,7 @@ EnsoCode 官方插件市场的源仓库 · [浏览插件](https://enso-plugins.j
 | [Agent Inbox](https://github.com/J3n5en/enso-plugins/tree/main/packages/enso.agentinbox) | `enso.agentinbox` | 0.1.2 | 官方 | 跨项目收件箱：把各会话里等你审批的工具调用、等你回答的提问，以及失败的主会话收成按项目分组的列表，带未读数，点击切回当前项目的会话。 |
 | Beads | `enso.beads` | 0.1.0 | 官方 | 在侧栏查看当前项目的 Beads 任务：就绪、进行中、阻塞和已关闭，支持表格、依赖、评论、认领、关闭，以及把任务交给新会话。数据来自本地 bd 或 .beads，不需要云服务。 |
 | [Better Prompt](https://github.com/nicobailon/pi-better) | `enso.better` | 0.1.0 | 官方 | 移植自 pi-better：输入框一键用 Felix Rieseberg 的「Depth」提示改写草稿。只读代理先读你的代码、文件和对话，回答四个问题（高手会多做什么、最原始的材料、具体方法和工具、什么能证明结果正确），再写出更深入的提示词。侧栏实时显示它读了什么、进行到哪一步，结果替换输入框文字，由你确认后发送。 |
-| Session Bridge | `enso.bridge` | 1.0.2 | 官方 | 跨会话桥：同项目的多个会话可在侧栏群聊室中互相提问、委托与回传结论。 |
+| Session Bridge | `enso.bridge` | 1.1.0 | 官方 | 跨会话桥：同项目的多个会话可在侧栏群聊室中互相提问、委托与回传结论。 |
 | Browse | `enso.browse` | 0.1.1 | 官方 | 接入 OpenCode Browse：官方扩展和官方中继，没装时插件可以自己下载一份，不改其它 agent。代理在后台标签里读页面、点击、输入、截图、录屏和抓包；登录、两步验证和付款交还给你。 |
 | Bugbot Review | `enso.bugbot` | 0.1.0 | 官方 | 移植自 Cursor review-bugbot 与 Agent Review：本地 Git diff 组装（自动识别默认基准分支、剔除 linguist-generated 文件、合并 .cursor/BUGBOT.md 规则与最小改动行数门禁）、只读 bugbot 审查子代理、/review-bugbot 技能以及侧栏 Findings 面板与一键 Fix in Chat。 |
 | Chat Board | `enso.chatboard` | 0.1.1 | 官方 | 跨项目会话看板：每张卡片就是一个会话（状态含 coworker），可分列、标未读、写备注，点卡片切换到该会话。 |
@@ -52,7 +52,7 @@ EnsoCode 官方插件市场的源仓库 · [浏览插件](https://enso-plugins.j
 | [模型指纹](https://lm.ikale.io) | `enso.fingerprint` | 0.1.1 | 官方 | 侧栏里看当前会话的模型最像参考库里的哪个模型：用 Fingerpoint Detector（lmfpd-sdk）出 3 道随机整数题，交给当前会话的模型作答，再在本机离线评分。显示最像的模型、家族、置信度、候选排名、每道题的解析情况和「像不像语言模型写的」检查。会话直接选了具体模型时，结果与会话模型 id 对照；用 Auto 这类虚拟模型时，宿主拿不到实际答题的模型，不做对照。手动点按钮才检测，每次 3 次模型调用；结果是参考库内的相似度排序，不是身份证明。 |
 | GitHub | `enso.github` | 0.5.0 | 官方 | 在侧栏查看、回复、关闭和重开当前项目的 GitHub issue 与 PR，也可查看 Actions 运行、失败原因与日志，并重跑或取消。会话里的 agent 也能调用，还能监听仓库的 PR、issue、@提及与 CI 失败，有事件才投递进会话。支持设备码登录，已登录的 gh CLI 可直接复用。侧栏的「监听」页可查看和停止所有会话的监听。 |
 | 红果短剧 | `enso.hongguo` | 0.2.20 | 社区 | 在侧栏里浏览、搜索并播放红果短剧（基于 openhongguo 匿名 SDK）。仅供学习研究。 |
-| Kanban | `enso.kanban` | 1.0.4 | 官方 | 项目看板：同一项目的所有会话共享，人和会话都能创建、编辑、拖动卡片。 |
+| Kanban | `enso.kanban` | 1.1.0 | 官方 | 项目看板：同一项目的所有会话共享，人和会话都能创建、编辑、拖动卡片。 |
 | Linear | `enso.linear` | 0.1.0 | 官方 | 在侧栏查看 Linear 议题：我的、当前周期、待办和分拣。按当前 git 分支高亮对应议题，可看状态、子议题、链接和评论，并在 Enso 会话里开始处理。用 Personal API Key，或用 PKCE 登录自建 OAuth 应用（不需要 Client Secret）。 |
 | 噜噜和噜妹 | `enso.lulu` | 0.1.0 | 官方 | 噜噜和噜妹主题：奶油橘底配焦糖棕，两人在侧栏并排，噜噜在输入框后探头，思考时托腮。 |
 | Monokai Pro | `enso.monokaipro` | 1.0.0 | 社区 | Monokai Pro 风格深浅双色主题：炭黑/暖白画布，粉强调色，偏精致专业。 |
@@ -60,7 +60,7 @@ EnsoCode 官方插件市场的源仓库 · [浏览插件](https://enso-plugins.j
 | 奶蛙 | `enso.naiwa` | 0.1.2 | 官方 | 奶蛙主题：荷叶绿配奶黄，奶蛙在输入框后面探头、在侧栏爬行、思考时托腮，干完活就捧腹大笑。 |
 | OpenSpec | `enso.openspec` | 0.1.0 | 官方 | 侧栏按阶段查看当前项目的 OpenSpec 变更：任务进度、下一步、工单，以及文档里能识别的 PR。实现和收尾会把提示发到对应的 Enso 会话。 |
 | [pstack](https://github.com/cursor/plugins/tree/main/pstack) | `enso.pstack` | 0.3.5 | 官方 | Lauren Tan 的 pstack 0.15.46（MIT）：poteto-mode 按任务挑选 playbook，配套 arena、interrogate、architect 等 58 个 skill 和工程原则，先深挖再并行。只在输入框选了「pstack」预设的会话里加载。在输入框按钮里为某个会话打开后，该会话的每条消息自动展开 poteto-mode。 |
-| Scheduler | `enso.scheduler` | 1.1.1 | 官方 | 定时任务：按 cron 到点向会话发送提示词或弹出系统通知，侧栏显示下次运行时间与倒计时。 |
+| Scheduler | `enso.scheduler` | 1.2.0 | 官方 | 定时任务：按 cron 到点向会话发送提示词或弹出系统通知，侧栏显示下次运行时间与倒计时。 |
 | Skill Usage | `enso.skillusage` | 0.1.0 | 官方 | 侧栏查看技能、MCP 和子代理真正被用了多少：哪些放进了上下文却很少或从未调用，以及它们大约占多少 token。 |
 | 雷霆战机 | `enso.skyfighter` | 0.1.1 | 官方 | 侧栏里的纵向弹幕战役：三种战机、五关空域、四色武器和关间强化。离线可玩。 |
 | Spreadsheet | `enso.spreadsheet` | 0.1.0 | 官方 | 在文件面板里打开并编辑表格：网格、公式、插入删除行列，以及选区的计数、求和与平均。 |

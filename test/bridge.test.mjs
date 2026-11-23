@@ -1,10 +1,19 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { activate } from '../packages/enso.bridge/main.mjs';
+
+test('清单声明 agent.inject 与 agent.injectTrusted，并要求 Enso >=0.3.14', async () => {
+  const manifest = JSON.parse(
+    await readFile(new URL('../packages/enso.bridge/enso-plugin.json', import.meta.url), 'utf8')
+  );
+  assert.ok(manifest.permissions.includes('agent.inject'));
+  assert.ok(manifest.permissions.includes('agent.injectTrusted'));
+  assert.equal(manifest.engines?.enso, '>=0.3.14');
+});
 
 async function withDir(run) {
   const dir = await mkdtemp(join(tmpdir(), 'bridge-'));
@@ -182,6 +191,8 @@ test('bridge_ask 同步等待多个目标会话回复（支持 bridge_reply 与 
 
     assert.equal(h.openedCount, 1);
     assert.equal(h.injected.length, 2);
+    assert.equal(h.injected[0].trusted, true);
+    assert.equal(h.injected[1].trusted, true);
     assert.ok(res.content.includes('B 确认：接口参数为 userId 和 token'));
     assert.ok(res.content.includes('C 确认：登录表单已绑定这两个字段'));
     assert.ok(progressLogs.length >= 1);
@@ -212,6 +223,7 @@ test('bridge_ask 兼容旧版 main（无 ui.view.open 或调用抛错时不中�
     assert.ok(askRes.content.includes('已发送'));
     assert.equal(h.injected.length, 1);
     assert.equal(h.injected[0].sessionId, 'sess-b');
+    assert.equal(h.injected[0].trusted, true);
 
     // 当会话 B 完成回复触发 agent_end 时，应自动通过 session.inject 把回答推回给会话 A
     await h.events.agent_end(
@@ -221,6 +233,8 @@ test('bridge_ask 兼容旧版 main（无 ui.view.open 或调用抛错时不中�
     assert.equal(h.injected.length, 2);
     assert.equal(h.injected[1].sessionId, 'sess-a');
     assert.ok(h.injected[1].text.includes('数据库迁移已全部执行完毕'));
+    assert.notEqual(h.injected[1].trusted, true);
+    assert.equal('trusted' in h.injected[1], false);
   });
 });
 

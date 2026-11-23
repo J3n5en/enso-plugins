@@ -166,6 +166,7 @@ export function activate(enso) {
         text: task.prompt,
         deliverAs: 'followUp',
         triggerTurn: true,
+        trusted: true,
       });
     }
     if (task.action === 'notify' || task.notify)

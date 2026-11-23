@@ -359,6 +359,7 @@ export function activate(enso) {
           text: promptText,
           deliverAs: 'followUp',
           triggerTurn: true,
+          trusted: true,
         });
       } catch (error) {
         const q = pendingByTarget.get(target.id) ?? [];
