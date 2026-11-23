@@ -59,6 +59,16 @@
           justNow: '刚刚',
           rel: (n, future, unit) => (future ? `${n} ${unit}后` : `${n} ${unit}前`),
           units: ['分钟', '小时', '天'],
+          ev: {
+            pr_opened: '新 PR',
+            pr_ready: 'PR 稳定可处理',
+            pr_merged_closed: '合并/关闭',
+            issue_opened: '新 issue',
+            mention: '提及',
+            ci_failed: 'CI 失败',
+            pr_commented: 'PR 评论',
+            issue_commented: 'issue 评论',
+          },
         },
         en: {
           count: (n) => (n === 1 ? '1 watch' : `${n} watches`),
@@ -101,6 +111,16 @@
             return future ? `in ${n} ${unit}` : `${n} ${unit} ago`;
           },
           units: [['minute', 'minutes'], ['hour', 'hours'], ['day', 'days']],
+          ev: {
+            pr_opened: 'New PR',
+            pr_ready: 'PR ready for review',
+            pr_merged_closed: 'Merged/closed',
+            issue_opened: 'New issue',
+            mention: 'Mention',
+            ci_failed: 'CI failed',
+            pr_commented: 'PR comment',
+            issue_commented: 'Issue comment',
+          },
         },
       };
       const zh = navigator.language.toLowerCase().startsWith('zh');
@@ -164,7 +184,7 @@
         return `<div class="ui-card card${w.denied ? ' bad' : ''}">
           <div class="row">${name}${where}${badges}<span class="grow"></span>
             <button class="ui-btn ui-btn--sm${stopClass}" data-stop="${esc(w.sessionId)}">${esc(armed ? L.confirm : L.stop)}</button></div>
-          <div class="m">${esc(L.repos)} ${esc((w.repos ?? []).join(', '))} · ${esc(L.events)} ${esc((w.events ?? []).join(', '))}</div>
+          <div class="m">${esc(L.repos)} ${esc((w.repos ?? []).join(', '))} · ${esc(L.events)} <span data-tip="${esc((w.events ?? []).join(', '))}">${esc((w.events ?? []).map((e) => L.ev[e] ?? e).join(zh ? '、' : ', '))}</span></div>
           ${filters(w)}
           <div class="m">${esc(L.settle)} ${w.settleSec}${esc(L.sec)} · ${esc(L.debounce)} ${w.debounceSec}${esc(L.sec)} · ${esc(L.gap)} ${w.minIntervalSec}${esc(L.sec)} · ${esc(L.since)} ${esc(when(w.since) || local(w.since))}</div>
           ${noteOf(w.note)}

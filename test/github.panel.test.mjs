@@ -5,7 +5,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { activate } from '../packages/enso.github/main.mjs';
-import { attachSessions, createWatcher } from '../packages/enso.github/watch.mjs';
+import { attachSessions, createWatcher, EVENTS } from '../packages/enso.github/watch.mjs';
 
 const T0 = Date.parse('2025-03-01T00:00:00Z');
 const MIN = 60_000;
@@ -304,4 +304,24 @@ test('清单声明全局监听页、新方法和会话权限', async () => {
   assert.ok(names.includes('focusSession'));
   assert.ok(manifest.permissions.includes('session.readAll'));
   assert.ok(manifest.permissions.includes('session.focus'));
+});
+
+test('监听页把事件原名翻成中英文说法', async () => {
+  const html = await readFile(new URL('../packages/enso.github/watch.html', import.meta.url), 'utf8');
+  const DICT = new Function(`return ${html.match(/const DICT = (\{[\s\S]*?\n {6}\});/)[1]}`)();
+  assert.deepEqual(DICT.zh.ev, {
+    pr_opened: '新 PR',
+    pr_ready: 'PR 稳定可处理',
+    pr_merged_closed: '合并/关闭',
+    issue_opened: '新 issue',
+    mention: '提及',
+    ci_failed: 'CI 失败',
+    pr_commented: 'PR 评论',
+    issue_commented: 'issue 评论',
+  });
+  for (const lang of ['zh', 'en']) {
+    assert.deepEqual(Object.keys(DICT[lang].ev).sort(), [...EVENTS].sort());
+    for (const e of EVENTS) assert.ok(DICT[lang].ev[e] && !DICT[lang].ev[e].includes('_'), `${lang}.${e}`);
+  }
+  assert.match(html, /\(w\.events \?\? \[\]\)\.map\(\(e\) => L\.ev\[e\] \?\? e\)/);
 });
