@@ -10,6 +10,8 @@ const MAX_BODY = 65536;
 const LOG_CHARS = 60000;
 const ERROR_CONTEXT = 40;
 const LOG_STAMP = /^\d{4}-\d\d-\d\dT[\d:.]+Z /;
+/** CSI、OSC、字符集切换和其余单字符 ESC 序列 */
+const ANSI = /\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[()#][0-9A-Za-z]|[@-Z\\-_])/g;
 const RUN_ACTIONS = { rerun: 'rerun', rerun_failed: 'rerun-failed-jobs', cancel: 'cancel' };
 const ANNO_LEVELS = new Set(['failure', 'warning']);
 
@@ -34,6 +36,8 @@ const exec = (bin, args, cwd, opts = {}) =>
 export function trimLog(text, lines = 150) {
   const cap = Math.min(1000, Math.max(1, Number.isInteger(lines) && lines > 0 ? lines : 150));
   const all = String(text ?? '')
+    .replace(/^\uFEFF/, '')
+    .replace(ANSI, '')
     .replace(/\n$/, '')
     .split('\n')
     .map((l) => l.replace(LOG_STAMP, '').replace(/\r$/, ''));
@@ -102,6 +106,16 @@ export function activate(enso) {
       } catch {}
     }
     return (ghBin = null);
+  };
+
+  /** 新版 gh 遇到转义序列拒绝输出，要加 --allow-escape-sequences；旧版不认这个参数 */
+  let ghAllowEscapes;
+  const ghLogArgs = async (bin) => {
+    if (ghAllowEscapes === undefined) {
+      const help = await exec(bin, ['api', '--help']).catch(() => '');
+      ghAllowEscapes = help.includes('--allow-escape-sequences');
+    }
+    return ghAllowEscapes ? ['--allow-escape-sequences'] : [];
   };
 
   const ghAuthToken = async () => {
@@ -370,7 +384,7 @@ export function activate(enso) {
     const cred = await requireCred();
     const bin = await findGh();
     if (!bin) throw new Error('读取日志需要安装 gh CLI；可先看 annotations 或在浏览器打开');
-    const text = await exec(bin, ['api', `repos/${repo}/actions/jobs/${job}/logs`], undefined, {
+    const text = await exec(bin, ['api', ...(await ghLogArgs(bin)), `repos/${repo}/actions/jobs/${job}/logs`], undefined, {
       env: { GH_TOKEN: cred.token },
       timeout: 20000,
     });
