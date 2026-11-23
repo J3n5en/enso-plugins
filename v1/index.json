@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-23T17:20:42.739Z",
-  "sequence": 134,
+  "generatedAt": "2026-11-23T17:44:39.482Z",
+  "sequence": 135,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -2860,11 +2860,11 @@
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.translate.svg",
       "category": "writing",
       "readme": {
-        "path": "packages/enso.translate/0.1.2.readme.md",
-        "sha256": "5985751e5a77b8dfbf7298a5fbc8685b96eeb32bef8a3053ac6bcaf4be4629f1",
-        "size": 2379
+        "path": "packages/enso.translate/0.1.3.readme.md",
+        "sha256": "6e1de8b99831ea6827f262f74a13a4d36fc3c3d093f858de0e3d30ad4893b397",
+        "size": 2624
       },
-      "latest": "0.1.2",
+      "latest": "0.1.3",
       "versions": [
         {
           "version": "0.1.0",
@@ -2907,6 +2907,20 @@
           "sha256": "998a26df1952d503dcc269cb2b3dbfbbf1beed171ab74985068a10f489840876",
           "size": 27592,
           "publishedAt": "2026-11-11T13:09:59.296Z"
+        },
+        {
+          "version": "0.1.3",
+          "engines": {
+            "enso": ">=0.2.15"
+          },
+          "permissions": [
+            "net.fetch",
+            "ui.slot"
+          ],
+          "path": "packages/enso.translate/0.1.3.zip",
+          "sha256": "9fda7010ee628109e3a6e4f53e910ade6f79675f3d07d4801c3750f629e89daa",
+          "size": 31752,
+          "publishedAt": "2026-11-23T17:44:39.482Z"
         }
       ]
     },
