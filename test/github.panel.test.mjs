@@ -212,7 +212,7 @@ test('watches 只读本地状态，stopWatch 卸下订阅和独占仓库', async
   gh.repo('o/b');
   gh.repo('o/c');
   const fetches = [];
-  const gate = { error: null, focused: [] };
+  const gate = { error: null, focused: [], opened: [], viewError: null };
   const listed = {
     current: 's1',
     sessions: [{ id: 's1', title: '甲', projectId: 'p1', projectName: 'proj' }],
@@ -231,7 +231,17 @@ test('watches 只读本地状态，stopWatch 卸下订阅和独占仓库', async
         return { status: res.status, headers: res.headers, body: res.data == null ? '' : JSON.stringify(res.data) };
       },
     },
-    ui: { openExternal: async () => {}, notify: async () => {} },
+    ui: {
+      openExternal: async () => {},
+      notify: async () => {},
+      view: {
+        open: async (id) => {
+          if (gate.viewError) throw gate.viewError;
+          gate.opened.push(id);
+          return null;
+        },
+      },
+    },
     session: {
       inject: async () => {},
       list: async () => {
@@ -268,6 +278,13 @@ test('watches 只读本地状态，stopWatch 卸下订阅和独占仓库', async
   await handlers.focusSession({ sessionId: 's1' });
   assert.deepEqual(gate.focused, ['s1']);
 
+  const before = fetches.length;
+  await handlers.openWatchPanel();
+  assert.deepEqual(gate.opened, ['watch']);
+  assert.equal(fetches.length, before);
+  gate.viewError = Object.assign(new Error('当前环境不能操作会话'), { code: 'UNSUPPORTED' });
+  await assert.rejects(() => handlers.openWatchPanel(), /不能操作会话/);
+
   const stopped = await handlers.stopWatch({ sessionId: 's2' });
   assert.equal(stopped.ok, true);
   const left = await handlers.watches();
@@ -302,6 +319,8 @@ test('清单声明全局监听页、新方法和会话权限', async () => {
   assert.ok(names.includes('watches'));
   assert.ok(names.includes('stopWatch'));
   assert.ok(names.includes('focusSession'));
+  assert.ok(names.includes('openWatchPanel'));
+  assert.ok(manifest.permissions.includes('ui.view'));
   assert.ok(manifest.permissions.includes('session.readAll'));
   assert.ok(manifest.permissions.includes('session.focus'));
 });
@@ -324,4 +343,21 @@ test('监听页把事件原名翻成中英文说法', async () => {
     for (const e of EVENTS) assert.ok(DICT[lang].ev[e] && !DICT[lang].ev[e].includes('_'), `${lang}.${e}`);
   }
   assert.match(html, /\(w\.events \?\? \[\]\)\.map\(\(e\) => L\.ev\[e\] \?\? e\)/);
+});
+
+test('GitHub 侧栏的「监听 N」经主进程 ui.view.open 打开监听页，失败时退回浮层', async () => {
+  const html = await readFile(new URL('../packages/enso.github/view.html', import.meta.url), 'utf8');
+  // 侧栏页面的 window.enso 没有 views.open，旧实现在这里静默什么都不做
+  assert.doesNotMatch(html, /enso\.views/);
+  assert.match(html, /else if \('panel' in d\) openPanel\(\);/);
+  const fn = html.match(/async function openPanel\(\) \{[\s\S]*?\n {6}\}/)[0];
+  assert.match(fn, /call\('openWatchPanel'\)/);
+  assert.match(fn, /catch \(e\)[\s\S]*call\('watches'\)/);
+  const btn = html.match(/<button[^>]*data-panel[^>]*>/)[0];
+  assert.match(btn, /data-tip="\$\{esc\(panelTip\)\}"/);
+  assert.match(html, /const panelTip = `打开「GitHub 监听」面板/);
+  const pop = html.match(/function popView\(\) \{[\s\S]*?\n {6}\}/)[0];
+  for (const part of ['w.session?.title', 'w.repos', 'EVENT_LABEL', 'PANEL_WHERE', '会话已删除', 'data-pop-close']) assert.ok(pop.includes(part), part);
+  const label = new Function(`return ${html.match(/const EVENT_LABEL = (\{[\s\S]*?\});/)[1]}`)();
+  assert.deepEqual(Object.keys(label).sort(), [...EVENTS].sort());
 });

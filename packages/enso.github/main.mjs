@@ -436,6 +436,7 @@ export function activate(enso) {
     return watcher.unwatch(sessionId);
   });
   enso.renderer.handle('focusSession', (args) => enso.session.focus(args?.sessionId));
+  enso.renderer.handle('openWatchPanel', () => enso.ui.view.open('watch'));
   enso.renderer.handle('login', login);
   enso.renderer.handle('cancelLogin', () => ((pending = null), null));
   enso.renderer.handle('logout', async () => {

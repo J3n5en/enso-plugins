@@ -50,7 +50,7 @@ EnsoCode 官方插件市场的源仓库 · [浏览插件](https://enso-plugins.j
 | Excalidraw | `enso.excalidraw` | 0.1.0 | 官方 | 在编辑器里打开并修改 .excalidraw、.excalidraw.json 和 .excalidraw.svg 白板。改动写回文件草稿，仍由 Enso 保存。 |
 | 番茄小说 | `enso.fanqie` | 0.1.3 | 社区 | 在侧栏里浏览、搜索并阅读番茄免费小说（基于 openfanqie 匿名 SDK）。仅供学习研究。 |
 | [模型指纹](https://lm.ikale.io) | `enso.fingerprint` | 0.1.1 | 官方 | 侧栏里看当前会话的模型最像参考库里的哪个模型：用 Fingerpoint Detector（lmfpd-sdk）出 3 道随机整数题，交给当前会话的模型作答，再在本机离线评分。显示最像的模型、家族、置信度、候选排名、每道题的解析情况和「像不像语言模型写的」检查。会话直接选了具体模型时，结果与会话模型 id 对照；用 Auto 这类虚拟模型时，宿主拿不到实际答题的模型，不做对照。手动点按钮才检测，每次 3 次模型调用；结果是参考库内的相似度排序，不是身份证明。 |
-| GitHub | `enso.github` | 0.4.1 | 官方 | 在侧栏查看、回复、关闭和重开当前项目的 GitHub issue 与 PR，也可查看 Actions 运行、失败原因与日志，并重跑或取消。会话里的 agent 也能调用，还能监听仓库的 PR、issue、@提及与 CI 失败，有事件才投递进会话。支持设备码登录，已登录的 gh CLI 可直接复用。侧栏可查看和停止所有会话的监听。 |
+| GitHub | `enso.github` | 0.4.2 | 官方 | 在侧栏查看、回复、关闭和重开当前项目的 GitHub issue 与 PR，也可查看 Actions 运行、失败原因与日志，并重跑或取消。会话里的 agent 也能调用，还能监听仓库的 PR、issue、@提及与 CI 失败，有事件才投递进会话。支持设备码登录，已登录的 gh CLI 可直接复用。侧栏可查看和停止所有会话的监听。 |
 | 红果短剧 | `enso.hongguo` | 0.2.19 | 社区 | 在侧栏里浏览、搜索并播放红果短剧（基于 openhongguo 匿名 SDK）。仅供学习研究。 |
 | Kanban | `enso.kanban` | 1.0.4 | 官方 | 项目看板：同一项目的所有会话共享，人和会话都能创建、编辑、拖动卡片。 |
 | Linear | `enso.linear` | 0.1.0 | 官方 | 在侧栏查看 Linear 议题：我的、当前周期、待办和分拣。按当前 git 分支高亮对应议题，可看状态、子议题、链接和评论，并在 Enso 会话里开始处理。用 Personal API Key，或用 PKCE 登录自建 OAuth 应用（不需要 Client Secret）。 |
