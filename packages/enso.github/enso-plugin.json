@@ -2,14 +2,14 @@
   "schemaVersion": 1,
   "id": "enso.github",
   "name": "GitHub",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "icon": "icon.svg",
-  "description": "在侧栏查看、回复、关闭和重开当前项目的 GitHub issue 与 PR，也可查看 Actions 运行、失败原因与日志，并重跑或取消。会话里的 agent 也能调用。支持设备码登录，已登录的 gh CLI 可直接复用。",
+  "description": "在侧栏查看、回复、关闭和重开当前项目的 GitHub issue 与 PR，也可查看 Actions 运行、失败原因与日志，并重跑或取消。会话里的 agent 也能调用，还能监听仓库的 PR、issue、@提及与 CI 失败，有事件才投递进会话。支持设备码登录，已登录的 gh CLI 可直接复用。",
   "engines": {
     "enso": ">=0.2.14"
   },
   "main": "main.mjs",
-  "permissions": ["agent.tool", "net.fetch", "ui.view", "ui.openExternal"],
+  "permissions": ["agent.tool", "net.fetch", "ui.view", "ui.openExternal", "agent.inject", "process.background", "ui.notify"],
   "net": {
     "domains": ["github.com", "api.github.com"]
   },
@@ -23,6 +23,7 @@
       }
     ],
     "views": [{ "id": "github", "title": "GitHub", "entry": "view.html" }],
+    "schedules": [{ "id": "watch", "intervalSeconds": 60, "timeoutMs": 120000 }],
     "methods": [
       { "name": "state", "timeoutMs": 15000 },
       { "name": "login", "timeoutMs": 20000 },
@@ -142,6 +143,44 @@
           },
           "required": ["id", "action"]
         }
+      },
+      {
+        "name": "github_watch",
+        "timeoutMs": 120000,
+        "description": "Watch GitHub repositories and deliver new events into this session as they happen: opened, ready, merged or closed PRs, new issues, @mentions of you, comments, and failed CI. The plugin polls each repository at most once a minute and wakes this session only when a filtered event arrives. One watch per session; calling again replaces it. Requires \"Allow messages to any running session\" in Settings → Plugins → GitHub.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "repos": { "type": "array", "items": { "type": "string" }, "description": "owner/name list, max 20; omit to use the current project's GitHub origin" },
+            "events": {
+              "type": "array",
+              "items": { "type": "string", "enum": ["pr_opened", "pr_ready", "pr_merged_closed", "issue_opened", "mention", "ci_failed", "pr_commented", "issue_commented"] },
+              "description": "Default pr_opened, pr_ready, pr_merged_closed, issue_opened, mention, ci_failed. pr_ready fires when a PR has had no new pushes for settleSec. mention covers @you, comments or reviews on your PRs/issues, and review requests"
+            },
+            "authors": { "type": "array", "items": { "type": "string" }, "description": "Only PRs/issues (or CI runs) by these logins" },
+            "excludeAuthors": { "type": "array", "items": { "type": "string" }, "description": "Skip when the PR/issue author or the commenter/reviewer is one of these logins, e.g. dependabot[bot]" },
+            "labels": { "type": "array", "items": { "type": "string" }, "description": "Only PRs/issues with any of these labels; CI is not filtered by labels" },
+            "excludeNumbers": { "type": "array", "items": { "type": "integer" }, "description": "Skip these PR/issue numbers" },
+            "includeDrafts": { "type": "boolean", "description": "Default false: draft PRs only raise mention" },
+            "branches": { "type": "array", "items": { "type": "string" }, "description": "Branches checked for ci_failed, max 10. Default the repository's default branch" },
+            "settleSec": { "type": "integer", "description": "Quiet time after the last push before pr_ready, 60-86400 seconds, default 900" },
+            "debounceSec": { "type": "integer", "description": "Quiet period before a batch is delivered, 1-3600 seconds, default 3" },
+            "minIntervalSec": { "type": "integer", "description": "Minimum gap between two deliveries, 0-86400 seconds, default 0" },
+            "note": { "type": "string", "description": "Standing instruction repeated with every delivery, max 500 characters" }
+          }
+        }
+      },
+      {
+        "name": "github_unwatch",
+        "timeoutMs": 120000,
+        "description": "Stop the github_watch subscription of this session.",
+        "parameters": { "type": "object", "properties": {} }
+      },
+      {
+        "name": "github_watch_status",
+        "readOnly": true,
+        "description": "Show this session's github_watch: its settings, each repository's last and next poll, failures and errors, pending and delivered counts, the last delivery error, and the GitHub rate limit.",
+        "parameters": { "type": "object", "properties": {} }
       }
     ]
   }
