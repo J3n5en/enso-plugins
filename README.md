@@ -50,8 +50,8 @@ EnsoCode 官方插件市场的源仓库 · [浏览插件](https://enso-plugins.j
 | Excalidraw | `enso.excalidraw` | 0.1.0 | 官方 | 在编辑器里打开并修改 .excalidraw、.excalidraw.json 和 .excalidraw.svg 白板。改动写回文件草稿，仍由 Enso 保存。 |
 | 番茄小说 | `enso.fanqie` | 0.1.3 | 社区 | 在侧栏里浏览、搜索并阅读番茄免费小说（基于 openfanqie 匿名 SDK）。仅供学习研究。 |
 | [模型指纹](https://lm.ikale.io) | `enso.fingerprint` | 0.1.1 | 官方 | 侧栏里看当前会话的模型最像参考库里的哪个模型：用 Fingerpoint Detector（lmfpd-sdk）出 3 道随机整数题，交给当前会话的模型作答，再在本机离线评分。显示最像的模型、家族、置信度、候选排名、每道题的解析情况和「像不像语言模型写的」检查。会话直接选了具体模型时，结果与会话模型 id 对照；用 Auto 这类虚拟模型时，宿主拿不到实际答题的模型，不做对照。手动点按钮才检测，每次 3 次模型调用；结果是参考库内的相似度排序，不是身份证明。 |
-| GitHub | `enso.github` | 0.4.2 | 官方 | 在侧栏查看、回复、关闭和重开当前项目的 GitHub issue 与 PR，也可查看 Actions 运行、失败原因与日志，并重跑或取消。会话里的 agent 也能调用，还能监听仓库的 PR、issue、@提及与 CI 失败，有事件才投递进会话。支持设备码登录，已登录的 gh CLI 可直接复用。侧栏的「监听」页可查看和停止所有会话的监听。 |
-| 红果短剧 | `enso.hongguo` | 0.2.19 | 社区 | 在侧栏里浏览、搜索并播放红果短剧（基于 openhongguo 匿名 SDK）。仅供学习研究。 |
+| GitHub | `enso.github` | 0.5.0 | 官方 | 在侧栏查看、回复、关闭和重开当前项目的 GitHub issue 与 PR，也可查看 Actions 运行、失败原因与日志，并重跑或取消。会话里的 agent 也能调用，还能监听仓库的 PR、issue、@提及与 CI 失败，有事件才投递进会话。支持设备码登录，已登录的 gh CLI 可直接复用。侧栏的「监听」页可查看和停止所有会话的监听。 |
+| 红果短剧 | `enso.hongguo` | 0.2.20 | 社区 | 在侧栏里浏览、搜索并播放红果短剧（基于 openhongguo 匿名 SDK）。仅供学习研究。 |
 | Kanban | `enso.kanban` | 1.1.0 | 官方 | 项目看板：同一项目的所有会话共享，人和会话都能创建、编辑、拖动卡片。 |
 | Linear | `enso.linear` | 0.1.0 | 官方 | 在侧栏查看 Linear 议题：我的、当前周期、待办和分拣。按当前 git 分支高亮对应议题，可看状态、子议题、链接和评论，并在 Enso 会话里开始处理。用 Personal API Key，或用 PKCE 登录自建 OAuth 应用（不需要 Client Secret）。 |
 | 噜噜和噜妹 | `enso.lulu` | 0.1.0 | 官方 | 噜噜和噜妹主题：奶油橘底配焦糖棕，两人在侧栏并排，噜噜在输入框后探头，思考时托腮。 |
@@ -66,8 +66,8 @@ EnsoCode 官方插件市场的源仓库 · [浏览插件](https://enso-plugins.j
 | Spreadsheet | `enso.spreadsheet` | 0.1.0 | 官方 | 在文件面板里打开并编辑表格：网格、公式、插入删除行列，以及选区的计数、求和与平均。 |
 | SQLite | `enso.sqlite` | 0.1.0 | 官方 | 浏览和查询 SQLite 数据库：可排序、筛选的表格，SQL 查询，以及表、视图、索引和触发器的 CREATE 语句。只读。 |
 | 任务启动 | `enso.tasklauncher` | 0.1.0 | 官方 | 从当前项目的 GitHub issue 用可编辑的提示词启动 Enso 会话：列出 origin 的 issue，套用提示词模板，再新建会话并聚焦。可选在干净的工作区创建并切换分支。不创建 worktree，也不替代 GitHub 插件。 |
-| Telegram | `enso.telegram` | 0.3.2 | 官方 | 用 Telegram Bot 远程使用 EnsoCode 会话：配对后发消息即进入会话，执行进度原位更新，回复以富文本发回；支持图片、群聊绑定、成员白名单与群聊上下文、插话、远程停止和双向同步。 |
-| Telegram 客户端 | `enso.tgclient` | 0.5.7 | 官方 | 在侧栏里用手机号登录自己的 Telegram 账号，像官方客户端一样聊天：会话列表与聊天分组、论坛话题、实时收发、相册、边下边播视频、表情与贴纸面板、编辑、回复、表情回应、已读详情、切换发言身份、机器人按钮与键盘、新消息系统通知；附带 Agent 工具，可查聊天、读写消息、订阅新消息。支持 socks5 与 MTProxy 代理。 |
+| Telegram | `enso.telegram` | 0.4.0 | 官方 | 用 Telegram Bot 远程使用 EnsoCode 会话：配对后发消息即进入会话，执行进度原位更新，回复以富文本发回；支持图片、群聊绑定、成员白名单与群聊上下文、插话、远程停止和双向同步。 |
+| Telegram 客户端 | `enso.tgclient` | 0.6.0 | 官方 | 在侧栏里用手机号登录自己的 Telegram 账号，像官方客户端一样聊天：会话列表与聊天分组、论坛话题、实时收发、相册、边下边播视频、表情与贴纸面板、编辑、回复、表情回应、已读详情、切换发言身份、机器人按钮与键盘、新消息系统通知；附带 Agent 工具，可查聊天、读写消息、订阅新消息。支持 socks5 与 MTProxy 代理。 |
 | 会话轨迹 | `enso.trajectory` | 0.1.1 | 官方 | 查看当前会话的轨迹：每一轮的用户提示、模型请求、工具与子代理调用、token、缓存命中和耗时。 |
 | 双语对照翻译 | `enso.translate` | 0.1.2 | 官方 | 把思考过程和回复正文译成目标语言，原文下面紧跟译文。代码、链接、路径和公式保持原样。 |
 | Walkthrough | `enso.walkthrough` | 0.1.0 | 官方 | 把 Git diff、提交范围或当前会话的改动收成一步步的讲解：每步有标题、说明和对应代码，可以改文字，一次看一步。 |

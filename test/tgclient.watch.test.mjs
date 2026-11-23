@@ -17,7 +17,7 @@ const session = (() => {
   return `1${Buffer.concat([dc, alen, addr, port, key]).toString('base64')}`;
 })();
 
-async function withWatch(t, fn, { blankId = false, forum = false } = {}) {
+async function withWatch(t, fn, { blankId = false, forum = false, inject } = {}) {
   let dataDir;
   let timers = false;
   let failSelf = false;
@@ -74,7 +74,12 @@ async function withWatch(t, fn, { blankId = false, forum = false } = {}) {
     ui: { notify: async () => {}, openExternal: async () => {} },
     renderer: { handle: () => {} },
     tools: { register: (name, fn) => tools.set(name, fn) },
-    session: { inject: async (input) => injected.push(input) },
+    session: {
+      inject: async (input) => {
+        await inject?.(input);
+        injected.push(input);
+      },
+    },
   });
   await tools.get('tg_watch')({ debounceSec: 30, minIntervalSec: 60 }, { sessionId: 's1' });
   let n = 0;
@@ -401,5 +406,137 @@ test('对象形式指定话题时该群没开话题就拒绝', async (t) => {
       () => tools.get('tg_watch')({ chats: [{ chat: '100', topic: 55 }] }, { sessionId: 's1' }),
       /不是开了话题的群/,
     );
+  });
+});
+
+const user = (id, name) => new Api.User({ id, firstName: name });
+const noRole = (sender) => {
+  for (const k of ['owner', 'isOwner', 'role', 'trusted']) assert.equal(k in sender, false);
+};
+
+test('单发送者投递附带 sender，自己的 out 消息带 userId，缺 senderId 时用 getMe', async (t) => {
+  await withWatch(t, async ({ injected, emit, tick }) => {
+    await emit({ message: '群友一句' });
+    await tick(30_000);
+    assert.equal(injected.length, 1);
+    assert.deepEqual(injected[0].sender, { channel: 'telegram', chatId: '100', userId: '7', displayName: 'Bob' });
+    noRole(injected[0].sender);
+
+    await emit({ out: true, message: '手机上说', senderId: 42, sender: user(42, 'Phone') });
+    await tick(60_000);
+    assert.equal(injected.length, 2);
+    assert.deepEqual(injected[1].sender, { channel: 'telegram', chatId: '100', userId: '42', displayName: 'Me' });
+    noRole(injected[1].sender);
+
+    await emit({ out: true, message: '没带发送者', senderId: undefined, sender: undefined, fromId: undefined });
+    await tick(60_000);
+    assert.equal(injected.length, 3);
+    assert.match(injected[2].text, /没带发送者/);
+    assert.deepEqual(injected[2].sender, { channel: 'telegram', chatId: '100', userId: '42', displayName: 'Me' });
+    noRole(injected[2].sender);
+  });
+});
+
+test('防抖批里 owner 和群友交替出现时按发送者拆成两批', async (t) => {
+  await withWatch(t, async ({ injected, emit, tick }) => {
+    await emit({ message: '主1', senderId: 42, sender: user(42, 'Ann') });
+    await emit({ message: '群1', senderId: 7, sender: user(7, 'Bob') });
+    await emit({ message: '主2', senderId: 42, sender: user(42, 'Ann') });
+    await tick(30_000);
+    assert.equal(injected.length, 2);
+    assert.match(injected[0].text, /共 2 条/);
+    assert.match(injected[0].text, /主1/);
+    assert.match(injected[0].text, /主2/);
+    assert.doesNotMatch(injected[0].text, /群1/);
+    assert.equal(injected[0].sender.userId, '42');
+    assert.match(injected[1].text, /共 1 条/);
+    assert.match(injected[1].text, /群1/);
+    assert.doesNotMatch(injected[1].text, /主1|主2/);
+    assert.equal(injected[1].sender.userId, '7');
+    noRole(injected[0].sender);
+    noRole(injected[1].sender);
+  });
+});
+
+test('频道身份或缺失 senderId 与个人消息拆成两批，非个人批不填 userId', async (t) => {
+  await withWatch(t, async ({ injected, emit, tick }) => {
+    await emit({ message: '人话', senderId: 7, sender: user(7, 'Bob') });
+    await emit({
+      message: '频道说',
+      senderId: 7,
+      sender: undefined,
+      fromId: new Api.PeerChannel({ channelId: 999n }),
+    });
+    await tick(30_000);
+    assert.equal(injected.length, 2);
+    const human = injected.find((x) => x.sender.userId === '7');
+    const anon = injected.find((x) => !('userId' in x.sender));
+    assert.ok(human);
+    assert.match(human.text, /人话/);
+    assert.doesNotMatch(human.text, /频道说/);
+    assert.ok(anon);
+    assert.match(anon.text, /频道说/);
+    assert.equal(anon.sender.channel, 'telegram');
+    assert.equal(anon.sender.chatId, '100');
+    noRole(anon.sender);
+
+    await emit({ message: '又是人' });
+    await emit({ message: '没身份', senderId: undefined, sender: undefined });
+    await tick(60_000);
+    assert.equal(injected.length, 4);
+    const named = injected[2];
+    const nameless = injected[3];
+    assert.equal(named.sender.userId, '7');
+    assert.match(named.text, /又是人/);
+    assert.equal('userId' in nameless.sender, false);
+    assert.match(nameless.text, /没身份/);
+    assert.equal(nameless.sender.channel, 'telegram');
+  });
+});
+
+test('同一发送者跨聊天时省略 chatId', async (t) => {
+  await withWatch(t, async ({ injected, emit, tick }) => {
+    const me = user(42, 'Ann');
+    await emit({ message: '这边', senderId: 42, sender: me });
+    await emit({
+      message: '那边',
+      chatId: 200,
+      senderId: 42,
+      sender: me,
+      getChat: async () => new Api.Chat({ id: 200, title: '另' }),
+    });
+    await tick(30_000);
+    assert.equal(injected.length, 1);
+    assert.match(injected[0].text, /这边/);
+    assert.match(injected[0].text, /那边/);
+    assert.deepEqual(injected[0].sender, { channel: 'telegram', userId: '42', displayName: 'Ann' });
+    assert.equal('chatId' in injected[0].sender, false);
+  });
+});
+
+test('拆批中途后一组投递失败时，已成功的不重投，失败的退避后补上', async (t) => {
+  let calls = 0;
+  await withWatch(t, async ({ injected, emit, tick }) => {
+    await emit({ message: '主人甲', senderId: 42, sender: user(42, 'Ann') });
+    await emit({ message: '群友乙', senderId: 7, sender: user(7, 'Bob') });
+    await tick(30_000);
+    assert.equal(injected.length, 1);
+    assert.match(injected[0].text, /主人甲/);
+    assert.doesNotMatch(injected[0].text, /群友乙/);
+    assert.equal(injected[0].sender.userId, '42');
+    await tick(4_999);
+    assert.equal(injected.length, 1);
+    await tick(1);
+    assert.equal(injected.length, 2);
+    assert.match(injected[1].text, /群友乙/);
+    assert.doesNotMatch(injected[1].text, /主人甲/);
+    assert.deepEqual(injected[1].sender, { channel: 'telegram', chatId: '100', userId: '7', displayName: 'Bob' });
+    await tick(120_000);
+    assert.equal(injected.length, 2);
+  }, {
+    inject: async () => {
+      calls += 1;
+      if (calls === 2) throw Object.assign(new Error('inject down'), { code: 'SESSION_NOT_RUNNING' });
+    },
   });
 });

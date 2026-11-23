@@ -44,11 +44,13 @@ test('createClient 只传档案路径，换设备次数用 SDK 默认值', async
 });
 
 test('播放遇到设备被拒或空结果：交给 SDK，插件不再自己换设备', async () => {
+  // SDK 自己会换设备（deviceResets 默认 2），插件这边只负责把错误码翻译成人话
+  const wording = { DEVICE_REJECTED: /已换新设备仍/, ANONYMOUS_LIMITED: /限制了匿名访问/ };
   for (const code of ['DEVICE_REJECTED', 'ANONYMOUS_LIMITED']) {
     const { call, state } = await setup({ resolvePlayback: [err(code)] });
     await assert.rejects(call('open', { episodeId: 'e1' }), (e) => {
       assert.equal(e.code, code);
-      assert.match(e.message, /已换新设备仍/);
+      assert.match(e.message, wording[code]);
       assert.doesNotMatch(e.message, /稍后再试/);
       return true;
     });
@@ -75,8 +77,9 @@ test('推荐空结果：换设备重试，仍为空时报错而不是当成看�
 
   const bad = await setup({ discover: [err('ANONYMOUS_LIMITED')] });
   await assert.rejects(bad.call('discover', {}), (e) => e.code === 'ANONYMOUS_LIMITED' && !/稍后再试/.test(e.message));
-  assert.equal(bad.state.resets, 2);
-  assert.equal(bad.state.calls.discover, 3);
+  // 服务端按 IP 限流，连续换设备只会更快触发风控，所以只换一次
+  assert.equal(bad.state.resets, 1);
+  assert.equal(bad.state.calls.discover, 2);
 
   const end = await setup({ discover: [err('END_OF_LIST')] });
   assert.deepEqual(await end.call('discover', { cursor: 'c2' }), { items: [], hasMore: false });

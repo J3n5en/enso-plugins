@@ -13,6 +13,7 @@ import {
   pendingTargets,
   rootSession,
   route,
+  senderOf,
   setAllowed,
   takeReply,
 } from './lib.mjs';
@@ -242,6 +243,7 @@ export function activate(enso, { loop = true } = {}) {
         ...(attached ? { images: attached } : {}),
         deliverAs: retry ? 'followUp' : action.deliverAs,
         triggerTurn: true,
+        sender: senderOf(action),
       });
     const done = () => action.image && images.delete(action.image.fileId);
     if (retry) {

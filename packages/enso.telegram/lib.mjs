@@ -92,6 +92,20 @@ export function createPairing(state, sessionId, now, random = Math.random) {
 /** 群里以匿名管理员身份发言时，from 固定是这个机器人账号 */
 const ANONYMOUS_ADMIN = 1087968824;
 const isBotUser = (u) => u.is_bot && u.id !== ANONYMOUS_ADMIN;
+const SENDER_MAX = 128;
+
+const boundedId = (value) => {
+  if (value == null) return undefined;
+  const id = String(value).trim();
+  return id.length >= 1 && id.length <= SENDER_MAX ? id : undefined;
+};
+
+const displayNameOf = (value) => {
+  const name = String(value ?? '').trim().slice(0, SENDER_MAX);
+  return name || undefined;
+};
+
+const fromNameOf = (value) => displayNameOf(String(value ?? '').replace(/\s+/g, ' '));
 
 export const userOf = (u) => ({
   id: u.id,
@@ -175,6 +189,8 @@ function decide(state, update, now, bot) {
   if (typeof chatId !== 'number') return { kind: 'ignore' };
   const isGroup = isGroupChat(m.chat);
   const from = m.from?.username ?? m.from?.first_name ?? String(m.from?.id ?? chatId);
+  const fromId = m.from?.id != null && m.from.id !== ANONYMOUS_ADMIN ? String(m.from.id) : undefined;
+  const fromName = fromNameOf(m.from ? userOf(m.from).name : from);
   const reply = (text) => ({ kind: 'reply', chatId, text });
   let text = String(m.text ?? m.caption ?? '').trim();
   const binding = state.bindings.find((b) => b.chatId === chatId);
@@ -262,7 +278,7 @@ function decide(state, update, now, bot) {
         return { kind: 'stop', chatId, sessionId: binding.sessionId };
       case 'steer':
         if (!command.arg) return reply('用法：/steer 补充内容');
-        return inject(binding, chatId, command.arg, from, m.message_id, 'steer');
+        return inject(binding, chatId, command.arg, from, m.message_id, 'steer', fromId, fromName);
     }
   }
 
@@ -274,7 +290,7 @@ function decide(state, update, now, bot) {
   if (image === 'too-large') return reply('图片超过 5MB，请压缩后再发。');
   if (image) {
     return {
-      ...inject(binding, chatId, text || '（用户发来一张图片）', from, m.message_id, 'followUp'),
+      ...inject(binding, chatId, text || '（用户发来一张图片）', from, m.message_id, 'followUp', fromId, fromName),
       image,
     };
   }
@@ -283,7 +299,7 @@ function decide(state, update, now, bot) {
       ? reply('暂只支持文字和图片，文件、语音等请附带文字说明或改用 EnsoCode。')
       : { kind: 'ignore' };
   }
-  return inject(binding, chatId, text, from, m.message_id, 'followUp');
+  return inject(binding, chatId, text, from, m.message_id, 'followUp', fromId, fromName);
 }
 
 /** 照片取不超过上限的最大尺寸；以文件发送的图片按 mime 识别 */
@@ -302,7 +318,7 @@ function imageOf(m) {
   return null;
 }
 
-const inject = (binding, chatId, text, from, messageId, deliverAs) => ({
+const inject = (binding, chatId, text, from, messageId, deliverAs, fromId, fromName) => ({
   kind: 'inject',
   chatId,
   sessionId: binding.sessionId,
@@ -310,7 +326,21 @@ const inject = (binding, chatId, text, from, messageId, deliverAs) => ({
   from,
   messageId,
   deliverAs,
+  ...(fromId ? { fromId } : {}),
+  ...(fromName ? { fromName } : {}),
 });
+
+export function senderOf(action) {
+  const chatId = boundedId(action?.chatId);
+  const userId = boundedId(action?.fromId);
+  const displayName = displayNameOf(action?.fromName ?? action?.from);
+  return {
+    channel: 'telegram',
+    ...(chatId ? { chatId } : {}),
+    ...(userId && userId !== String(ANONYMOUS_ADMIN) ? { userId } : {}),
+    ...(displayName ? { displayName } : {}),
+  };
+}
 
 export const inboundText = ({ from, text, context }) => {
   const head = context?.length
