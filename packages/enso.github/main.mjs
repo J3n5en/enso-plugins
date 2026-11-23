@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { basename, join } from 'node:path';
+import { createWatcher } from './watch.mjs';
 
 const CLIENT_ID = 'Ov23liudxhEHEczTvPcC';
 const API = 'https://api.github.com';
@@ -393,6 +394,29 @@ export function activate(enso) {
   enso.tools.register('github_run', run);
   enso.tools.register('github_job_log', jobLog);
   enso.tools.register('github_run_action', runAction);
+
+  const watchFile = join(enso.dataDir, 'watch.json');
+  const watcher = createWatcher({
+    request: (path, { etag } = {}) => request('GET', path, { headers: etag ? { 'if-none-match': etag } : undefined }),
+    login: async () => (await call('GET', '/user'))?.login ?? null,
+    inject: (input) => enso.session.inject(input),
+    notify: (title, body) => enso.ui.notify(title, body),
+    load: () => readFile(watchFile, 'utf8').then(JSON.parse).catch(() => null),
+    save: async (state) => {
+      await mkdir(enso.dataDir, { recursive: true });
+      await writeFile(`${watchFile}.tmp`, JSON.stringify(state));
+      await rename(`${watchFile}.tmp`, watchFile);
+    },
+  });
+  enso.tools.register('github_watch', async (args, ctx) => {
+    if (!ctx?.sessionId) throw new Error('只能在会话里调用');
+    await requireCred();
+    const repos = Array.isArray(args?.repos) && args.repos.length ? args.repos : [await repoOf({}, ctx)];
+    return watcher.watch(ctx.sessionId, { ...args, repos }, ctx.projectRoot ? basename(ctx.projectRoot) : undefined);
+  });
+  enso.tools.register('github_unwatch', (_args, ctx) => watcher.unwatch(ctx?.sessionId));
+  enso.tools.register('github_watch_status', (_args, ctx) => watcher.status(ctx?.sessionId));
+  enso.schedules?.register('watch', () => watcher.tick());
 
   enso.renderer.handle('state', async (_args, ctx) => {
     const cred = await credential();
