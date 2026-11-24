@@ -59,7 +59,7 @@ EnsoCode 官方插件市场的源仓库 · [浏览插件](https://enso-plugins.j
 | 奶龙 | `enso.nailong` | 0.1.5 | 官方 | 奶龙主题：奶油黄配巧克力棕，奶龙在输入框后面探头、在侧栏躺平、思考时「在忙」。 |
 | 奶蛙 | `enso.naiwa` | 0.1.2 | 官方 | 奶蛙主题：荷叶绿配奶黄，奶蛙在输入框后面探头、在侧栏爬行、思考时托腮，干完活就捧腹大笑。 |
 | OpenSpec | `enso.openspec` | 0.1.0 | 官方 | 侧栏按阶段查看当前项目的 OpenSpec 变更：任务进度、下一步、工单，以及文档里能识别的 PR。实现和收尾会把提示发到对应的 Enso 会话。 |
-| [pstack](https://github.com/cursor/plugins/tree/main/pstack) | `enso.pstack` | 0.3.5 | 官方 | Lauren Tan 的 pstack 0.15.46（MIT）：poteto-mode 按任务挑选 playbook，配套 arena、interrogate、architect 等 58 个 skill 和工程原则，先深挖再并行。只在输入框选了「pstack」预设的会话里加载。在输入框按钮里为某个会话打开后，该会话的每条消息自动展开 poteto-mode。 |
+| [pstack](https://github.com/cursor/plugins/tree/main/pstack) | `enso.pstack` | 0.3.6 | 官方 | Lauren Tan 的 pstack 0.15.48（MIT）：poteto-mode 按任务挑选 playbook，配套 arena、interrogate、architect 等 59 个 skill 和工程原则，先深挖再并行。只在输入框选了「pstack」预设的会话里加载。在输入框按钮里为某个会话打开后，该会话的每条消息自动展开 poteto-mode。 |
 | Scheduler | `enso.scheduler` | 1.2.0 | 官方 | 定时任务：按 cron 到点向会话发送提示词或弹出系统通知，侧栏显示下次运行时间与倒计时。 |
 | Skill Usage | `enso.skillusage` | 0.1.0 | 官方 | 侧栏查看技能、MCP 和子代理真正被用了多少：哪些放进了上下文却很少或从未调用，以及它们大约占多少 token。 |
 | 雷霆战机 | `enso.skyfighter` | 0.1.1 | 官方 | 侧栏里的纵向弹幕战役：三种战机、五关空域、四色武器和关间强化。离线可玩。 |

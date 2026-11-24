@@ -1,4 +1,4 @@
-> EnsoCode 版 pstack，生成自 [cursor/plugins pstack 0.15.46](https://github.com/cursor/plugins/tree/0b46ec399d55f2829e88822998f53b84944837d3/pstack)，作者 Lauren Tan，MIT 协议。pstack 的 skill 只在输入框选了「pstack」预设的会话里加载，这类会话的每个任务都会先走 poteto-mode。在输入框按钮里为某个会话打开后，该会话的每条消息自动展开 poteto-mode。Cursor 名称在 EnsoCode 里的对应见 [docs/harness/enso.md](docs/harness/enso.md)。不要手改，在 enso-plugins 仓库运行 `node scripts/pstack/generate.mjs [--source <cursor-plugins>/pstack]` 重新生成。
+> EnsoCode 版 pstack，生成自 [cursor/plugins pstack 0.15.48](https://github.com/cursor/plugins/tree/9e278fe4d4ecd8bfe98b1b79bf4be662efb338cc/pstack)，作者 Lauren Tan，MIT 协议。pstack 的 skill 只在输入框选了「pstack」预设的会话里加载，这类会话的每个任务都会先走 poteto-mode。在输入框按钮里为某个会话打开后，该会话的每条消息自动展开 poteto-mode。Cursor 名称在 EnsoCode 里的对应见 [docs/harness/enso.md](docs/harness/enso.md)。不要手改，在 enso-plugins 仓库运行 `node scripts/pstack/generate.mjs [--source <cursor-plugins>/pstack]` 重新生成。
 
 # pstack
 
@@ -129,6 +129,7 @@ to keep [`/poteto-mode`](./skills/poteto-mode/SKILL.md) on across turns, pick it
 | [`/poteto-help`](./skills/poteto-help/SKILL.md) | you're new to pstack, or unsure which skill, playbook, or principle fits. finds out what you're trying to do, answers that part, and hands you a prompt to type. runs only when you type `/poteto-help`. |
 | [`/in-your-own-words`](./skills/in-your-own-words/SKILL.md) | you want the agent to play back your goal and the problem before it starts. runs only when you type `/in-your-own-words`. |
 | [`/sharpen`](./skills/sharpen/SKILL.md) | you want a prompt made deeper, not bigger, before you send it: what a top professional would do that you didn't ask for, the raw material they'd start from, their methods and tools, and an outside check that the result is right. hands back the rewritten prompt, which asks the agent to prototype any choice an experiment can settle and leaves product and preference choices to you. doesn't do the task. runs only when you type `/sharpen`. |
+| [`/reframe`](./skills/reframe/SKILL.md) | you can't name what you're building, so you can't ask an agent for it clearly. starts from your files and your own words. if they could describe more than one problem, it lists the two or three it could be, with the sign that tells each apart, and picks the likeliest. then it gives 8 to 12 expert terms ranked by how much they'd change what you build, each tied to the part of your description it names and to a real project whose link it checked. borrows terms from 2 or 3 neighboring fields that solved the same problem under other names, says where each analogy breaks, then rewrites your description with the new words. runs only when you type `/reframe`. |
 | [`/how`](./skills/how/SKILL.md) | you want a walkthrough of how a subsystem works. |
 | [`/why`](./skills/why/SKILL.md) | you want to know why something was built this way. answers from the record, not the code: the commits and pr discussions that introduced it and each later change, and other sources when that trail is thin. cites what the authors wrote, marks its own inferences, and says what the record does not answer. |
 | [`/recall`](./skills/recall/SKILL.md) | you're starting or resuming work and want your recent context on a topic rebuilt from your own chat history and the shared record, handed back as a tight current-state brief. |
@@ -283,7 +284,7 @@ when a default changes, a rule written before the change still pins the old defa
 
 ## automations
 
-pstack also ships a dormant [benny automation pack](https://github.com/cursor/plugins/tree/main/pstack/automations/benny). benny triages slack issue reports, then reproduces and fixes confirmed bugs with real ui evidence. its files are not registered as slash skills.
+pstack also ships a dormant [benny automation pack](https://github.com/cursor/plugins/tree/9e278fe4d4ecd8bfe98b1b79bf4be662efb338cc/pstack/automations/benny). benny triages slack issue reports, then reproduces and fixes confirmed bugs with real ui evidence. its files are not registered as slash skills.
 
 to set it up, point cursor at [`FOR_AGENTS.md`](https://github.com/cursor/plugins/blob/main/pstack/automations/benny/FOR_AGENTS.md). setup copies the pack into the target repository at `.cursor/automations/benny/`, enables pstack there for shared skills, and keeps user configuration outside the copied pack. benny runs on cursor automations, so it is cursor-only.
 
