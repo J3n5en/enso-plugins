@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-24T03:29:46.101Z",
-  "sequence": 139,
+  "generatedAt": "2026-11-24T10:16:00.619Z",
+  "sequence": 140,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -2540,7 +2540,7 @@
     {
       "id": "enso.tgclient",
       "name": "Telegram 客户端",
-      "description": "在侧栏里用手机号登录自己的 Telegram 账号，像官方客户端一样聊天：会话列表与聊天分组、论坛话题、实时收发、相册、边下边播视频、表情与贴纸面板、编辑、回复、表情回应、已读详情、切换发言身份、机器人按钮与键盘、新消息系统通知；附带 Agent 工具，可查聊天、读写消息、订阅新消息。支持 socks5 与 MTProxy 代理。",
+      "description": "在侧栏里用手机号登录自己的 Telegram 账号，像官方客户端一样聊天：会话列表与聊天分组、论坛话题、实时收发、相册、边下边播视频、表情与贴纸面板、编辑、回复、表情回应、已读详情、切换发言身份、机器人按钮与键盘、新消息系统通知；附带 Agent 工具，可查聊天、读写消息、发图片、订阅新消息。支持 socks5 与 MTProxy 代理。",
       "tier": "official",
       "tags": [
         "chat",
@@ -2549,11 +2549,11 @@
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.tgclient.svg",
       "category": "integrations",
       "readme": {
-        "path": "packages/enso.tgclient/0.7.1.readme.md",
-        "sha256": "06d0e94f33f4ee4165aa4f0780e3176286f0b4f7cec3ff1f77c1a8b73853c599",
-        "size": 6034
+        "path": "packages/enso.tgclient/0.8.0.readme.md",
+        "sha256": "700781ff006abd3ab7f6d872a2ff1601dc20265df99229b81c52bc1198fbe209",
+        "size": 7639
       },
-      "latest": "0.7.1",
+      "latest": "0.8.0",
       "versions": [
         {
           "version": "0.1.0",
@@ -2904,6 +2904,25 @@
           "sha256": "86bec37ab3dd158c240f8ad96440fc7354a88008dfc84047072a963d9b6e3206",
           "size": 1354634,
           "publishedAt": "2026-11-24T03:29:46.101Z"
+        },
+        {
+          "version": "0.8.0",
+          "engines": {
+            "enso": ">=0.3.14"
+          },
+          "permissions": [
+            "agent.tool",
+            "agent.inject",
+            "ui.view",
+            "ui.notify",
+            "ui.openExternal",
+            "process.background",
+            "session.read"
+          ],
+          "path": "packages/enso.tgclient/0.8.0.zip",
+          "sha256": "ad52d12f625b3fa22ff3a4cd5d1d39373b31d26d89f70ac16eb88ac8e240c593",
+          "size": 1363608,
+          "publishedAt": "2026-11-24T10:16:00.619Z"
         }
       ]
     },
