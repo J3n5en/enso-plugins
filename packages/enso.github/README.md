@@ -42,6 +42,7 @@
 | `github_watch` | 监听仓库事件，有事件才投递进本会话 |
 | `github_unwatch` | 停止本会话的监听 |
 | `github_watch_status` | 查看本会话的监听配置、轮询状态与限流 |
+| `github_link_pr` | 把刚开的 PR 绑到本会话的需求线程 |
 
 `repo` 不填时使用当前项目的 `origin`。
 
@@ -52,6 +53,8 @@
 先在 设置 → 插件 → GitHub 打开「允许向任意运行中的会话发送消息」，否则消息会暂存，并弹一次系统通知提醒。
 
 一个会话只有一个监听，再次调用会替换旧的。多个会话监听同一仓库时共用一次轮询。
+
+宿主有需求线程时，PR 的打开、评论、review、CI 失败、合并和关闭先交给对应线程，不再分给订阅会话。给聊天里的需求开出 PR 后立刻调用 `github_link_pr`，之后这条 PR 的评论、CI 和合并只进本会话，里程碑由 EnsoCode 回复原消息。宿主有对象认领时，其余事件只投给认领它的一个订阅会话（订阅更早的优先）；认领失败或持有者不是订阅者时，仍投给每个符合条件的会话。没有这两个能力的旧宿主保持原样，每个订阅会话都收到。
 
 ### 监听页
 
@@ -74,7 +77,7 @@
 | `pr_merged_closed` | PR 合并或关闭 |
 | `issue_opened` | 新 issue 或重新打开 |
 | `mention` | 正文或评论里 @ 了你、你的 PR / issue 有新评论或 review、有人请你 review |
-| `ci_failed` | Actions 运行以 failure、timed_out 或 startup_failure 结束 |
+| `ci_failed` | 同一提交的 Actions 全部结束后，其中有 failure、timed_out 或 startup_failure。每个 sha 只报一次 |
 | `pr_commented` | PR 有新评论（含行内评论），默认不开 |
 | `issue_commented` | issue 有新评论，默认不开 |
 
@@ -119,6 +122,7 @@
 - 你的 PR 的 review 每轮最多查 5 个 PR。
 - 只看 `branches` 里分支的 CI，PR 分支的 CI 要写进 `branches` 才看。
 - 两次轮询之间同一分支完成超过 30 次运行时，更早的那些不报。
+- 同一 sha 还有未完成的运行时先不报；已经报过的 sha 再次失败不重复报。
 - 提及按正文里的 `@用户名` 识别，`@组织/团队` 不算。
 - 会话删除后监听不会自动停止。在 GitHub 侧栏点 **监听 N**，停掉标成 **会话已删除** 的订阅。
 
@@ -135,3 +139,7 @@
 | `agent.inject` | 把监听到的事件投递进会话 |
 | `process.background` | 每分钟运行一次轮询任务 |
 | `ui.notify` | 投递被拒时提醒你打开授权 |
+
+## 更新
+
+- 0.6.0：接入需求线程和对象认领。PR 动态优先交给需求线程，其余事件只投给认领它的订阅会话；旧宿主仍投给每个订阅会话。CI 按提交去重，等该提交的运行都结束后再报失败。新增 `github_link_pr`。

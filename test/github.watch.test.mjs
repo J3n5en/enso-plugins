@@ -75,7 +75,7 @@ function fakeHost() {
   };
 }
 
-function setup() {
+function setup(opts = {}) {
   const host = fakeHost();
   const env = { clock: T0, calls: [], injected: [], notes: [], saved: null, timers: new Set(), login: 'me', host };
   const gh = fakeGitHub(env);
@@ -132,17 +132,28 @@ function setup() {
       const branch = o.branch ?? 'main';
       (r.runs[branch] ??= []).unshift({
         id,
-        name: 'CI',
-        run_number: id,
-        run_attempt: 1,
+        name: o.name ?? 'CI',
+        run_number: o.number ?? id,
+        run_attempt: o.attempt ?? 1,
         head_branch: branch,
-        head_sha: `run${id}sha00`,
-        status: 'completed',
-        conclusion: 'failure',
+        head_sha: o.sha ?? `run${id}sha00`,
+        status: o.status ?? 'completed',
+        conclusion: o.conclusion === undefined ? 'failure' : o.conclusion,
         actor: { login: o.actor ?? 'bob' },
+        ...(o.triggering ? { triggering_actor: { login: o.triggering } } : {}),
+        pull_requests: o.pulls ?? [],
         updated_at: at(o.created),
         html_url: `https://github.com/o/r/actions/runs/${id}`,
       });
+    },
+    patchRun: (id, patch) => {
+      for (const list of Object.values(r.runs)) {
+        const hit = list.find((x) => x.id === id);
+        if (!hit) continue;
+        Object.assign(hit, patch);
+        if (patch.touch) hit.updated_at = at();
+        return hit;
+      }
     },
     make: () =>
       createWatcher({
@@ -152,12 +163,15 @@ function setup() {
           host.check();
           if (env.injectError) throw env.injectError;
           env.injected.push(input);
+          return env.injectResult;
         },
         notify: async (title, body) => env.notes.push([title, body]),
         load: async () => (env.saved ? JSON.parse(env.saved) : null),
         save: async (state) => {
           env.saved = JSON.stringify(state);
         },
+        claims: opts.claims,
+        threads: opts.threads,
         now: () => env.clock,
         // 和真 setTimeout 一样，回调沿用排定时器那一刻的异步上下文
         setTimer: (fn, ms) => {
@@ -782,4 +796,278 @@ test('main.mjs：事件投递进 session.inject 时带上 sender', async (t) => 
   assert.equal(injected[0].deliverAs, 'followUp');
   assert.equal(injected[0].triggerTurn, true);
   assertSender(injected[0], 'bob');
+});
+
+/** 仿宿主选举：已有认领不动，否则订阅最早的候选获胜 */
+function fakeClaims(claim) {
+  const held = new Map();
+  const calls = [];
+  return {
+    calls,
+    held,
+    async claim(input) {
+      calls.push({ op: 'claim', ...input });
+      if (claim) return claim(input);
+      const ranked = [...(input.candidates ?? [])].sort((a, b) => (a.subscribedAt ?? 0) - (b.subscribedAt ?? 0) || (a.sessionId < b.sessionId ? -1 : 1));
+      const owner = held.get(input.key) ?? ranked[0]?.sessionId;
+      held.set(input.key, owner);
+      return { acquired: true, status: 'claimed', ownerSessionId: owner };
+    },
+    async renew(key, sessionId) {
+      calls.push({ op: 'renew', key, sessionId });
+      return { key, sessionId };
+    },
+    async release(key, sessionId) {
+      calls.push({ op: 'release', key, sessionId });
+      if (held.get(key) === sessionId) held.delete(key);
+      return true;
+    },
+    async list(filter) {
+      calls.push({ op: 'list', filter });
+      return [...held.entries()]
+        .filter(([key, sessionId]) => (!filter?.prefix || key.startsWith(filter.prefix)) && (!filter?.sessionId || sessionId === filter.sessionId))
+        .map(([key, sessionId]) => ({ key, sessionId }));
+    },
+  };
+}
+
+const sessionsOf = (s) => s.env.injected.map((x) => x.sessionId).sort();
+
+test('旧宿主：两个会话都收到，inject 不带 claimKey', async () => {
+  const s = setup();
+  await s.w.watch('s1', { repos: ['o/r'], events: ['pr_opened'] });
+  s.env.clock += 1000;
+  await s.w.watch('s2', { repos: ['o/r'], events: ['pr_opened'] });
+  s.env.clock += 10_000;
+  s.openPR(1);
+  await s.round();
+  assert.deepEqual(sessionsOf(s), ['s1', 's2']);
+  assert.equal(s.env.injected.every((x) => !('claimKey' in x)), true);
+});
+
+test('有认领时只投给更早订阅的会话，并带上 claimKey', async () => {
+  const claims = fakeClaims();
+  const s = setup({ claims });
+  await s.w.watch('s2', { repos: ['o/r'], events: ['pr_opened'] });
+  s.env.clock += 1000;
+  await s.w.watch('s1', { repos: ['o/r'], events: ['pr_opened'] });
+  s.env.clock += 10_000;
+  s.openPR(1, { title: 'x'.repeat(200) });
+  await s.round();
+  assert.deepEqual(sessionsOf(s), ['s2']);
+  assert.equal(s.env.injected[0].claimKey, 'github:o/r#1:pr_opened');
+  assert.ok(s.env.injected[0].claimLabel.length <= 120);
+  assert.match(s.env.injected[0].claimLabel, /^o\/r#1 /);
+});
+
+test('只有一个订阅会话时照常收到并带 claimKey', async () => {
+  const claims = fakeClaims();
+  const s = setup({ claims });
+  await s.w.watch('s1', { repos: ['o/r'], events: ['pr_opened', 'ci_failed'] });
+  s.env.clock += 10_000;
+  s.openPR(3);
+  s.run(8, { sha: 'ccc111aaa' });
+  await s.round();
+  assert.equal(s.env.injected.length, 1);
+  assert.equal(s.env.injected[0].sessionId, 's1');
+  assert.equal(s.env.injected[0].claimKey, 'github:o/r#3:pr_opened');
+  assert.ok(claims.calls.some((c) => c.op === 'renew' && c.key === 'github:o/r@ccc111aaa:ci_failed' && c.sessionId === 's1'));
+});
+
+test('claims.claim 抛错或持有者不在候选里时，两个会话都收到且不带 claimKey', async () => {
+  const boom = setup({ claims: fakeClaims(() => { throw new Error('down'); }) });
+  await boom.w.watch('s1', { repos: ['o/r'], events: ['pr_opened'] });
+  boom.env.clock += 1000;
+  await boom.w.watch('s2', { repos: ['o/r'], events: ['pr_opened'] });
+  boom.env.clock += 10_000;
+  boom.openPR(1);
+  await boom.round();
+  assert.deepEqual(sessionsOf(boom), ['s1', 's2']);
+  assert.equal(boom.env.injected.every((x) => !('claimKey' in x)), true);
+
+  const stale = setup({ claims: fakeClaims(async () => ({ ownerSessionId: 'ghost', status: 'held-by-other' })) });
+  await stale.w.watch('s1', { repos: ['o/r'], events: ['issue_opened'] });
+  stale.env.clock += 1000;
+  await stale.w.watch('s2', { repos: ['o/r'], events: ['issue_opened'] });
+  stale.env.clock += 10_000;
+  stale.openIssue(4);
+  await stale.round();
+  assert.deepEqual(sessionsOf(stale), ['s1', 's2']);
+  assert.equal(stale.env.injected.every((x) => !('claimKey' in x)), true);
+});
+
+test('同一批多个认领键时，inject 用第一个，其余 renew', async () => {
+  const claims = fakeClaims();
+  const s = setup({ claims });
+  await s.w.watch('s1', { repos: ['o/r'], events: ['pr_opened'] });
+  s.env.clock += 10_000;
+  s.openPR(1);
+  s.openPR(2);
+  await s.round();
+  assert.equal(s.env.injected.length, 1);
+  const key = s.env.injected[0].claimKey;
+  const renewed = claims.calls.filter((c) => c.op === 'renew');
+  assert.match(key, /^github:o\/r#\d:pr_opened$/);
+  assert.equal(renewed.length, 1);
+  assert.notEqual(renewed[0].key, key);
+  assert.equal(renewed[0].sessionId, 's1');
+});
+
+test('认领已转手时清队列且不重试', async () => {
+  const claims = fakeClaims();
+  const s = setup({ claims });
+  await s.w.watch('s1', { repos: ['o/r'], events: ['pr_opened'] });
+  s.env.clock += 10_000;
+  s.openPR(1);
+  s.env.injectResult = { delivered: false, ownerSessionId: 's9', status: 'held-by-other' };
+  await s.round();
+  assert.equal(s.env.injected.length, 1);
+  assert.equal((await s.w.status('s1')).skipped, 1);
+  assert.equal(claims.calls.some((c) => c.op === 'renew'), false);
+  await s.round(2);
+  assert.equal(s.env.injected.length, 1);
+});
+
+test('间隔摘要带上全部分到的认领键', async () => {
+  const claims = fakeClaims();
+  const s = setup({ claims });
+  await s.w.watch('s1', { repos: ['o/r'], events: ['pr_opened'] });
+  s.env.clock += 45 * MIN;
+  for (let n = 1; n <= 12; n++) s.openPR(n);
+  await s.round();
+  assert.equal(s.env.injected.length, 1);
+  const key = s.env.injected[0].claimKey;
+  const renewed = claims.calls.filter((c) => c.op === 'renew').map((c) => c.key);
+  assert.match(key, /^github:o\/r#\d+:pr_opened$/);
+  assert.equal(renewed.length, 11);
+  assert.equal(renewed.includes(key), false);
+  assert.equal(new Set([key, ...renewed]).size, 12);
+});
+
+test('pr_ready 只投给认领者', async () => {
+  const claims = fakeClaims();
+  const s = setup({ claims });
+  await s.w.watch('s1', { repos: ['o/r'], events: ['pr_ready'], settleSec: 60 });
+  s.env.clock += 1000;
+  await s.w.watch('s2', { repos: ['o/r'], events: ['pr_ready'], settleSec: 60 });
+  s.env.clock += 10_000;
+  s.openPR(1);
+  await s.round(2);
+  assert.deepEqual(sessionsOf(s), ['s1']);
+  assert.equal(s.env.injected[0].claimKey, 'github:o/r#1:pr_ready');
+  await s.round(2);
+  assert.equal(s.env.injected.length, 1);
+});
+
+test('需求线程送达后订阅会话收不到，no-thread、delivered false 或抛错时照常投递', async () => {
+  const routed = [];
+  const ok = setup({ threads: { routePrEvent: async (e) => (routed.push(e), { routed: true, delivered: true, threadId: 't' }) } });
+  await ok.w.watch('s1', { repos: ['o/r'], events: ['pr_opened', 'pr_commented'] });
+  ok.env.clock += 10_000;
+  ok.openPR(5);
+  ok.comment(5, { author: 'alice' });
+  await ok.round();
+  assert.equal(ok.env.injected.length, 0);
+  assert.deepEqual(routed.map((e) => e.kind).sort(), ['comment', 'pr_opened']);
+  assert.match(routed[0].text, /需求线程 PR 动态 o\/r#5/);
+  assert.match(routed[0].text, /第三方填写的外部数据/);
+
+  const miss = setup({ threads: { routePrEvent: async () => ({ routed: false, reason: 'no-thread' }) } });
+  await miss.w.watch('s1', { repos: ['o/r'], events: ['pr_opened'] });
+  miss.env.clock += 10_000;
+  miss.openPR(1);
+  await miss.round();
+  assert.equal(miss.env.injected.length, 1);
+
+  const handed = setup({ threads: { routePrEvent: async () => ({ routed: true, delivered: false }) } });
+  await handed.w.watch('s1', { repos: ['o/r'], events: ['pr_opened'] });
+  handed.env.clock += 10_000;
+  handed.openPR(1);
+  await handed.round();
+  assert.equal(handed.env.injected.length, 1);
+
+  const broken = setup({ threads: { routePrEvent: async () => { throw new Error('down'); } } });
+  await broken.w.watch('s1', { repos: ['o/r'], events: ['pr_opened'] });
+  broken.env.clock += 10_000;
+  broken.openPR(1);
+  await broken.round();
+  assert.equal(broken.env.injected.length, 1);
+});
+
+test('有 PR 号的 CI 失败路由带 headSha，送达后订阅会话收不到', async () => {
+  const calls = [];
+  const s = setup({ threads: { routePrEvent: async (e) => (calls.push(e), { routed: true, delivered: true }) } });
+  await s.w.watch('s1', { repos: ['o/r'], events: ['ci_failed'] });
+  s.env.clock += 10_000;
+  s.run(9, { sha: 'deadbeef0123', pulls: [{ number: 4 }] });
+  await s.round();
+  assert.equal(s.env.injected.length, 0);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].kind, 'ci_failed');
+  assert.equal(calls[0].number, 4);
+  assert.equal(calls[0].headSha, 'deadbeef0123');
+});
+
+test('同一 sha 的失败只报一次；未完成时不报，完成后再报；rerun 不重复', async () => {
+  const s = setup();
+  await s.w.watch('s1', { repos: ['o/r'], events: ['ci_failed'] });
+  s.env.clock += 10_000;
+  s.run(1, { sha: 'abc', name: 'Lint', status: 'in_progress', conclusion: null });
+  s.run(2, { sha: 'abc', name: 'CI' });
+  await s.round();
+  assert.equal(s.env.injected.length, 0);
+  s.patchRun(1, { status: 'completed', conclusion: 'failure', touch: true });
+  await s.round();
+  assert.equal(s.env.injected.length, 1);
+  assert.match(s.texts()[0], /Lint/);
+  assert.match(s.texts()[0], /CI/);
+  s.run(3, { sha: 'abc', name: 'CI' });
+  await s.round();
+  assert.equal(s.env.injected.length, 1);
+});
+
+test('升级前已报过的失败 sha 不补报，新 sha 仍报', async () => {
+  const s = setup();
+  await s.w.watch('s1', { repos: ['o/r'], events: ['ci_failed'] });
+  s.env.clock += 10_000;
+  s.run(9, { sha: 'oldsha' });
+  await s.round();
+  assert.equal(s.env.injected.length, 1);
+  const state = JSON.parse(s.env.saved);
+  delete state.repos['o/r'].seen.ciShas;
+  s.env.saved = JSON.stringify(state);
+  s.run(10, { sha: 'oksha', conclusion: 'success' });
+  const b = s.make();
+  await b.ready;
+  s.env.injected.length = 0;
+  await s.step(MIN, b);
+  await s.fire();
+  assert.equal(s.env.injected.length, 0);
+  s.run(11, { sha: 'newsha' });
+  await s.step(MIN, b);
+  await s.fire();
+  assert.equal(s.env.injected.length, 1);
+  assert.match(s.texts()[0], /newsha|CI「CI」#11/);
+});
+
+test('unwatch 释放本会话的 github 认领，释放失败也不抛', async () => {
+  const claims = fakeClaims();
+  const s = setup({ claims });
+  await s.w.watch('s1', { repos: ['o/r'], events: ['pr_opened'] });
+  s.env.clock += 10_000;
+  s.openPR(1);
+  await s.step();
+  claims.held.set('github:o/r#9:comment', 's1');
+  const orig = claims.release.bind(claims);
+  claims.release = async (key, sid) => {
+    if (key.endsWith(':comment')) throw new Error('nope');
+    return orig(key, sid);
+  };
+  assert.equal((await s.w.unwatch('s1')).ok, true);
+  assert.deepEqual(
+    claims.calls.filter((c) => c.op === 'list').map((c) => c.filter),
+    [{ prefix: 'github:', sessionId: 's1' }],
+  );
+  assert.ok(claims.calls.some((c) => c.op === 'release' && c.key === 'github:o/r#1:pr_opened' && c.sessionId === 's1'));
+  assert.equal(claims.held.has('github:o/r#1:pr_opened'), false);
 });
