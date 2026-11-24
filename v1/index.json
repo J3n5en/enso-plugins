@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-24T00:17:43.660Z",
-  "sequence": 137,
+  "generatedAt": "2026-11-24T02:23:28.378Z",
+  "sequence": 138,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -1927,7 +1927,7 @@
     {
       "id": "enso.pstack",
       "name": "pstack",
-      "description": "Lauren Tan 的 pstack 0.15.46（MIT）：poteto-mode 按任务挑选 playbook，配套 arena、interrogate、architect 等 58 个 skill 和工程原则，先深挖再并行。只在输入框选了「pstack」预设的会话里加载。在输入框按钮里为某个会话打开后，该会话的每条消息自动展开 poteto-mode。",
+      "description": "Lauren Tan 的 pstack 0.15.48（MIT）：poteto-mode 按任务挑选 playbook，配套 arena、interrogate、architect 等 59 个 skill 和工程原则，先深挖再并行。只在输入框选了「pstack」预设的会话里加载。在输入框按钮里为某个会话打开后，该会话的每条消息自动展开 poteto-mode。",
       "tier": "official",
       "tags": [
         "skills",
@@ -1939,11 +1939,11 @@
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.pstack.svg",
       "category": "agent",
       "readme": {
-        "path": "packages/enso.pstack/0.3.5.readme.md",
-        "sha256": "ebd29ae8654f8ebf48a4990c538586a99c3c4f8a07d3dd0d5f7df28298fd6633",
-        "size": 28729
+        "path": "packages/enso.pstack/0.3.6.readme.md",
+        "sha256": "f00b65c3b1db08d17bdbe12ced80b87c7ef3dc17c8ce27211a08778512d6dfb7",
+        "size": 29472
       },
-      "latest": "0.3.5",
+      "latest": "0.3.6",
       "versions": [
         {
           "version": "0.1.0",
@@ -2058,6 +2058,20 @@
           "sha256": "cd9a25ca92493603d3bdaec5d34e91eae1c859c8637b487057550d9abef44368",
           "size": 664162,
           "publishedAt": "2026-11-21T03:51:02.574Z"
+        },
+        {
+          "version": "0.3.6",
+          "engines": {
+            "enso": ">=0.2.15"
+          },
+          "permissions": [
+            "agent.intercept",
+            "ui.slot"
+          ],
+          "path": "packages/enso.pstack/0.3.6.zip",
+          "sha256": "379cf3d423a3836328a2f5502e585383f1712cd9b8bffd498f64b844741386db",
+          "size": 667348,
+          "publishedAt": "2026-11-24T02:23:28.378Z"
         }
       ]
     },
