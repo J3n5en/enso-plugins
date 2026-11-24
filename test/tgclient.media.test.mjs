@@ -21,6 +21,7 @@ async function setup() {
   const sent = [];
   const parts = [];
   let nextId = 900;
+  let failAt = 0;
   const msg = (peer, caption) => new Api.Message({
     id: nextId++,
     peerId: new Api.PeerUser({ userId: BigInt(getPeerId(peer).toString()) }),
@@ -44,6 +45,7 @@ async function setup() {
     },
     async getInputEntity() { return null; },
     async sendFile(peer, opts) {
+      if (failAt && sent.length + 1 === failAt) throw Object.assign(new Error('x'), { errorMessage: 'CHAT_WRITE_FORBIDDEN' });
       sent.push(opts);
       if (Array.isArray(opts.file)) return opts.file.map((_, i) => msg(peer, i ? '' : opts.caption[0]));
       return msg(peer, opts.caption);
@@ -67,7 +69,7 @@ async function setup() {
     return p;
   };
   const send = (args, ctx = { sessionId: 's1' }) => tools.get('tg_send_media')({ chat: '42', ...args }, ctx);
-  return { dir, sent, parts, file, send };
+  return { dir, sent, parts, file, send, failAt: (n) => { failAt = n; } };
 }
 
 async function run(fn) {
@@ -123,6 +125,13 @@ describe('tg_send_media', { concurrency: false }, () => {
       assert.deepEqual(r.ids, [900, 901]);
     }));
 
+  test('逐张发到一半失败时报出已发出的 id', () =>
+    run(async (t) => {
+      t.failAt(2);
+      const files = [await t.file('a.png', PNG), await t.file('b.png', PNG)];
+      await assert.rejects(t.send({ files, asAlbum: false }), /没有在这里发言的权限；前 1 张已发出（消息 id 900）/);
+    }));
+
   test('topic 与 replyTo 传给 GramJS', () =>
     run(async (t) => {
       const p = await t.file('a.png', PNG);
@@ -147,6 +156,7 @@ describe('tg_send_media', { concurrency: false }, () => {
   test('调用会话的项目目录在白名单内', () =>
     run(async (t) => {
       await assert.rejects(t.send({ files: [manifestPath] }, { sessionId: 's1', projectRoot: repo }), /只支持图片/);
+      await assert.rejects(t.send({ files: [manifestPath] }, { sessionId: 's1', projectRoot: '/' }), /不在允许的目录/);
     }));
 
   test('类型不对、过大、数量不对都被拒', () =>

@@ -34,17 +34,17 @@
 - 处理状态表情：投递成功后给原消息点 ⚡，回合结束换成 ✅（失败 ❌；表情不被允许时退到 👍/👎）；宿主拒收（认领在别的会话）时不点表情、也不显示正在输入；同一聊天同时只挂一个 ⚡、两次请求至少隔 2 秒，失败静默忽略；`tg_watch` 传 `reactions: false` 关闭
 - 0.7.0：宿主有认领接口时，多个会话监听同一群，一条消息只投给认领它的会话（键 `tg:<chatId>:<被回复的消息 id 或本条 id>`，回复归到原消息）；没有该接口的旧宿主仍投给每个监听。`tg_unwatch` 或替换监听时释放本会话的 `tg:` 认领
 - `tg_track_demand` 把认定为需求的群消息登记成需求线程（发起人取自消息本身）。之后 PR 开出、CI 失败、合并、需要人这些里程碑由 EnsoCode 自动回复原消息。不要自己把 PR 评论或 CI 结果转发回群
-- 0.8.0：`tg_send_media` 以本人身份发 1 到 10 张本地图片。参数 `chat`（规则同 `tg_send_message`）、`files`（绝对路径）、`caption`（挂在第一张或整个相册上）、`asAlbum`（默认 true，多张合成相册；false 逐张发）、`topic`、`replyTo`；返回每条消息的 `ids`，相册一张图一个 id。相册里有 gif 或 webp 时整组按文件发（Telegram 的规则）
+- 0.8.0：`tg_send_media` 以本人身份发 1 到 10 张本地图片。参数 `chat`（规则同 `tg_send_message`）、`files`（绝对路径）、`caption`（挂在第一张或整个相册上）、`asAlbum`（默认 true，多张合成相册；false 逐张发）、`topic`、`replyTo`；返回每条消息的 `ids`，相册一张图一个 id。png、jpg 按图片发，gif、webp 按文件发；相册里有 gif 或 webp 时整组按文件发（Telegram 的规则）。逐张发送中途失败时，报错里列出已经发出的 id，重试时只发剩下的
 
 ## `tg_send_media` 能读哪些文件
 
-先 `realpath`，再要求落在下面这些目录里，符号链接指到外面一律拒绝：
+先 `realpath`，再要求落在下面这些目录里，符号链接指到外面一律拒绝。`/` 和家目录本身即使出现在这些来源里也不算数：
 
 - 系统临时目录：`/tmp`、`/private/tmp`、`os.tmpdir()`、`/var/folders`
-- 调用会话的项目目录（会话在 worktree 里就是那个 worktree），以及 EnsoCode 数据目录下的 `worktrees/`
+- 调用会话的项目目录（会话在 worktree 里就是那个 worktree），以及 EnsoCode 数据目录下的 `worktrees/`（EnsoCode 管理的全部会话 worktree）
 - EnsoCode 的聊天图片目录：数据目录下的 `bot-chats/`，以及环境变量 `ENSO_USER_IMAGE_DIRS` 里的目录
 
-只收图片：按文件头认 png、jpg、webp、gif，不看扩展名；单个文件最大 10MB。不支持任意文件。路径、大小或类型不对时直接报错，什么都不上传。
+只收图片：按文件头认 png、jpg、webp、gif，不看扩展名；单个文件最大 10MB，大小和内容从同一个文件句柄读取。不支持任意文件。路径、大小或类型不对时直接报错，什么都不上传。
 
 这些目录不在「当前项目」之内的部分由插件进程自己读取，不走宿主的 `fs.read`，所以清单的权限没有变化。
 

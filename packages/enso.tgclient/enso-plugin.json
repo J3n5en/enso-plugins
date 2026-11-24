@@ -349,7 +349,7 @@
       },
       {
         "name": "tg_send_media",
-        "description": "Send 1-10 local images as the user's own Telegram account. Only send when the user explicitly asked to, to the chat they meant. Several files become one album by default (asAlbum:false sends them one by one); caption goes on the first image, and Telegram markdown works in it. Files must be absolute paths inside the system temp dir (/tmp, /var/folders), the calling session's project or worktree, or the EnsoCode chat image folder; symlinks are resolved first. Images only (png, jpg, webp, gif by file header), up to 10MB each. If chat is omitted it goes to the chat open in the sidebar. Returns the sent message ids (album: one id per image).",
+        "description": "Send 1-10 local images as the user's own Telegram account. Only send when the user explicitly asked to, to the chat they meant. Several files become one album by default (asAlbum:false sends them one by one); caption goes on the first image, and Telegram markdown works in it. Files must be absolute paths inside the system temp dir (/tmp, /var/folders), the calling session's project or worktree, EnsoCode's managed worktrees folder, or the EnsoCode chat image folder; symlinks are resolved first. Images only (png, jpg, webp, gif by file header), up to 10MB each; png/jpg go out as photos, gif/webp as files (an album containing one goes out as files). If chat is omitted it goes to the chat open in the sidebar. Returns the sent message ids (album: one id per image).",
         "parameters": {
           "type": "object",
           "properties": {

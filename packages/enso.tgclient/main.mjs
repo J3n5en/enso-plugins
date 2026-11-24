@@ -1,4 +1,4 @@
-import { mkdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { homedir, platform, release, tmpdir } from 'node:os';
 import { basename, delimiter, extname, isAbsolute, join, relative } from 'node:path';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -150,25 +150,37 @@ export function mediaRoots({ dataDir, projectRoot, env = process.env, tmp = tmpd
   return roots;
 }
 
-// 目录和文件都先 realpath，符号链接指到白名单外就拒绝
+// 目录和文件都先 realpath，符号链接指到白名单外就拒绝；根目录或家目录本身不能当白名单
 async function readMedia(files, roots) {
   if (!Array.isArray(files) || files.length < 1 || files.length > MEDIA_COUNT) throw new Error('files 需要 1 到 10 个本地图片的绝对路径');
-  const allowed = (await Promise.all(roots.map((r) => realpath(r).catch(() => null)))).filter(Boolean);
+  const real = (p) => realpath(p).catch(() => null);
+  const broad = await Promise.all(['/', homedir()].map(real));
+  const allowed = (await Promise.all(roots.map(real))).filter((r) => r && !broad.includes(r));
   const out = [];
   for (const f of files) {
     const p = String(f ?? '');
     if (!isAbsolute(p)) throw new Error(`需要绝对路径：${p}`);
-    const real = await realpath(p).catch(() => null);
-    if (!real) throw new Error(`读不到文件：${p}`);
-    if (!allowed.some((r) => { const rel = relative(r, real); return rel && !rel.startsWith('..') && !isAbsolute(rel); }))
+    const path = await real(p);
+    if (!path) throw new Error(`读不到文件：${p}`);
+    if (!allowed.some((r) => { const rel = relative(r, path); return rel && !rel.startsWith('..') && !isAbsolute(rel); }))
       throw new Error(`${p} 不在允许的目录里（系统临时目录、当前会话的项目或 worktree、聊天图片目录）`);
-    const st = await stat(real);
-    if (!st.isFile()) throw new Error(`不是文件：${p}`);
-    if (st.size > MEDIA_MAX) throw new Error(`${p} 超过 10MB`);
-    const buf = await readFile(real);
+    // 大小和内容从同一个句柄读，校验后文件被换掉或变大也不会多读
+    const fh = await open(path, 'r');
+    let buf;
+    try {
+      const st = await fh.stat();
+      if (!st.isFile()) throw new Error(`不是文件：${p}`);
+      if (st.size > MEDIA_MAX) throw new Error(`${p} 超过 10MB`);
+      buf = Buffer.alloc(st.size + 1);
+      const { bytesRead } = await fh.read(buf, 0, buf.length, 0);
+      if (bytesRead > st.size) throw new Error(`${p} 在读取时还在变化，请等它写完再发`);
+      buf = buf.subarray(0, bytesRead);
+    } finally {
+      await fh.close();
+    }
     const ext = IMAGE_SIGS.find(([, ok]) => ok(buf))?.[0];
     if (!ext) throw new Error(`${p} 不是图片，只支持图片（png、jpg、webp、gif，按文件头判断）`);
-    out.push({ name: `${basename(real, extname(real)) || 'image'}.${ext}`, buf });
+    out.push({ name: `${basename(path, extname(path)) || 'image'}.${ext}`, buf });
   }
   return out;
 }
@@ -2142,16 +2154,23 @@ function createApp(enso, opts = {}) {
     for (const f of files) ups.push(await uploadBuf(c, f.buf, f.name));
     const album = ups.length > 1 && args.asAlbum !== false;
     const list = [];
-    if (album) {
-      const docs = files.some((f) => !PHOTO_EXT.test(f.name));
-      const res = await sending(chat.id, () => c.sendFile(chat.entity, { file: ups, caption: [caption], forceDocument: docs, ...reply }));
-      list.push(...(Array.isArray(res) ? res : [res]).filter(Boolean));
-    } else {
-      for (const [i, file] of ups.entries()) list.push(await sending(chat.id, () => c.sendFile(chat.entity, { file, caption: i ? '' : caption, ...reply })));
+    try {
+      if (album) {
+        const docs = files.some((f) => !PHOTO_EXT.test(f.name));
+        const res = await sending(chat.id, () => c.sendFile(chat.entity, { file: ups, caption: [caption], forceDocument: docs, ...reply }));
+        list.push(...(Array.isArray(res) ? res : [res]).filter(Boolean));
+      } else {
+        for (const [i, file] of ups.entries()) list.push(await sending(chat.id, () => c.sendFile(chat.entity, { file, caption: i ? '' : caption, ...reply })));
+      }
+    } catch (e) {
+      // 逐张发到一半失败：告诉调用方哪些已经发出，避免整组重发
+      if (list.length) throw new Error(`${errText(e)}；前 ${list.length} 张已发出（消息 id ${list.map((m) => m.id).join('、')}），重试时只发剩下的`);
+      throw e;
+    } finally {
+      stopTyping(chat.id);
+      dirty();
+      for (const m of list) push({ type: 'message', chat: chat.id, message: await pack(m) });
     }
-    stopTyping(chat.id);
-    dirty();
-    for (const m of list) push({ type: 'message', chat: chat.id, message: await pack(m) });
     return { ok: true, chat: { id: chat.id, title: chat.title }, album, ids: list.map((m) => m.id), at: list[0] ? when(list[0].date) : '' };
   });
 
