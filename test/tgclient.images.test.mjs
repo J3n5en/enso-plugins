@@ -193,3 +193,42 @@ test('downloadMedia 抛错时文字仍投递，提示未转达', async (t) => {
     assert.match(injected[0].text, /未转达/);
   });
 });
+
+const later = (ms, value) => () => new Promise((resolve) => setTimeout(() => resolve(value), ms));
+
+test('图片下载卡住 30 秒后才返回，仍随消息投递', async (t) => {
+  await withWatch(t, async ({ injected, emit, tick }) => {
+    await emit({ photo: { id: 1 }, message: '慢图', bytes: later(30_000, JPEG) });
+    await tick(30_000);
+    await tick(30_000);
+    assert.equal(injected.length, 1);
+    assert.equal(injected[0].images?.length, 1);
+    assert.deepEqual(Buffer.from(injected[0].images[0].data, 'base64'), JPEG);
+    assert.doesNotMatch(injected[0].text, /未转达/);
+  });
+});
+
+test('相册里每张都要 20 秒，三张都投递', async (t) => {
+  await withWatch(t, async ({ injected, emit, tick }) => {
+    for (let i = 0; i < 3; i++) {
+      await emit({ photo: { id: i + 1 }, groupedId: 555n, message: i ? '' : '相册', bytes: later(20_000, JPEG) });
+    }
+    await tick(30_000);
+    await tick(30_000);
+    assert.equal(injected.length, 1);
+    assert.equal(injected[0].images?.length, 3);
+    assert.doesNotMatch(injected[0].text, /未转达/);
+  });
+});
+
+test('下载一直不返回时文字照常投递，提示图片下载失败', async (t) => {
+  await withWatch(t, async ({ injected, emit, tick }) => {
+    await emit({ photo: { id: 1 }, message: '挂起', bytes: () => new Promise(() => {}) });
+    await tick(30_000);
+    await tick(60_000);
+    assert.equal(injected.length, 1);
+    assert.equal(injected[0].images, undefined);
+    assert.match(injected[0].text, /挂起/);
+    assert.match(injected[0].text, /1 张图片下载失败未转达/);
+  });
+});
