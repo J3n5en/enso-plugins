@@ -92,6 +92,10 @@ test('未登录时停在登录页，校验参数，轮询立即返回状态', as
         assert.deepEqual(await fn({ chat: 'me', messageId: '1' }, { sessionId: 's1' }), { tracked: false, reason: '宿主不支持需求线程' });
         continue;
       }
+      if (name === 'tg_send_media') {
+        await assert.rejects(fn({ chat: 'me', files: [] }), /1 到 10/);
+        continue;
+      }
       await assert.rejects(fn({ chat: 'me', query: 'x', text: 'x' }), /请先登录/);
     }
     assert.deepEqual(await tools.get('tg_unwatch')({}, { sessionId: 's1' }), { ok: true, watching: null });

@@ -1,6 +1,6 @@
-import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
-import { homedir, platform, release } from 'node:os';
-import { basename, extname, join } from 'node:path';
+import { mkdir, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import { homedir, platform, release, tmpdir } from 'node:os';
+import { basename, delimiter, extname, isAbsolute, join, relative } from 'node:path';
 import { randomBytes, randomUUID } from 'node:crypto';
 import {
   Api,
@@ -98,6 +98,7 @@ const ERRORS = {
   MESSAGE_ID_INVALID: '消息不存在或已删除',
   STICKER_DOCUMENT_INVALID: '贴纸已失效',
   CHAT_SEND_STICKERS_FORBIDDEN: '这里不允许发送贴纸',
+  MEDIA_CAPTION_TOO_LONG: '说明文字太长（普通账号上限 1024 字）',
 };
 
 const ACTIONS = {
@@ -128,6 +129,49 @@ const sniff = (b) =>
       : b[0] === 0x1a && b[1] === 0x45 ? 'video/webm'
         : b[0] === 0x47 && b[1] === 0x49 ? 'image/gif'
           : 'image/webp';
+
+// tg_send_media 只发图片：按文件头认类型，不信扩展名
+const IMAGE_SIGS = [
+  ['png', (b) => b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))],
+  ['jpg', (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff],
+  ['gif', (b) => /^GIF8[79]a/.test(b.subarray(0, 6).toString('latin1'))],
+  ['webp', (b) => b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP'],
+];
+const MEDIA_MAX = 10 * 1024 * 1024;
+const MEDIA_COUNT = 10;
+
+/** tg_send_media 能读的目录：系统临时目录、调用会话的项目、EnsoCode 的会话 worktree 与聊天图片目录 */
+export function mediaRoots({ dataDir, projectRoot, env = process.env, tmp = tmpdir() }) {
+  const roots = ['/tmp', '/private/tmp', tmp, '/var/folders', '/private/var/folders'];
+  if (projectRoot) roots.push(String(projectRoot));
+  const userData = String(dataDir ?? '').match(/^(.+)[\\/]extension-plugins[\\/]data[\\/][^\\/]+[\\/]?$/)?.[1];
+  if (userData) roots.push(join(userData, 'bot-chats'), join(userData, 'worktrees'));
+  for (const d of String(env.ENSO_USER_IMAGE_DIRS ?? '').split(delimiter)) if (isAbsolute(d)) roots.push(d);
+  return roots;
+}
+
+// 目录和文件都先 realpath，符号链接指到白名单外就拒绝
+async function readMedia(files, roots) {
+  if (!Array.isArray(files) || files.length < 1 || files.length > MEDIA_COUNT) throw new Error('files 需要 1 到 10 个本地图片的绝对路径');
+  const allowed = (await Promise.all(roots.map((r) => realpath(r).catch(() => null)))).filter(Boolean);
+  const out = [];
+  for (const f of files) {
+    const p = String(f ?? '');
+    if (!isAbsolute(p)) throw new Error(`需要绝对路径：${p}`);
+    const real = await realpath(p).catch(() => null);
+    if (!real) throw new Error(`读不到文件：${p}`);
+    if (!allowed.some((r) => { const rel = relative(r, real); return rel && !rel.startsWith('..') && !isAbsolute(rel); }))
+      throw new Error(`${p} 不在允许的目录里（系统临时目录、当前会话的项目或 worktree、聊天图片目录）`);
+    const st = await stat(real);
+    if (!st.isFile()) throw new Error(`不是文件：${p}`);
+    if (st.size > MEDIA_MAX) throw new Error(`${p} 超过 10MB`);
+    const buf = await readFile(real);
+    const ext = IMAGE_SIGS.find(([, ok]) => ok(buf))?.[0];
+    if (!ext) throw new Error(`${p} 不是图片，只支持图片（png、jpg、webp、gif，按文件头判断）`);
+    out.push({ name: `${basename(real, extname(real)) || 'image'}.${ext}`, buf });
+  }
+  return out;
+}
 const INJECT_IMAGE_MIMES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
 function sniffInjectImage(b) {
   if (!b || b.length < 2) return null;
@@ -2085,6 +2129,30 @@ function createApp(enso, opts = {}) {
     dirty();
     push({ type: 'message', chat: chat.id, message: await pack(m) });
     return { ok: true, chat: { id: chat.id, title: chat.title }, id: m.id, at: when(m.date) };
+  });
+
+  // 先查文件再连 Telegram：路径、大小、类型不对时什么都不上传
+  tool('tg_send_media', async (args, ctx) => {
+    const files = await readMedia(args.files, mediaRoots({ dataDir: enso.dataDir, projectRoot: ctx?.projectRoot }));
+    const caption = String(args.caption ?? '');
+    const c = await agentClient();
+    const chat = await chatOf(c, args.chat);
+    const reply = replyArgs(topicArg(args), args.replyTo);
+    const ups = [];
+    for (const f of files) ups.push(await uploadBuf(c, f.buf, f.name));
+    const album = ups.length > 1 && args.asAlbum !== false;
+    const list = [];
+    if (album) {
+      const docs = files.some((f) => !PHOTO_EXT.test(f.name));
+      const res = await sending(chat.id, () => c.sendFile(chat.entity, { file: ups, caption: [caption], forceDocument: docs, ...reply }));
+      list.push(...(Array.isArray(res) ? res : [res]).filter(Boolean));
+    } else {
+      for (const [i, file] of ups.entries()) list.push(await sending(chat.id, () => c.sendFile(chat.entity, { file, caption: i ? '' : caption, ...reply })));
+    }
+    stopTyping(chat.id);
+    dirty();
+    for (const m of list) push({ type: 'message', chat: chat.id, message: await pack(m) });
+    return { ok: true, chat: { id: chat.id, title: chat.title }, album, ids: list.map((m) => m.id), at: list[0] ? when(list[0].date) : '' };
   });
 
   tool('tg_mark_read', async (args) => {
