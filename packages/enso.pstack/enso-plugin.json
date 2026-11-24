@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "id": "enso.pstack",
   "name": "pstack",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "icon": "icon.svg",
-  "description": "Lauren Tan 的 pstack 0.15.46（MIT）：poteto-mode 按任务挑选 playbook，配套 arena、interrogate、architect 等 58 个 skill 和工程原则，先深挖再并行。只在输入框选了「pstack」预设的会话里加载。在输入框按钮里为某个会话打开后，该会话的每条消息自动展开 poteto-mode。",
+  "description": "Lauren Tan 的 pstack 0.15.48（MIT）：poteto-mode 按任务挑选 playbook，配套 arena、interrogate、architect 等 59 个 skill 和工程原则，先深挖再并行。只在输入框选了「pstack」预设的会话里加载。在输入框按钮里为某个会话打开后，该会话的每条消息自动展开 poteto-mode。",
   "engines": {
     "enso": ">=0.2.15"
   },
@@ -63,6 +63,7 @@
       "skills/principle-type-system-discipline",
       "skills/recall",
       "skills/reflect",
+      "skills/reframe",
       "skills/setup-pstack",
       "skills/sharpen",
       "skills/show-me-your-work",
@@ -128,6 +129,7 @@
           "skills/principle-type-system-discipline",
           "skills/recall",
           "skills/reflect",
+          "skills/reframe",
           "skills/setup-pstack",
           "skills/sharpen",
           "skills/show-me-your-work",
