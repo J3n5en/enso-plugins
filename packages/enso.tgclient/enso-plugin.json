@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "id": "enso.tgclient",
   "name": "Telegram 客户端",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "icon": "icon.svg",
-  "description": "在侧栏里用手机号登录自己的 Telegram 账号，像官方客户端一样聊天：会话列表与聊天分组、论坛话题、实时收发、相册、边下边播视频、表情与贴纸面板、编辑、回复、表情回应、已读详情、切换发言身份、机器人按钮与键盘、新消息系统通知；附带 Agent 工具，可查聊天、读写消息、订阅新消息。支持 socks5 与 MTProxy 代理。",
+  "description": "在侧栏里用手机号登录自己的 Telegram 账号，像官方客户端一样聊天：会话列表与聊天分组、论坛话题、实时收发、相册、边下边播视频、表情与贴纸面板、编辑、回复、表情回应、已读详情、切换发言身份、机器人按钮与键盘、新消息系统通知；附带 Agent 工具，可查聊天、读写消息、发图片、订阅新消息。支持 socks5 与 MTProxy 代理。",
   "engines": {
     "enso": ">=0.3.14"
   },
@@ -346,6 +346,46 @@
           ]
         },
         "timeoutMs": 30000
+      },
+      {
+        "name": "tg_send_media",
+        "description": "Send 1-10 local images as the user's own Telegram account. Only send when the user explicitly asked to, to the chat they meant. Several files become one album by default (asAlbum:false sends them one by one); caption goes on the first image, and Telegram markdown works in it. Files must be absolute paths inside the system temp dir (/tmp, /var/folders), the calling session's project or worktree, EnsoCode's managed worktrees folder, or the EnsoCode chat image folder; symlinks are resolved first. Images only (png, jpg, webp, gif by file header), up to 10MB each; png/jpg go out as photos, gif/webp as files (an album containing one goes out as files). If chat is omitted it goes to the chat open in the sidebar. Returns the sent message ids (album: one id per image).",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "chat": {
+              "type": "string",
+              "description": "Chat id (from tg_list_chats / tg_search_chats), @username, t.me link, exact or partial chat title, or \"me\" for Saved Messages Omit to use the chat currently open in the Telegram sidebar."
+            },
+            "files": {
+              "type": "array",
+              "items": { "type": "string" },
+              "minItems": 1,
+              "maxItems": 10,
+              "description": "Absolute paths of 1-10 local images (png, jpg, webp, gif), each up to 10MB"
+            },
+            "caption": {
+              "type": "string",
+              "description": "Optional text on the first image (or the album). Telegram markdown supported; 1024 characters for regular accounts"
+            },
+            "asAlbum": {
+              "type": "boolean",
+              "description": "Default true: several images go out as one album. false sends one message per image"
+            },
+            "replyTo": {
+              "type": "integer",
+              "description": "Optional message id to reply to"
+            },
+            "topic": {
+              "type": "integer",
+              "description": "Forum topic id to post in (from tg_list_topics; 1 or omitted = General); when chat is omitted, defaults to the topic open in the sidebar"
+            }
+          },
+          "required": [
+            "files"
+          ]
+        },
+        "timeoutMs": 180000
       },
       {
         "name": "tg_mark_read",
