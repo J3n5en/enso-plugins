@@ -116,8 +116,10 @@ git clone https://github.com/J3n5en/enso-hongguo.git
 
 - 数据来自 [openhongguo](https://github.com/beilunyang/openhongguo)（Apache-2.0），以匿名设备身份访问。
 - 这里用的是 `vendor/openhongguo` 里自己编译的 wasm，基于上游 0.4.1：那一版把 x-medusa
-  的签名改成和真实设备一致，取播放地址不会再被服务端判成空响应；同时带着首页瀑布流字段
-  （`vid` / 封面 / 摘要 / 热度）的改动。上游合并那部分之后可以改回 npm 依赖。
+  的签名改成和真实设备一致，同时带着首页瀑布流字段（`vid` / 封面 / 摘要 / 热度）的改动。
+  自 2026-11-23 起服务端对播放请求的要求反过来：带上 x-medusa（设备布局，消息字段 21 =
+  369）才返回播放地址，少了它一律空响应。所以本地这一版保留了这个头。上游合并之后可以
+  改回 npm 依赖。
 - 侧栏页面跑在沙盒 iframe 里，不能直接访问外网，也不能用 `http(s)` 地址播放媒体。所以视频由插件后台进程下载，在本机转成分段 MP4，再分块传给页面里的 MediaSource 播放。
 - 视频流本身是加密的（cenc-aes-ctr），`remux.mjs` 在本机用 Node 自带的 `crypto` 解密并重新封装，不依赖 ffmpeg。
 
