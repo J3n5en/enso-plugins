@@ -2,7 +2,7 @@ import { AsyncResource } from 'node:async_hooks';
 
 export const EVENTS = ['pr_opened', 'pr_ready', 'pr_merged_closed', 'issue_opened', 'mention', 'ci_failed', 'pr_commented', 'issue_commented'];
 const DEFAULT_EVENTS = EVENTS.slice(0, 6);
-const CONFIG = ['repos', 'events', 'authors', 'excludeAuthors', 'labels', 'excludeNumbers', 'includeDrafts', 'branches', 'settleSec', 'debounceSec', 'minIntervalSec', 'note'];
+const CONFIG = ['repos', 'events', 'authors', 'excludeAuthors', 'labels', 'excludeNumbers', 'includeDrafts', 'readyOnce', 'branches', 'settleSec', 'debounceSec', 'minIntervalSec', 'note'];
 const NEEDS = {
   pr_opened: ['pulls'],
   pr_ready: ['pulls'],
@@ -124,6 +124,7 @@ export function normalizeWatch(args = {}) {
     labels: strings(args.labels, 'labels', 50),
     excludeNumbers: excludeNumbers?.length ? excludeNumbers : undefined,
     includeDrafts: args.includeDrafts === true || args.includeDrafts === 'true',
+    readyOnce: args.readyOnce === true || args.readyOnce === 'true',
     branches: strings(args.branches, 'branches', 10),
     settleSec: clampSec(args.settleSec, 60, 86_400, 900),
     debounceSec: clampSec(args.debounceSec, 1, 3600, 3),
@@ -368,6 +369,15 @@ const issueOf = (i) => ({
   updatedAt: i.updated_at,
   url: i.html_url,
 });
+
+/** 已报事件按 PR 记忆：pr_ready 记已报过的 head sha，pr_merged_closed 记本次关闭已报 */
+const blankReported = () => ({ ready: {}, closed: {} });
+const capReported = (w) => {
+  for (const bucket of ['ready', 'closed']) {
+    const keys = Object.keys(w.reported[bucket]);
+    if (keys.length > KEEP_SEEN) for (const k of keys.slice(0, keys.length - KEEP_SEEN)) delete w.reported[bucket][k];
+  }
+};
 
 function remember(list, id) {
   if (list.includes(id)) return false;
@@ -780,6 +790,8 @@ export function createWatcher({ request, login, inject, notify, load, save, clai
       for (const f of facts) {
         const key = f.key ?? `${repo}#${f.n}`;
         if (f.type === 'closed') delete w.ready[key];
+        if (f.type === 'opened' || f.type === 'reopened') delete w.reported.closed[key];
+        if (f.type === 'pushed' && f.info?.sha && w.reported.ready[key] === f.info.sha) continue;
         if ((f.type === 'pushed' || f.type === 'ready') && passes(w, f, 'pr_ready', ctx, true)) w.ready[key] = { sha: f.info?.sha, pushAt: t };
       }
     await routeFacts(repo, facts, truncated);
@@ -788,7 +800,14 @@ export function createWatcher({ request, login, inject, notify, load, save, clai
       if (f.routed) continue;
       const ev = FACT_EVENT[f.kind]?.[f.type];
       if (!ev) continue;
-      const candidates = subs.filter(({ w }) => passes(w, f, ev, ctx)).map(({ sessionId, w }) => ({ sessionId, subscribedAt: w.since }));
+      const candidates = subs
+        .filter(({ w }) => passes(w, f, ev, ctx))
+        .filter(({ w }) => {
+          if (ev !== 'pr_merged_closed') return true;
+          const key = f.key ?? `${repo}#${f.n}`;
+          return f.type === 'closed' ? !w.reported.closed[key] : true;
+        })
+        .map(({ sessionId, w }) => ({ sessionId, subscribedAt: w.since }));
       if (!candidates.length) continue;
       const n = f.kind === 'ci' ? f.info?.prNumber : f.n;
       const targets = await place(claimKeyOf(repo, ev, n, f.info?.sha), claimLabelOf(repo, n, f.info?.title, f.info?.sha), candidates);
@@ -798,6 +817,11 @@ export function createWatcher({ request, login, inject, notify, load, save, clai
         const list = hits.get(target.sessionId) ?? [];
         list.push([qk, withClaim(item, target)]);
         hits.set(target.sessionId, list);
+        const tw = state.watches[target.sessionId];
+        if (tw && f.type === 'closed') {
+          tw.reported.closed[qk] = true;
+          capReported(tw);
+        }
       }
     }
     for (const [sid, list] of hits) {
@@ -861,8 +885,12 @@ export function createWatcher({ request, login, inject, notify, load, save, clai
         delete e.w.ready[g.key];
         changed = true;
         if (!live.includes(e)) continue;
+        if (e.w.reported.ready[g.key] === e.p.sha) continue;
+        if (e.w.readyOnce && e.w.reported.ready[g.key] !== undefined) continue;
         const mine = placed.find((x) => x.sessionId === e.sid);
         if (claimed && !mine?.claimKey) continue;
+        e.w.reported.ready[g.key] = e.p.sha;
+        capReported(e.w);
         enqueue(e.w, g.key, withClaim(itemOf({ repo: g.repo, kind: 'pr', n: e.p.n, actor: e.p.author, info: e.p }, 'pr_ready'), mine));
       }
     }
@@ -994,6 +1022,7 @@ export function createWatcher({ request, login, inject, notify, load, save, clai
       w.queue ??= {};
       w.ready ??= {};
       w.alerted ??= {};
+      w.reported = { ...blankReported(), ...(w.reported ?? {}) };
     }
     prune();
     for (const sid of Object.keys(state.watches)) arm(sid);
@@ -1052,7 +1081,7 @@ export function createWatcher({ request, login, inject, notify, load, save, clai
     watch: (sid, args, project) =>
       locked(async () => {
         if (!sid) throw new Error('只能在会话里调用');
-        const w = { ...normalizeWatch(args), ...(project ? { project } : {}), since: now(), ready: {}, queue: {}, alerted: {}, delivered: 0, failures: 0 };
+        const w = { ...normalizeWatch(args), ...(project ? { project } : {}), since: now(), ready: {}, queue: {}, alerted: {}, reported: blankReported(), delivered: 0, failures: 0 };
         await ensureLogin(true);
         const errors = {};
         for (const repo of w.repos) {
@@ -1067,6 +1096,8 @@ export function createWatcher({ request, login, inject, notify, load, save, clai
           if (err) errors[repo] = err.message;
         }
         const old = state.watches[sid];
+        // 重新订阅继承已报事件的去重状态：同一 head 的 pr_ready、同一次关闭不因重订再报一遍
+        if (old?.reported) w.reported = { ...blankReported(), ...old.reported };
         state.watches[sid] = w;
         prune();
         arm(sid);

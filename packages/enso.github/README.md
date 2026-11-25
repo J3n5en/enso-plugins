@@ -73,8 +73,8 @@
 | 事件 | 含义 |
 | --- | --- |
 | `pr_opened` | 新 PR、草稿转正、重新打开 |
-| `pr_ready` | PR 最后一次推送后 `settleSec` 内没有新推送，可以看了 |
-| `pr_merged_closed` | PR 合并或关闭 |
+| `pr_ready` | PR 最后一次推送后 `settleSec` 内没有新推送，可以看了。同一个 head（sha）只报一次，行里带 `head` 供快速判断看没看过；推送又回退到已报过的 sha 不重复报 |
+| `pr_merged_closed` | PR 合并或关闭。同一次关闭只报一次；重开再关是新的一次 |
 | `issue_opened` | 新 issue 或重新打开 |
 | `mention` | 正文或评论里 @ 了你、你的 PR / issue 有新评论或 review、有人请你 review |
 | `ci_failed` | 同一提交的 Actions 全部结束后，其中有 failure、timed_out 或 startup_failure。每个 sha 只报一次 |
@@ -98,6 +98,7 @@
 | `labels` | 不限 | 带任一标签才要，不管 CI |
 | `excludeNumbers` | 无 | 跳过这些编号 |
 | `includeDrafts` | `false` | 不开时草稿 PR 只报 `mention` |
+| `readyOnce` | `false` | 开时同一 PR 的 `pr_ready` 只报第一次，之后推送不再报（不想每推一次就被叫一遍时用） |
 | `branches` | 仓库默认分支 | `ci_failed` 看哪些分支，最多 10 个 |
 | `settleSec` | 900 | `pr_ready` 的静默时间，60 到 86400 秒 |
 | `debounceSec` | 3 | 最后一个事件后等这么久再投递，1 到 3600 秒 |
