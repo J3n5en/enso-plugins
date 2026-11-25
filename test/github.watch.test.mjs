@@ -944,6 +944,87 @@ test('间隔摘要带上全部分到的认领键', async () => {
   assert.equal(new Set([key, ...renewed]).size, 12);
 });
 
+test('同一 head 的 pr_ready 不重复：推送又回退到已报过的 sha 时不再播报', async () => {
+  const s = setup();
+  await s.w.watch('s1', { repos: ['o/r'], events: ['pr_ready'], settleSec: 60 });
+  s.env.clock += 10_000;
+  s.openPR(1);
+  await s.round(2);
+  assert.equal(s.env.injected.length, 1);
+  assert.deepEqual(s.lines(s.texts()[0]), ['- o/r PR #1「PR 1」 @bob · pr_ready · head 1aaaaaa · https://github.com/o/r/pull/1']);
+  s.updatePR(1, { head: { sha: 'zzzzzzzzz1', ref: 'b1' } });
+  await s.round();
+  s.updatePR(1, { head: { sha: '1aaaaaaaaaa', ref: 'b1' } });
+  await s.round(3);
+  assert.equal(s.env.injected.length, 1, '回退到已报过的 sha 不再重复 pr_ready');
+});
+
+test('readyOnce：同一 PR 的 pr_ready 只报一次，后续推送安静但其他事件照常', async () => {
+  const s = setup();
+  await s.w.watch('s1', { repos: ['o/r'], events: ['pr_ready', 'pr_commented'], settleSec: 60, readyOnce: true });
+  s.env.clock += 10_000;
+  s.openPR(1);
+  await s.round(2);
+  assert.equal(s.env.injected.length, 1);
+  s.updatePR(1, { head: { sha: '1111111bb1', ref: 'b1' } });
+  await s.round(3);
+  assert.equal(s.env.injected.length, 1, 'readyOnce 下再次推送不再重复 pr_ready');
+  s.comment(1, { author: 'alice' });
+  await s.round();
+  assert.equal(s.env.injected.length, 2);
+  assert.match(s.texts()[1], /pr_commented/);
+});
+
+test('readyOnce 默认关闭：同一 PR 每次推送 settle 后仍报 pr_ready', async () => {
+  const s = setup();
+  await s.w.watch('s1', { repos: ['o/r'], events: ['pr_ready'], settleSec: 60 });
+  s.env.clock += 10_000;
+  s.openPR(1);
+  await s.round(2);
+  assert.equal(s.env.injected.length, 1);
+  s.updatePR(1, { head: { sha: '1111111bb1', ref: 'b1' } });
+  await s.round(2);
+  assert.equal(s.env.injected.length, 2);
+  assert.match(s.texts()[1], /head 1111111/);
+});
+
+test('github_watch 重新订阅不重复播报已报事件：继承原订阅的去重状态', async () => {
+  const s = setup();
+  await s.w.watch('s1', { repos: ['o/r'], events: ['pr_ready', 'pr_merged_closed'], settleSec: 60 });
+  s.env.clock += 10_000;
+  s.openPR(1);
+  await s.round(2);
+  assert.equal(s.env.injected.length, 1);
+  assert.match(s.texts()[0], /pr_ready/);
+
+  // 30 秒内关闭并重新订阅：新订阅首轮就会再看到这个已关闭的 PR
+  s.env.clock += 30_000;
+  s.updatePR(1, { state: 'closed', merged_at: iso(s.env.clock), closed_at: iso(s.env.clock) });
+  await s.w.watch('s1', { repos: ['o/r'], events: ['pr_ready', 'pr_merged_closed'], settleSec: 60, note: '换了个要求' });
+  await s.round(2);
+  assert.equal(s.env.injected.length, 2);
+  assert.match(s.texts()[1], /pr_merged_closed/, '新订阅第一次见到关闭要报一次');
+  await s.round(2);
+  assert.equal(s.env.injected.length, 2, '同一次关闭不重复播报');
+});
+
+test('同一次关闭只报一次 pr_merged_closed，重开再关是新的一次', async () => {
+  const s = setup();
+  await s.w.watch('s1', { repos: ['o/r'], events: ['pr_merged_closed'] });
+  s.env.clock += 10_000;
+  s.openPR(1);
+  s.updatePR(1, { state: 'closed', merged_at: iso(s.env.clock), closed_at: iso(s.env.clock) });
+  await s.round();
+  assert.equal(s.env.injected.length, 1);
+  await s.round(2);
+  assert.equal(s.env.injected.length, 1, '同一次关闭不重复播报');
+  s.updatePR(1, { state: 'open', merged_at: null, closed_at: null });
+  await s.round();
+  s.updatePR(1, { state: 'closed', closed_at: iso(s.env.clock) });
+  await s.round();
+  assert.equal(s.env.injected.length, 2, '重开后再次关闭是新事件');
+});
+
 test('pr_ready 只投给认领者', async () => {
   const claims = fakeClaims();
   const s = setup({ claims });
