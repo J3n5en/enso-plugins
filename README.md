@@ -65,6 +65,7 @@ EnsoCode 官方插件市场的源仓库 · [浏览插件](https://enso-plugins.j
 | 雷霆战机 | `enso.skyfighter` | 0.1.1 | 官方 | 侧栏里的纵向弹幕战役：三种战机、五关空域、四色武器和关间强化。离线可玩。 |
 | Spreadsheet | `enso.spreadsheet` | 0.1.0 | 官方 | 在文件面板里打开并编辑表格：网格、公式、插入删除行列，以及选区的计数、求和与平均。 |
 | SQLite | `enso.sqlite` | 0.1.0 | 官方 | 浏览和查询 SQLite 数据库：可排序、筛选的表格，SQL 查询，以及表、视图、索引和触发器的 CREATE 语句。只读。 |
+| Swarm | `enso.swarm` | 0.1.10 | 社区 | 蜂群：一个协调者把活拆给几个独立会话，通过共享消息板协作，侧栏是 AGY 的原版看板（Board / Members / Graph / Raw）。 |
 | 任务启动 | `enso.tasklauncher` | 0.1.0 | 官方 | 从当前项目的 GitHub issue 用可编辑的提示词启动 Enso 会话：列出 origin 的 issue，套用提示词模板，再新建会话并聚焦。可选在干净的工作区创建并切换分支。不创建 worktree，也不替代 GitHub 插件。 |
 | Telegram | `enso.telegram` | 0.4.0 | 官方 | 用 Telegram Bot 远程使用 EnsoCode 会话：配对后发消息即进入会话，执行进度原位更新，回复以富文本发回；支持图片、群聊绑定、成员白名单与群聊上下文、插话、远程停止和双向同步。 |
 | Telegram 客户端 | `enso.tgclient` | 0.8.0 | 官方 | 在侧栏里用手机号登录自己的 Telegram 账号，像官方客户端一样聊天：会话列表与聊天分组、论坛话题、实时收发、相册、边下边播视频、表情与贴纸面板、编辑、回复、表情回应、已读详情、切换发言身份、机器人按钮与键盘、新消息系统通知；附带 Agent 工具，可查聊天、读写消息、发图片、订阅新消息。支持 socks5 与 MTProxy 代理。 |

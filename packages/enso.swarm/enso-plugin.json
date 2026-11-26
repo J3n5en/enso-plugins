@@ -1,0 +1,291 @@
+{
+  "schemaVersion": 1,
+  "id": "enso.swarm",
+  "name": "Swarm",
+  "version": "0.1.10",
+  "description": "蜂群：一个协调者把活拆给几个独立会话，通过共享消息板协作，侧栏是 AGY 的原版看板（Board / Members / Graph / Raw）。",
+  "icon": "logo.svg",
+  "engines": {
+    "enso": ">=0.3.14"
+  },
+  "main": "main.mjs",
+  "resident": true,
+  "permissions": [
+    "agent.inject",
+    "agent.injectTrusted",
+    "agent.observe",
+    "agent.tool",
+    "process.background",
+    "session.focus",
+    "session.read",
+    "ui.view"
+  ],
+  "contributes": {
+    "agentTools": [
+      {
+        "name": "swarm",
+        "description": "Manage the swarm in this conversation. open creates it (this session becomes the coordinator), add posts a brief and tells you how to spawn the worker, kill stops a member, title names the swarm, status lists every member with role, state and post counts. bind is for a worker: call it once with the key from its brief so the board knows which session it is.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "open",
+                "status",
+                "add",
+                "kill",
+                "title",
+                "bind"
+              ],
+              "description": "What to do. Defaults to status."
+            },
+            "title": {
+              "type": "string",
+              "description": "For open/title: the swarm's name, 2-6 words."
+            },
+            "name": {
+              "type": "string",
+              "description": "For add/kill: lowercase member name, e.g. parser, verifier, narrator."
+            },
+            "brief": {
+              "type": "string",
+              "description": "For add: the worker's whole assignment. It is posted on the board and is the only context the new worker starts with."
+            },
+            "role": {
+              "type": "string",
+              "enum": [
+                "worker",
+                "narrator",
+                "monitor"
+              ],
+              "description": "For add: worker (default), narrator (owns the Overview), or monitor (watches for stalls)."
+            },
+            "model": {
+              "type": "string",
+              "description": "For add: optional model id the worker should run on."
+            },
+            "key": {
+              "type": "string",
+              "description": "For bind: the key the brief gives you, e.g. \"a1b2c3d4\"."
+            }
+          },
+          "required": [
+            "action"
+          ]
+        }
+      },
+      {
+        "name": "swarm_post",
+        "description": "Say something on the swarm's shared board. Addressing is the doorbell: @name wakes that member, @all wakes everyone, @#channel reaches a channel. Every post costs the people you address a turn.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string",
+              "description": "The post. Start with @name when you are assigning work to someone."
+            },
+            "channel": {
+              "type": "string",
+              "description": "Optional channel id; omit for main."
+            }
+          },
+          "required": [
+            "text"
+          ]
+        }
+      },
+      {
+        "name": "swarm_read",
+        "readOnly": true,
+        "description": "Read the swarm board, newest last. Pass since to get only newer posts. Use it before deciding, not instead of swarm_wait.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "since": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Only posts with a higher seq."
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "description": "Newest N posts (default 40)."
+            }
+          }
+        }
+      },
+      {
+        "name": "swarm_wait",
+        "description": "Sleep on the board until someone posts, then return the new posts. Waiting costs nothing; polling the board in a loop costs a turn each time. Call again with the returned head as since.",
+        "timeoutMs": 600000,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "since": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "The highest seq you have actually read."
+            },
+            "timeoutSec": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 540,
+              "description": "How long to sleep (default 120)."
+            },
+            "mentionsOnly": {
+              "type": "boolean",
+              "description": "Only wake for posts that @ you or @all (the coordinator usually wants false)."
+            }
+          },
+          "required": [
+            "since"
+          ]
+        }
+      },
+      {
+        "name": "swarm_view",
+        "readOnly": false,
+        "description": "Narrator only: publish the pane's Overview. Pass view (the view.json object: headline, phase, attention[], workstreams, milestones, risks, feedback_ack, reel.frames[]) or html (a static page).",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "view": {
+              "type": "object",
+              "description": "The Overview contract, written to view.json."
+            },
+            "html": {
+              "type": "string",
+              "description": "Optional static page, written to view.html."
+            }
+          }
+        }
+      },
+      {
+        "name": "swarm_plan",
+        "description": "Publish the swarm's plan, which the pane's Overview draws: goal, each member's task in a few words, and 1-6 threads grouping work by outcome. Call it again when the plan changes. Never write plan.json yourself.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "plan": {
+              "type": "object",
+              "description": "{\"goal\":{\"title\",\"line\"},\"tasks\":{member:task},\"threads\":[{\"id\",\"title\",\"goal\",\"tasks\"}]}"
+            }
+          },
+          "required": [
+            "plan"
+          ]
+        }
+      }
+    ],
+    "views": [
+      {
+        "id": "swarm",
+        "title": "Swarm",
+        "entry": "swarm_board/index.html"
+      }
+    ],
+    "commands": [
+      {
+        "id": "board",
+        "title": "打开蜂群看板"
+      }
+    ],
+    "schedules": [
+      {
+        "id": "stall-check",
+        "intervalSeconds": 300,
+        "timeoutMs": 30000
+      }
+    ],
+    "methods": [
+      {
+        "name": "api",
+        "timeoutMs": 20000
+      },
+      {
+        "name": "swarm.session",
+        "timeoutMs": 5000
+      },
+      {
+        "name": "openMember",
+        "timeoutMs": 5000
+      }
+    ],
+    "skills": [
+      "skills/swarm",
+      "skills/swarm_pane",
+      "skills/swarm_narrator",
+      "skills/swarm_monitor"
+    ],
+    "agentTypes": [
+      {
+        "name": "swarm:worker",
+        "description": "蜂群里的一个工作者：读板、干活、在板上报结果，然后睡回板上等下一个 @。",
+        "systemPrompt": "agents/worker.md",
+        "tools": "all",
+        "skills": [
+          "skills/swarm_pane"
+        ]
+      },
+      {
+        "name": "swarm:verifier",
+        "description": "蜂群里的验证者：只报告不修改，审别人交上来的活。",
+        "systemPrompt": "agents/verifier.md",
+        "tools": "all",
+        "skills": [
+          "skills/swarm_pane"
+        ]
+      },
+      {
+        "name": "swarm:narrator",
+        "description": "蜂群的讲述者：读板并在每轮重写侧栏 Overview（view.json）。不派活、不改代码。",
+        "systemPrompt": "agents/narrator.md",
+        "tools": "all",
+        "skills": [
+          "skills/swarm_narrator"
+        ]
+      },
+      {
+        "name": "swarm:monitor",
+        "description": "蜂群的僵局监视器：定时看板，只在全员都在等、活又没干完时点名协调者。",
+        "systemPrompt": "agents/monitor.md",
+        "tools": "all",
+        "skills": [
+          "skills/swarm_monitor"
+        ]
+      }
+    ],
+    "presets": [
+      {
+        "id": "swarm",
+        "name": "Swarm 协调者",
+        "skills": [
+          "skills/swarm"
+        ],
+        "agentTypes": [
+          "swarm:worker",
+          "swarm:verifier",
+          "swarm:narrator",
+          "swarm:monitor"
+        ],
+        "instruction": "prompts/coordinator.md"
+      }
+    ],
+    "events": [
+      {
+        "event": "session_end"
+      },
+      {
+        "event": "session_start"
+      },
+      {
+        "event": "agent_start"
+      },
+      {
+        "event": "agent_end"
+      }
+    ]
+  }
+}
