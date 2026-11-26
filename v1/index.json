@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-26T13:06:38.093Z",
-  "sequence": 143,
+  "generatedAt": "2026-11-26T13:52:41.491Z",
+  "sequence": 144,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -2373,13 +2373,20 @@
       "name": "Swarm",
       "description": "蜂群：一个协调者把活拆给几个独立会话，通过共享消息板协作，侧栏是 AGY 的原版看板（Board / Members / Graph / Raw）。",
       "tier": "community",
-      "tags": [],
+      "tags": [
+        "swarm",
+        "agents",
+        "productivity",
+        "ui"
+      ],
+      "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.swarm.svg",
+      "category": "productivity",
       "readme": {
-        "path": "packages/enso.swarm/0.1.10.readme.md",
-        "sha256": "999d69ee8d520418f6f075aa39cee3e1d31a9900b820362cbccf764c890a7274",
-        "size": 7938
+        "path": "packages/enso.swarm/0.1.12.readme.md",
+        "sha256": "98866478a16ea04a22bd4fec6300ea2fd7ecbd1ecfc5bcf877ff12447d85ee44",
+        "size": 9719
       },
-      "latest": "0.1.10",
+      "latest": "0.1.12",
       "versions": [
         {
           "version": "0.1.10",
@@ -2400,6 +2407,26 @@
           "sha256": "a96858c36b95a30823743f215fa64e4364699762aad6d87df85db0f411963fcf",
           "size": 667842,
           "publishedAt": "2026-11-26T13:06:38.093Z"
+        },
+        {
+          "version": "0.1.12",
+          "engines": {
+            "enso": ">=0.3.14"
+          },
+          "permissions": [
+            "agent.inject",
+            "agent.injectTrusted",
+            "agent.observe",
+            "agent.tool",
+            "process.background",
+            "session.focus",
+            "session.read",
+            "ui.view"
+          ],
+          "path": "packages/enso.swarm/0.1.12.zip",
+          "sha256": "7e920a40f20262f5e742e6863293e9c119fa88889a5f6122834a173d9d249db5",
+          "size": 702266,
+          "publishedAt": "2026-11-26T13:52:41.491Z"
         }
       ]
     },
