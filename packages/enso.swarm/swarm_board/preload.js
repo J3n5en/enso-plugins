@@ -144,3 +144,9 @@
   apply((window.enso && window.enso.theme) || 'light');
   if (window.enso && window.enso.onTheme) window.enso.onTheme(apply);
 })();
+
+// 界面汉化：i18n.js 只做外壳文字的运行时替换，不碰 AGY 的原版代码。
+if (window.__swarmZh && window.__swarmZh.install) {
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', window.__swarmZh.install, { once: true });
+  else window.__swarmZh.install();
+}

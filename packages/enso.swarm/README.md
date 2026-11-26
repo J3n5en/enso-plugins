@@ -9,16 +9,39 @@ UI 直接取自 AGY 内置插件 `~/.gemini/antigravity/builtin/plugins/swarm`�
 `app.js`（161 KB，四个 tab 的全部行为）、`hive.js`（113 KB，像素蜜蜂与 Overview/Members 渲染）、
 `hive.css`、`styles.css`、`gif.js`、`narrator_bootstrap.js`、`index.html` 都是上游原文件。
 
-只有四处必要差异：
+只有这几处必要差异：
 
 | 文件 | 差异 | 原因 |
 | --- | --- | --- |
 | `swarm_board/main.mjs` | `from 'sidecar_sdk'` → `from './sidecar_sdk.mjs'`；`BOARD_ACTIVITY` 增加 `swarm_read` / `swarm_post` 两个键 | 上游把路由注册到 AGY 的 loopback HTTP 服务；Enso 页面没有网络，改为进程内路由 |
 | `swarm_board/sidecar_sdk.mjs` | 新增 | 用 `handle(url)` 取代 listen，把同一个 handler 的返回值规整成 `{status, text|base64}` |
-| `swarm_board/index.html` | 去掉 Google Fonts 与绝对路径斜杠 | 页面被内联进沙箱 iframe，不能外链、不能有根绝对路径 |
-| `swarm_board/preload.js` | 新增 | 提供上游期望的 `window.sidecar.fetch`（转到 `enso.call('api')`）、`localStorage`（转到 `enso.storage`）与设计 token |
+| `swarm_board/index.html` | 去掉 Google Fonts 与绝对路径斜杠；`<script src="i18n.js">` 加在 `preload.js` 前；`lang="zh-CN"` | 页面被内联进沙箱 iframe，不能外链、不能有根绝对路径；中文界面见下 |
+| `swarm_board/preload.js` | 新增 | 提供上游期望的 `window.sidecar.fetch`（转到 `enso.call('api')`）、`localStorage`（转到 `enso.storage`）与设计 token；末尾调用一次 `i18n.js` |
+| `swarm_board/i18n.js` | 新增 | 界面中文：运行时替换外壳文字，不改上游代码 |
 
 因此看板的板面、Graph replay、Raw tab、像素蜜蜂、GIF 导出全部是 AGY 的逻辑，一行未改。
+
+## 界面是中文的
+
+上游的 `app.js` / `hive.js` / `index.html` 一行没动，中文是在运行时按字典换的（`swarm_board/i18n.js`）：
+
+- `TEXT` 精确匹配整段文字（含 `title` / `aria-label` / `placeholder` / `alt`）；`RULES` 处理带变量的句子
+  （`12 posts`、`Working for @alpha`、`0 of 3 done`、`read #12 · updated 42s ago` 这类），按顺序全局替换。
+- 只翻「外壳」：`pre` / `code` / `textarea` / `.raw` / `.msg-body` / `[contenteditable]` 里的内容属于用户和
+  agent，一律不碰。替换结果不会再命中英文键，所以 MutationObserver 反复触发是幂等的——页面本身是每轮轮询
+  重画 `innerHTML` 的。
+- 关系图里用 canvas `fillText` 画的摘要（标题、`10 posts over 1m`、`Swarm start · 3 members`）在 draw 入口
+  包了一层，走同一套字典。
+- 日期/时间不进字典：上游用 `Intl.DateTimeFormat(undefined, …)`，跟随系统语言，系统是中文就已经是中文。
+
+想肉眼看界面而不用起 Enso：
+
+```bash
+node test/preview.mjs [输出路径] [--empty]   # 默认 /tmp/swarm-pane-preview.html
+```
+
+它起临时 dataDir 跑真插件、开一个蜂群贴几条消息，把 `/api/swarm` 与 `/api/swarm/raw` 的响应连同原版页面
+内联成一个自包含 HTML（`--empty` 是「本会话还没有蜂群」的空状态）。
 
 ## 数据面
 
@@ -115,6 +138,11 @@ enso-server plugin enable enso.swarm
 
 在输入框选预设「Swarm 协调者」，说一句需求；协调者 `open` 后侧栏出现 Swarm 面板（或输入
 `/enso.swarm:board` 打开）。
+
+```bash
+node --test test/harness.mjs   # 板面与 AGY 面板 API 的兼容性
+node --test test/i18n.test.mjs # 字典没有死条目、替换幂等、长句与变量句都能翻
+```
 
 ## 已知差异（未对齐项）
 
