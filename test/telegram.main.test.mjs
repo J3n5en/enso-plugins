@@ -367,7 +367,7 @@ test('connect：校验 token 调 getMe 后 config.set 持久化；disconnect 清
   const legacy = await setup({ configSet: false });
   const res2 = await legacy.handlers.renderer.connect({ token: '123456:ABCDEFGHIJKLMNOPQRSTUVWX' });
   assert.equal(res2.needsUpgrade, true);
-  assert.match(res2.message, /设置 → 插件/);
+  assert.match(res2.message, /设置 → 插件 → Telegram Bot/);
 });
 
 test('侧栏 state：未配置与已配置；knownChats 出现在名册里', async () => {
@@ -1113,10 +1113,14 @@ test('cancelPair：关闭配对卡片即作废配对码，再 /bind 被拒', asy
   assert.equal((await t.handlers.renderer.state({}, { sessionId: 's1' })).pairing, undefined);
 });
 
-test('清单：1.1.2，声明 injectTrusted/session.focus 与新方法', async () => {
+test('清单：1.1.3，展示名与侧栏标题为 Telegram Bot、id 不变，声明 injectTrusted/session.focus 与新方法', async () => {
   const { readFile } = await import('node:fs/promises');
   const manifest = JSON.parse(await readFile(new URL('../packages/enso.telegram/enso-plugin.json', import.meta.url), 'utf8'));
-  assert.equal(manifest.version, '1.1.2');
+  assert.equal(manifest.version, '1.1.3');
+  assert.equal(manifest.id, 'enso.telegram');
+  assert.equal(manifest.name, 'Telegram Bot');
+  assert.equal(manifest.contributes.views[0].id, 'telegram');
+  assert.equal(manifest.contributes.views[0].title, 'Telegram Bot');
   assert.equal(manifest.engines.enso, '>=0.3.14');
   for (const p of ['agent.injectTrusted', 'session.focus']) assert.ok(manifest.permissions.includes(p), p);
   const methods = manifest.contributes.methods.map((m) => m.name);
@@ -1210,9 +1214,9 @@ test('工具：广播跳过静音路由；显式指定或全都静音时报清�
   const r = await t.handlers.tools.telegram_reply({ text: '进度' }, { sessionId: 's1' });
   assert.match(r, /1 个 Telegram 聊天（跳过 1 个已静音的路由）/);
   assert.ok(!t.of('sendMessage').some((c) => c.body.chat_id === -100 && c.body.text === '进度'));
-  await assert.rejects(t.handlers.tools.telegram_reply({ text: 'x', target: '-100' }, { sessionId: 's1' }), /该路由已暂停（静音）/);
+  await assert.rejects(t.handlers.tools.telegram_reply({ text: 'x', target: '-100' }, { sessionId: 's1' }), /该路由已暂停（静音）.*「Telegram Bot」面板/);
   await assert.rejects(t.handlers.tools.telegram_send_media({ files: ['/tmp/x.png'], target: '-100' }, { sessionId: 's1' }), /该路由已暂停（静音）/);
   await mute(t, '42');
-  await assert.rejects(t.handlers.tools.telegram_reply({ text: 'x' }, { sessionId: 's1' }), /都已暂停（静音）/);
+  await assert.rejects(t.handlers.tools.telegram_reply({ text: 'x' }, { sessionId: 's1' }), /都已暂停（静音）.*「Telegram Bot」面板/);
   await assert.rejects(t.handlers.tools.telegram_send_media({ files: ['/tmp/x.png'] }, { sessionId: 's1' }), /都已暂停（静音）/);
 });

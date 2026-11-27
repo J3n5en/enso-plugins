@@ -55,7 +55,7 @@ export const HELP = [
   '/admin /unadmin：回复某人的消息设为或取消管理员；单独发 /admin 查看名单',
   `/context <0-${MAX_CONTEXT}>：触发时附带最近几条其他人的消息`,
   '/session：切换这个聊天绑定的 EnsoCode 会话',
-  '提问卡片的按钮与回复作答也仅限管理员。更多开关在 EnsoCode 右侧「Telegram」面板。',
+  '提问卡片的按钮与回复作答也仅限管理员。更多开关在 EnsoCode 右侧「Telegram Bot」面板。',
 ].join('\n');
 
 /** 只有管理员能用的命令；普通用户只能发消息、/status、/help、/id */
@@ -559,7 +559,7 @@ function decide(state, update, now, bot) {
     const pairing = /^\d{6}$/.test(command.arg)
       ? state.pairings.find((p) => p.code === command.arg && p.expiresAt > now)
       : null;
-    if (!pairing) return reply('配对码无效或已过期，请在 EnsoCode 侧栏「Telegram」里重新生成。');
+    if (!pairing) return reply('配对码无效或已过期，请在 EnsoCode 侧栏「Telegram Bot」里重新生成。');
     const inTopic = (m.chat.is_forum === true || m.is_topic_message) && topicId != null;
     const bindKey = inTopic ? key : chatKey;
     const hasAdmins = (state.admins ?? []).length > 0;
@@ -581,10 +581,10 @@ function decide(state, update, now, bot) {
       note =
         m.from && !m.from.is_bot && setAdmin(state, userOf(m.from), true)
           ? '\n👑 你是首位绑定者，已自动成为管理员：你的消息会作为可信指令交给会话，并可使用 /stop、/session、/allow 等管理命令。'
-          : '\n⚠️ 匿名管理员认不出是谁，不能成为管理员。目前还没有管理员，请在 EnsoCode「Telegram」面板的「权限」页添加。';
+          : '\n⚠️ 匿名管理员认不出是谁，不能成为管理员。目前还没有管理员，请在 EnsoCode「Telegram Bot」面板的「权限」页添加。';
     }
     const where = inTopic ? '本话题' : '本聊天';
-    if (!isRouteEnabled(state.routes[bindKey])) note += '\n🔇 这条路由目前已静音：在 EnsoCode「Telegram」面板打开它的开关后才会收发消息。';
+    if (!isRouteEnabled(state.routes[bindKey])) note += '\n🔇 这条路由目前已静音：在 EnsoCode「Telegram Bot」面板打开它的开关后才会收发消息。';
     return {
       kind: 'bound',
       key: bindKey,
@@ -596,7 +596,7 @@ function decide(state, update, now, bot) {
   }
   if (!hit || !hit.sessionId) {
     return command?.name === 'start' && !isGroup
-      ? reply('在 EnsoCode 侧栏「Telegram」里点「绑定」，再点链接或把配对码发给我：/bind 123456')
+      ? reply('在 EnsoCode 侧栏「Telegram Bot」里点「绑定」，再点链接或把配对码发给我：/bind 123456')
       : { kind: 'ignore' };
   }
   const key2 = hit.key;
@@ -617,7 +617,7 @@ function decide(state, update, now, bot) {
       const none = (state.admins ?? []).length === 0;
       return reply2(
         `⛔ /${command.name} 仅限管理员使用。` +
-          (none ? '\n目前还没有管理员：请在 EnsoCode「Telegram」面板的「权限」页添加。' : '')
+          (none ? '\n目前还没有管理员：请在 EnsoCode「Telegram Bot」面板的「权限」页添加。' : '')
       );
     }
     switch (command.name) {
@@ -681,7 +681,7 @@ function decide(state, update, now, bot) {
         if (!command.arg) return { kind: 'sessions', key: key2, chatId, topicId, current: live.sessionId };
         return switchSession(state, live, key2, Number(command.arg));
       case 'new':
-        return reply2('请在 EnsoCode「Telegram」侧栏使用「新建会话」，或在 EnsoCode 里新建后发 /session 切过去。');
+        return reply2('请在 EnsoCode「Telegram Bot」侧栏使用「新建会话」，或在 EnsoCode 里新建后发 /session 切过去。');
       case 'unbind':
         unbindRoute(state, key2);
         return { kind: 'reply', key: key2, chatId, topicId, text: '已解绑本话题/聊天。' };

@@ -129,7 +129,7 @@ export function activate(enso, { loop = true } = {}) {
   const tokenOf = async () => (await enso.config.get())?.botToken ?? null;
   const api = async (method, body, retry = true, tokenOverride) => {
     const token = tokenOverride ?? (await tokenOf());
-    if (!token) throw new Error('还没有 Bot Token：在右侧「Telegram」面板直接填写，或到 设置 → 插件 → Telegram。');
+    if (!token) throw new Error('还没有 Bot Token：在右侧「Telegram Bot」面板直接填写，或到 设置 → 插件 → Telegram Bot。');
     const res = await enso.net.fetch(`https://api.telegram.org/bot${token}/${method}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -236,7 +236,7 @@ export function activate(enso, { loop = true } = {}) {
 
   const explain = (error) => {
     if (error?.code === 'PERMISSION_DENIED')
-      return '没有授权：到 EnsoCode 设置 → 插件 → Telegram 打开“允许向任意运行中的会话发送消息”。';
+      return '没有授权：到 EnsoCode 设置 → 插件 → Telegram Bot 打开“允许向任意运行中的会话发送消息”。';
     if (error?.code === 'INJECT_FAILED') return '绑定的会话没在运行，请在 EnsoCode 里打开它。';
     if (error?.code === 'RATE_LIMITED') return '发得太快了，稍后再试。';
     return `投递失败：${error?.message ?? error}`;
@@ -304,7 +304,7 @@ export function activate(enso, { loop = true } = {}) {
   };
   const showSessions = async ({ key, current: cur }) => {
     const all = await listSessions();
-    if (!all?.length) return send(key, '还拿不到 EnsoCode 会话列表：请在 EnsoCode 里打开一次「Telegram」侧栏。');
+    if (!all?.length) return send(key, '还拿不到 EnsoCode 会话列表：请在 EnsoCode 里打开一次「Telegram Bot」侧栏。');
     const list = all.slice(0, MENU_SIZE);
     await update((state) => {
       state.menus = { ...state.menus, [key]: list };
@@ -414,7 +414,7 @@ export function activate(enso, { loop = true } = {}) {
         self.trustWarned = true;
         await send(
           action.key,
-          '⚠️ 当前 EnsoCode 没有接受可信投递（旧版本或未授予 agent.injectTrusted 权限），管理员消息已按外部消息投递。请升级 EnsoCode，或在 设置 → 插件 → Telegram 确认权限。'
+          '⚠️ 当前 EnsoCode 没有接受可信投递（旧版本或未授予 agent.injectTrusted 权限），管理员消息已按外部消息投递。请升级 EnsoCode，或在 设置 → 插件 → Telegram Bot 确认权限。'
         ).catch(() => {});
       }
     };
@@ -1293,7 +1293,7 @@ export function activate(enso, { loop = true } = {}) {
         ok: false,
         needsUpgrade: true,
         bot: { username: me.username, name: me.first_name },
-        message: 'Token 有效，但当前 EnsoCode 版本不支持从面板保存：请到 设置 → 插件 → Telegram 填写 Bot Token（并建议升级 EnsoCode）。',
+        message: 'Token 有效，但当前 EnsoCode 版本不支持从面板保存：请到 设置 → 插件 → Telegram Bot 填写 Bot Token（并建议升级 EnsoCode）。',
       };
     }
     await enso.config.set({ botToken: token });
@@ -1470,7 +1470,7 @@ export function activate(enso, { loop = true } = {}) {
     } catch (error) {
       if (error?.code === 'NOT_FOUND' || error?.code === 'NO_SESSION')
         throw new Error('跳转失败：这个会话不在当前窗口（可能属于别的项目或已关闭）。请先打开它所在的项目；当前 EnsoCode 版本若不支持跨项目跳转，升级后即可直接跳过去。');
-      if (error?.code === 'PERMISSION_DENIED') throw new Error('没有跳转会话的权限：请在 设置 → 插件 → Telegram 确认 session.focus 权限，或升级 EnsoCode。');
+      if (error?.code === 'PERMISSION_DENIED') throw new Error('没有跳转会话的权限：请在 设置 → 插件 → Telegram Bot 确认 session.focus 权限，或升级 EnsoCode。');
       throw new Error(`跳转失败：${error?.message ?? error}`);
     }
     return { ok: true };
@@ -1487,13 +1487,13 @@ export function activate(enso, { loop = true } = {}) {
     if (target) {
       const r = state.routes[target];
       if (!r) throw new Error(`没有这条路由：${target}`);
-      if (!isRouteEnabled(r)) throw new Error(`该路由已暂停（静音）：${target}。在 EnsoCode「Telegram」面板打开它的开关后才能发送。`);
+      if (!isRouteEnabled(r)) throw new Error(`该路由已暂停（静音）：${target}。在 EnsoCode「Telegram Bot」面板打开它的开关后才能发送。`);
       return { targets: [target], skipped: 0 };
     }
     const all = routesOfSession(state, sessionId);
     if (!all.length) throw new Error('本会话没有绑定 Telegram 聊天');
     const targets = all.filter(({ route: r }) => isRouteEnabled(r)).map((x) => x.key);
-    if (!targets.length) throw new Error('本会话绑定的 Telegram 路由都已暂停（静音），没有发送。在 EnsoCode「Telegram」面板打开开关后再试。');
+    if (!targets.length) throw new Error('本会话绑定的 Telegram 路由都已暂停（静音），没有发送。在 EnsoCode「Telegram Bot」面板打开开关后再试。');
     return { targets, skipped: all.length - targets.length };
   };
   const skippedNote = (n) => (n ? `（跳过 ${n} 个已静音的路由）` : '');

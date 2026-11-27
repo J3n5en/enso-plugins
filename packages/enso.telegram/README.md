@@ -1,14 +1,14 @@
-# Telegram
+# Telegram Bot
 
-用 Telegram Bot 远程使用 EnsoCode 会话。在右侧「Telegram」面板粘贴 Bot Token 一键连接，然后把私聊、群聊、甚至论坛群里的单个话题，分别绑定给任意 EnsoCode 会话（包括跨项目会话与秘书会话）。
+用 Telegram Bot 远程使用 EnsoCode 会话。在右侧「Telegram Bot」面板粘贴 Bot Token 一键连接，然后把私聊、群聊、甚至论坛群里的单个话题，分别绑定给任意 EnsoCode 会话（包括跨项目会话与秘书会话）。
 
 ## 连接
 
 1. 在 Telegram 找 `@BotFather`，发 `/newbot` 创建机器人，复制 Token。
-2. 打开 EnsoCode 右侧「Telegram」面板，粘贴 Token，点「校验并连接」。
+2. 打开 EnsoCode 右侧「Telegram Bot」面板，粘贴 Token，点「校验并连接」。
 3. 想在群里用上下文/免 @ 直发：对 `@BotFather` 发 `/setprivacy` 选 **Disable**，再把机器人移出群重新拉进来。
 
-> 旧版 EnsoCode 不支持从面板保存 Token 时，面板会提示你去「设置 → 插件 → Telegram」填写。
+> 旧版 EnsoCode 不支持从面板保存 Token 时，面板会提示你去「设置 → 插件 → Telegram Bot」填写。
 
 ## 绑定与路由
 

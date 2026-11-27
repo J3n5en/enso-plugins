@@ -526,7 +526,7 @@ test('匿名管理员完成首次绑定：admins 仍为空并提示去面板添�
   const res = route(state, group(`/bind ${code}`, { from: ANON }), 0, BOT);
   assert.equal(res.kind, 'bound');
   assert.deepEqual(state.admins, []);
-  assert.match(res.text, /匿名管理员.*面板/s);
+  assert.match(res.text, /匿名管理员.*「Telegram Bot」面板/s);
 });
 
 test('已绑定的路由：非管理员拿配对码也改绑不了；还没有管理员时可以接手', () => {
@@ -576,7 +576,7 @@ test('命令分级：普通白名单用户只能 /status /help /id，管理命�
   assert.equal(route(state, group('/steer 插一句'), 0, BOT).admin, true);
   // 管理员没设时提示去面板
   state.admins = [];
-  assert.match(asBob('/stop').text, /还没有管理员/);
+  assert.match(asBob('/stop').text, /还没有管理员.*「Telegram Bot」面板/);
 });
 
 test('/admin /unadmin：回复设/撤管理员，匿名管理员与机器人被拒，单发列名单', () => {
