@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "enso.swarm",
   "name": "Swarm",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "description": "蜂群：一个协调者把活拆给几个独立会话，通过共享消息板协作，侧栏是 AGY 的原版看板（Board / Members / Graph / Raw）。",
   "icon": "logo.svg",
   "engines": {
@@ -274,6 +274,12 @@
       }
     ],
     "events": [
+      {
+        "event": "tool_call"
+      },
+      {
+        "event": "tool_result"
+      },
       {
         "event": "session_end"
       },

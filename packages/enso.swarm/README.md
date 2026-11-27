@@ -82,6 +82,18 @@ node test/preview.mjs [输出路径] [--empty]   # 默认 /tmp/swarm-pane-previe
 `killed_reason` 也区分了「谁杀的」：协调者 `swarm{action:"kill"}` 没有 reason，**不可复活**；
 宿主给的 `dismissed` / `parent_ended` 可以由同一个 key 重新 `bind` 回来。
 
+面板还从 transcript 的 **mtime** 判断「这一步之后还有没有动静」：`working` 加上 10 分钟没写过，就报
+`<name>: no progress, and not waiting on the board`（成员行显示「卡住」）。插件原来只在看板调用时写
+transcript，于是一个花十分钟连着改代码、跑测试、一次都没发帖的 worker 会被说成卡住——它明明在干活。
+因此插件另外订阅了 `tool_call` / `tool_result`（通知型，`agent.observe` 就够，子会话也会送）：
+
+- `tool_call` → 往该成员的 transcript 追加一步，`toolSummary` 写 `bash: pnpm test` 这样的实际调用，
+  面板因此既新鲜又显示「正在跑什么」；看板类工具（`swarm*`）本来就会记，不重复写。
+- `tool_result` → 只刷新 mtime，不写步骤：一次很长的工具调用结束时成员仍是活的，transcript 也不会被灌大
+  （超过 2MB 之后连 `tool_call` 也只刷新 mtime）。
+
+真的什么都不做的成员照样会被报卡住，这一档没变。
+
 ## 点开一个成员
 
 AGY 面板里点成员卡片 / 图上的节点 / Overview 的成员行，最后都走 `window.sidecar.ui.toggleConversation(conv)`

@@ -9,6 +9,7 @@ import {
   readdirSync,
   rmSync,
   existsSync,
+  utimesSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -358,4 +359,47 @@ test('a transcript nobody wrote to for 10 minutes reads as quiet, not working', 
   );
   const status = await call('swarm', { action: 'status' });
   assert.match(status.content, /quiet\tworker\twaiting\t0 posts\tlast #0\tquiet for 11m/);
+});
+
+test('a worker busy in tools is not called stuck', async () => {
+  const child = { kind: 'coworker', sessionId: `${coordinator}::cw-busy`, name: 'busy' };
+  await call('swarm', { action: 'add', name: 'busy', brief: 'Brief.' });
+  await call('swarm', { action: 'bind', key: members().members.busy.key }, child);
+  await call('swarm_post', { text: 'busy starting' }, child);
+
+  // Twelve minutes without a board call: the pane judges liveness from the
+  // transcript mtime, so it calls a working member stuck.
+  const conv = members().members.busy.conversation_id;
+  const file = join(dataDir, 'state', 'brain', conv, '.system_generated', 'logs', 'transcript.jsonl');
+  const old = new Date(Date.now() - 12 * 60 * 1000);
+  utimesSync(file, old, old);
+  let snap = await snapshot();
+  assert.equal(snap.members.find((m) => m.name === 'busy').status, 'working');
+  assert.ok(
+    snap.systemAttention.some((i) => i.member === 'busy' && i.kind === 'stuck'),
+    'the pane does call it stuck'
+  );
+
+  // Every tool the member runs is real activity, and the step names the tool.
+  fire('tool_call', { toolName: 'bash', input: { command: 'pnpm test' } }, child);
+  snap = await snapshot();
+  const busy = snap.members.find((m) => m.name === 'busy');
+  assert.equal(busy.status, 'working');
+  assert.equal(busy.activity, 'bash: pnpm test');
+  assert.ok(!snap.systemAttention.some((i) => i.member === 'busy'), 'and stops once it is working');
+
+  // A long call only refreshes the mtime when it ends: no step, no growth.
+  fire('tool_result', { toolName: 'bash', input: {}, isError: false }, child);
+  snap = await snapshot();
+  assert.equal(snap.members.find((m) => m.name === 'busy').steps, busy.steps);
+
+  // Board calls already record themselves; no second step for them.
+  fire('tool_call', { toolName: 'swarm_read', input: {} }, child);
+  snap = await snapshot();
+  assert.equal(snap.members.find((m) => m.name === 'busy').steps, busy.steps);
+
+  // The coordinator's own tools belong to no member.
+  fire('tool_call', { toolName: 'bash', input: { command: 'ls' } }, undefined);
+  snap = await snapshot();
+  assert.equal(snap.members.find((m) => m.name === 'coordinator').steps, 0);
 });

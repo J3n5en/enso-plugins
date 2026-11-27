@@ -30,6 +30,8 @@ import {
   readFileSync,
   readdirSync,
   renameSync,
+  statSync,
+  utimesSync,
   writeFileSync,
 } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -372,6 +374,79 @@ function recordActivity(ctx, conv, toolName, args, summary) {
 
 /** Reasons the host gives when a member's session is gone but nobody killed it. */
 const ENDED = new Set(['dismissed', 'parent_ended', 'ended']);
+
+/** Tools that already write their own step through recordActivity(). */
+const SWARM_TOOLS = new Set(['swarm', 'swarm_post', 'swarm_read', 'swarm_wait', 'swarm_plan', 'swarm_view']);
+
+/** Big transcripts are not worth growing; past this we only refresh the mtime. */
+const TRANSCRIPT_MAX_BYTES = 2 * 1024 * 1024;
+
+function toolSummary(toolName, input) {
+  const name = String(toolName || 'tool');
+  const i = input && typeof input === 'object' ? input : {};
+  const hint = [i.command, i.file_path, i.path, i.pattern, i.query, i.description].find(
+    (v) => typeof v === 'string' && v.trim()
+  );
+  const text = hint ? `${name}: ${String(hint).trim().split('\n')[0]}` : name;
+  return text.slice(0, 120);
+}
+
+/**
+ * One member's transcript, found by the child session id the host reports.
+ * Returns the member row and its swarm conversation dir.
+ */
+function memberBySession(sessionId) {
+  if (!sessionId) return null;
+  for (const conv of swarmConvs()) {
+    const roster = readRoster(conv);
+    if (!roster) continue;
+    for (const member of Object.values(roster.members)) {
+      const m = member && typeof member === 'object' ? member : null;
+      if (!m || m.session_id !== sessionId || m.killed || !m.conversation_id) continue;
+      return { conv, member: m };
+    }
+  }
+  return null;
+}
+
+/**
+ * The pane decides a member is stuck from its transcript: `working` plus an
+ * mtime older than ten minutes reads as "no progress, and not waiting on the
+ * board". We only ever wrote board calls there, so a worker that spends ten
+ * minutes in bash and edits was called stuck while it was plainly working.
+ * Every tool a bound member runs is real work, so record it the same shape a
+ * board call does — the label even names the tool.
+ */
+function noteMemberActivity(sessionId, toolName, input) {
+  if (!sessionId || SWARM_TOOLS.has(String(toolName))) return;
+  const hit = memberBySession(sessionId);
+  if (!hit) return;
+  const path = transcriptPath(hit.member.conversation_id);
+  const summary = toolSummary(toolName, input);
+  if (existsSync(path) && statSync(path).size > TRANSCRIPT_MAX_BYTES) {
+    const now = new Date();
+    utimesSync(path, now, now);
+    return;
+  }
+  appendTranscriptStep(hit.member.conversation_id, {
+    step_index: Date.now(),
+    type: 'PLANNER_RESPONSE',
+    status: 'RUNNING',
+    thinking: summary,
+    tool_calls: [{ name: String(toolName || 'tool').slice(0, 64), args: { toolSummary: summary } }],
+  });
+}
+
+/** A tool finished: the member is alive even if the step it wrote is old. */
+function touchMemberTranscript(sessionId) {
+  if (!sessionId) return;
+  const hit = memberBySession(sessionId);
+  if (!hit) return;
+  const path = transcriptPath(hit.member.conversation_id);
+  if (!existsSync(path)) return;
+  const now = new Date();
+  utimesSync(path, now, now);
+}
 
 /**
  * The session behind a member ended. Nothing else writes its state after that,
@@ -967,6 +1042,21 @@ export async function activate(inner) {
     });
     enso.events.on('agent_end', (_data, ctx) => {
       setMemberParked(turnSession(ctx), true);
+    });
+    // The pane calls a member stuck from an old transcript mtime, and we only
+    // write that transcript on board calls — so ten minutes of bash and editing
+    // read as "no progress, and not waiting on the board" while the worker is
+    // in fact working. Every tool it runs is real activity: the call records a
+    // step, the result refreshes the mtime (one long tool keeps it alive).
+    const toolSession = (ctx) => {
+      const agent = ctx && ctx.agent;
+      return String((agent && agent.sessionId) || '');
+    };
+    enso.events.on('tool_call', (data, ctx) => {
+      noteMemberActivity(toolSession(ctx), String((data && data.toolName) || ''), data && data.input);
+    });
+    enso.events.on('tool_result', (_data, ctx) => {
+      touchMemberTranscript(toolSession(ctx));
     });
   }
 

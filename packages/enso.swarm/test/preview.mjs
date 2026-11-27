@@ -5,7 +5,7 @@
 // 自包含文件（脚本和样式全部内联，和 Enso 宿主插件页的做法一致）。
 //
 //   node test/preview.mjs [输出路径]
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -87,6 +87,28 @@ function members() {
 function bind(name) {
   const key = members().members[name].key;
   return tools.get('swarm')({ action: 'bind', key }, { sessionId: `${coordinator}::cw-${name}` });
+}
+
+// 面板的两种情况摆在同一条屏幕上：wiring 的 transcript 12 分钟没动（它在干别的活，
+// 没写看板）会被说成卡住；verifier 刚跑了一条 bash，那就是活的。
+{
+  const wiringConv = members().members.wiring.conversation_id;
+  const transcript = join(
+    dataDir,
+    'state',
+    'brain',
+    wiringConv,
+    '.system_generated',
+    'logs',
+    'transcript.jsonl'
+  );
+  const old = new Date(Date.now() - 12 * 60 * 1000);
+  utimesSync(transcript, old, old);
+  const agent = { kind: 'coworker', sessionId: `${coordinator}::cw-verifier`, name: 'verifier' };
+  handlers.get('tool_call')(
+    { toolName: 'bash', input: { command: 'pnpm test:changed' } },
+    { sessionId: coordinator, agent }
+  );
 }
 
 // --empty：没有蜂群的会话，用来看空状态。
