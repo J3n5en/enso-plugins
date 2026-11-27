@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-27T12:54:57.666Z",
-  "sequence": 146,
+  "generatedAt": "2026-11-27T15:40:43.513Z",
+  "sequence": 147,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -2492,7 +2492,7 @@
     {
       "id": "enso.telegram",
       "name": "Telegram",
-      "description": "用 Telegram Bot 远程使用 EnsoCode 会话：面板直填 Token 即连；私聊、群聊与论坛话题各自绑定任意会话（含秘书）；两层白名单与全群开放模式、逐话题免 @ 直发；上下文条数、限速攒批与提示词前置按路由配置；双向图片与相册；ask_user 按钮直接在群里作答。",
+      "description": "用 Telegram Bot 远程使用 EnsoCode 会话：面板直填 Token 即连；私聊、群聊与论坛话题各自绑定任意会话（含秘书），面板一键跳到目标会话；管理员消息可信直达、普通用户按外部数据隔离；两层白名单与全群开放模式、逐话题免 @ 直发；上下文条数、限速攒批与提示词前置按路由配置；双向图片与相册；ask_user 按钮直接在群里作答。",
       "tier": "official",
       "tags": [
         "remote",
@@ -2501,11 +2501,11 @@
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.telegram.svg",
       "category": "integrations",
       "readme": {
-        "path": "packages/enso.telegram/1.0.0.readme.md",
-        "sha256": "833df70be0461a69f28bbe541f95326356997899b1cb3681ac2df30de55fb4e5",
-        "size": 3180
+        "path": "packages/enso.telegram/1.1.0.readme.md",
+        "sha256": "c92d44aad80d709fc96bbbcbc5a903873571fc72e3547f03618623a04b28d947",
+        "size": 5667
       },
-      "latest": "1.0.0",
+      "latest": "1.1.0",
       "versions": [
         {
           "version": "0.2.0",
@@ -2669,6 +2669,30 @@
           "sha256": "af30e89ab7d77ff6c835863bb20043e5f1555f1dc4de701856639c5a3d36aa08",
           "size": 148289,
           "publishedAt": "2026-11-27T12:54:57.666Z"
+        },
+        {
+          "version": "1.1.0",
+          "engines": {
+            "enso": ">=0.3.14"
+          },
+          "permissions": [
+            "process.background",
+            "agent.inject",
+            "agent.injectTrusted",
+            "agent.observe",
+            "agent.tool",
+            "net.fetch",
+            "session.create",
+            "session.focus",
+            "session.read",
+            "session.readAll",
+            "ui.openExternal",
+            "ui.view"
+          ],
+          "path": "packages/enso.telegram/1.1.0.zip",
+          "sha256": "08d056a06b673cbe945f097507d08790504418960f72c25e1029956459dc4ef8",
+          "size": 173017,
+          "publishedAt": "2026-11-27T15:40:43.513Z"
         }
       ]
     },
