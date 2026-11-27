@@ -943,6 +943,24 @@ test('focus：跳到会话（子会话归到主会话）；NOT_FOUND 与旧宿�
   await assert.rejects(legacy.handlers.renderer.focus({ sessionId: 's1' }), /升级 EnsoCode/);
 });
 
+test('route bindCurrent：按点击时实时的 ctx.sessionId 改绑（子会话归主会话），没有会话时报错且不改动', async () => {
+  const t = await setup();
+  await t.pair();
+  await runPoll(t);
+  // 面板上一次轮询还停在 s1，点按钮时宿主传来的已是新会话
+  assert.equal((await t.handlers.renderer.state({}, { sessionId: 's1' })).routes[0].sessionId, 's1');
+  const v = await t.handlers.renderer.route({ key: '42', patch: { bindCurrent: true } }, { sessionId: 's2::child' });
+  assert.equal(v.routes.find((r) => r.key === '42').sessionId, 's2');
+  assert.equal(v.sessionId, 's2');
+  await assert.rejects(t.handlers.renderer.route({ key: '42', patch: { bindCurrent: true } }, {}), /请先打开一个会话/);
+  await assert.rejects(t.handlers.renderer.route({ key: '42', patch: { bindCurrent: true } }, { sessionId: '' }), /请先打开一个会话/);
+  assert.equal((await t.handlers.renderer.state({}, { sessionId: 's3' })).routes[0].sessionId, 's2', '报错时绑定不变');
+  // 入站消息跟着新绑定走
+  t.message('到新会话了吗');
+  await runPoll(t);
+  assert.equal(t.injected.at(-1).sessionId, 's2');
+});
+
 test('cancelPair：关闭配对卡片即作废配对码，再 /bind 被拒', async () => {
   const t = await setup();
   const v1 = await t.handlers.renderer.pair({}, { sessionId: 's1' });

@@ -1356,10 +1356,13 @@ export function activate(enso, { loop = true } = {}) {
     return view(ctx?.sessionId ?? null);
   });
 
-  enso.renderer.handle('route', async (args, ctx) =>
-    editRoute(args, ctx, (r) => {
-      const patch = args?.patch ?? {};
-      if (patch.sessionId !== undefined) r.sessionId = rootSession(patch.sessionId);
+  enso.renderer.handle('route', async (args, ctx) => {
+    const patch = args?.patch ?? {};
+    // 「绑定当前」取点击时宿主传来的实时会话，面板上的 view.sessionId 可能还落后一次 1.5s 轮询
+    const current = patch.bindCurrent === true ? needSession(ctx) : undefined;
+    return editRoute(args, ctx, (r) => {
+      if (current) r.sessionId = current;
+      else if (patch.sessionId !== undefined) r.sessionId = rootSession(patch.sessionId);
       if (patch.enabled !== undefined) {
         r.enabled = patch.enabled === true;
         if (!r.enabled) silence(args.key);
@@ -1371,8 +1374,8 @@ export function activate(enso, { loop = true } = {}) {
       if (patch.debounceSec !== undefined) r.debounceSec = patch.debounceSec;
       if (patch.minIntervalSec !== undefined) r.minIntervalSec = patch.minIntervalSec;
       if (patch.promptPrefix !== undefined) r.promptPrefix = String(patch.promptPrefix).slice(0, MAX_PREFIX);
-    })
-  );
+    });
+  });
 
   /** 新建会话（宿主要求手势触发）并把路由改绑过去 */
   enso.renderer.handle('fresh', async (args, ctx) => {

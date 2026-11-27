@@ -187,6 +187,41 @@ test('路由卡片：头部会话标签可跳转且不触发折叠；展开态�
   assert.match(body, /class="row wrap"/);
 });
 
+test('「绑定当前」三态：无当前会话禁用、已绑当前禁用、不同会话可点并发 bindCurrent', async () => {
+  const button = (html) => html.match(/<span class="tip" data-tip="([^"]*)"><button [^>]*data-bind-current="-100"[^>]*>([^<]*)<\/button>/);
+  const sessions = [{ id: 's1', title: '主线', kind: 'normal' }, { id: 's2', title: 'Greeting', kind: 'normal' }];
+  let current = baseView({ sessionId: null });
+  const ui = await mount(async (method) => current);
+  ui.click({ toggle: '-100' });
+
+  let b = button(ui.nodes.body.html);
+  assert.ok(b, '目标会话行有「绑定当前」按钮');
+  assert.equal(b[1], '先在主界面打开一个会话');
+  assert.match(b[0], / disabled>/);
+
+  current = baseView({ sessionId: 's1', sessions });
+  await ui.ctx.run('state');
+  b = button(ui.nodes.body.html);
+  assert.equal(b[1], '已经绑定到当前会话');
+  assert.equal(b[2], '已绑当前');
+  assert.match(b[0], / disabled>/);
+
+  current = baseView({ sessionId: 's2', sessions });
+  await ui.ctx.run('state');
+  b = button(ui.nodes.body.html);
+  assert.equal(b[1], '改绑到当前会话：Greeting');
+  assert.equal(b[2], '绑定当前');
+  assert.doesNotMatch(b[0], /disabled/);
+  ui.click({ bindCurrent: '-100' });
+  await settle();
+  assert.deepEqual(ui.calls.at(-1), { method: 'route', args: { key: '-100', patch: { bindCurrent: true } } });
+
+  // 当前会话不在列表里（拿不到标题）也能改绑
+  current = baseView({ sessionId: 's9', sessions });
+  await ui.ctx.run('state');
+  assert.equal(button(ui.nodes.body.html)[1], '改绑到当前会话');
+});
+
 test('跳转失败把中文提示显示出来', async () => {
   const ui = await mount(async (method) => {
     if (method === 'focus') throw new Error('跳转失败：这个会话不在当前窗口');
