@@ -118,6 +118,11 @@ async function setup({ injectError, sessions, dataDir, configSet, answerAsk, foc
 test.afterEach(() => deactivate());
 
 const runPoll = (t) => t.tick(0);
+/** typing 续发不等待 sendChatAction 返回，多等一轮宏任务让调用落进记录 */
+const tickTyping = async (t) => {
+  await t.typingTick();
+  await new Promise((r) => setImmediate(r));
+};
 
 test('配对后发消息：先发占位，注入会话，进度原位更新，结束时把回复写进占位', async () => {
   const t = await setup();
@@ -961,7 +966,7 @@ test('route bindCurrent：按点击时实时的 ctx.sessionId 改绑（子会话
   assert.equal(t.injected.at(-1).sessionId, 's2');
 });
 
-test('进度提示关闭：不发占位/插入/进度/静默处理，typing 照常，最终回复直接发；再打开恢复', async () => {
+test('进度提示关闭：不发占位/插入/进度/静默处理/正在输入，最终回复直接发；再打开恢复', async () => {
   const t = await setup();
   await t.pair();
   await runPoll(t);
@@ -970,15 +975,19 @@ test('进度提示关闭：不发占位/插入/进度/静默处理，typing 照�
   assert.equal(v.routes[0].showProgress, false);
   const steps = /^(⏳|↪️|▶️|📥|🤫)/;
   const noise = () => t.calls.filter((c) => ['sendMessage', 'editMessageText'].includes(c.method) && steps.test(c.body.text ?? ''));
+  const typing = () => t.of('sendChatAction').length;
 
   t.message('帮我看下测试');
   await runPoll(t);
   assert.equal(t.injected.at(-1).sessionId, 's1');
-  assert.ok(t.of('sendChatAction').length >= 1, '原生「正在输入」保留');
+  await tickTyping(t);
+  assert.equal(typing(), 0, '不显示「正在输入」');
   await t.handlers.events.tool_call({ toolName: 'bash' }, { sessionId: 's1', agent: null });
   t.message('/steer 插一句');
   await runPoll(t);
   assert.equal(t.injected.at(-1).deliverAs, 'steer');
+  await tickTyping(t);
+  assert.equal(typing(), 0, '/steer 也不显示「正在输入」');
   await t.handlers.events.agent_end({ text: '**全部通过**' }, { sessionId: 's1', agent: null });
   assert.equal(t.of('sendMessage').at(-1).body.text, '<b>全部通过</b>', '最终回复作为新消息直接发');
   assert.equal(t.of('editMessageText').length, 0);
@@ -993,6 +1002,8 @@ test('进度提示关闭：不发占位/插入/进度/静默处理，typing 照�
   t.message('攒着');
   await runPoll(t);
   await t.flushTextBuffer('42');
+  await tickTyping(t);
+  assert.equal(typing(), 0, '攒批投递不显示「正在输入」');
   await t.handlers.renderer.route({ key: '42', patch: { debounceSec: 0 } }, { sessionId: 's1' });
 
   // 排队与补投：排队提示照发（它不是进度），补投不发「▶️」
@@ -1006,6 +1017,8 @@ test('进度提示关闭：不发占位/插入/进度/静默处理，typing 照�
   t.enso.session.inject = realInject;
   await t.flush();
   assert.match(t.injected.at(-1).text, /先排着$/);
+  await tickTyping(t);
+  assert.equal(typing(), 0, '排队补投不显示「正在输入」');
   assert.deepEqual(noise(), [], '一条过程提示都没有');
 
   // 关之前留下的占位：静默结束时删掉
@@ -1015,10 +1028,49 @@ test('进度提示关闭：不发占位/插入/进度/静默处理，typing 照�
   await runPoll(t);
   const placeholder = t.of('sendMessage').find((c) => c.body.text === '⏳ 已收到，处理中…');
   assert.ok(placeholder, '重新打开后恢复占位');
+  assert.equal(typing(), 1, '重新打开后恢复「正在输入」');
+  await tickTyping(t);
+  assert.equal(typing(), 2, '重新打开后续发「正在输入」');
   await t.handlers.renderer.route({ key: '42', patch: { showProgress: false } }, { sessionId: 's1' });
   await t.handlers.events.agent_end({ text: 'x', silent: true }, { sessionId: 's1', agent: null });
   assert.deepEqual(t.of('deleteMessage').map((c) => c.body), [{ chat_id: 42, message_id: placeholder.resultMessageId }]);
   assert.ok(!t.of('editMessageText').some((c) => c.body.text?.startsWith('🤫')));
+});
+
+test('进度提示在轮次进行中关掉：立即停止续发「正在输入」', async () => {
+  const t = await setup();
+  await t.pair();
+  await runPoll(t);
+  const typing = () => t.of('sendChatAction').length;
+  t.message('长任务');
+  await runPoll(t);
+  assert.equal(typing(), 1);
+  await tickTyping(t);
+  assert.equal(typing(), 2, '开着时每次 tick 续发');
+  await t.handlers.renderer.route({ key: '42', patch: { showProgress: false } }, { sessionId: 's1' });
+  await tickTyping(t);
+  await tickTyping(t);
+  assert.equal(typing(), 2, '关掉后不再续发');
+  // 重新打开不会复活本轮的 typing，下一条消息才重新开始
+  await t.handlers.renderer.route({ key: '42', patch: { showProgress: true } }, { sessionId: 's1' });
+  await tickTyping(t);
+  assert.equal(typing(), 2);
+});
+
+test('typing 续发前按最新配置再查：绕过面板写入的关闭也会停', async () => {
+  const { readFile, writeFile } = await import('node:fs/promises');
+  const t = await setup();
+  await t.pair();
+  await runPoll(t);
+  t.message('长任务');
+  await runPoll(t);
+  const file = join(t.enso.dataDir, 'state.json');
+  const state = JSON.parse(await readFile(file, 'utf8'));
+  state.routes['42'].showProgress = false;
+  await writeFile(file, JSON.stringify(state));
+  const before = t.of('sendChatAction').length;
+  await tickTyping(t);
+  assert.equal(t.of('sendChatAction').length, before);
 });
 
 test('进度提示开启：攒批回执、补投与静默处理的过程提示照旧', async () => {
@@ -1061,10 +1113,10 @@ test('cancelPair：关闭配对卡片即作废配对码，再 /bind 被拒', asy
   assert.equal((await t.handlers.renderer.state({}, { sessionId: 's1' })).pairing, undefined);
 });
 
-test('清单：1.1.1，声明 injectTrusted/session.focus 与新方法', async () => {
+test('清单：1.1.2，声明 injectTrusted/session.focus 与新方法', async () => {
   const { readFile } = await import('node:fs/promises');
   const manifest = JSON.parse(await readFile(new URL('../packages/enso.telegram/enso-plugin.json', import.meta.url), 'utf8'));
-  assert.equal(manifest.version, '1.1.1');
+  assert.equal(manifest.version, '1.1.2');
   assert.equal(manifest.engines.enso, '>=0.3.14');
   for (const p of ['agent.injectTrusted', 'session.focus']) assert.ok(manifest.permissions.includes(p), p);
   const methods = manifest.contributes.methods.map((m) => m.name);
