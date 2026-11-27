@@ -350,6 +350,8 @@ export function activate(enso, { loop = true } = {}) {
   }
 
   // ---- 入站投递（含排队与补投） ----
+  /** 路由关了进度提示：不发占位、攒批回执、工具进度与「已静默处理」，只发最终回复；路由不存在时照旧显示 */
+  const quiet = (state, key) => state?.routes[key]?.showProgress === false;
   /** 返回 false 表示会话仍没运行，留在队列里 */
   const deliverInject = async (action, retry = false) => {
     const latest = await load().catch(() => null);
@@ -426,12 +428,14 @@ export function activate(enso, { loop = true } = {}) {
         return true;
       }
       done();
-      const placeholder = await api('sendMessage', {
-        chat_id: routeChatId(action.key),
-        ...threadParams(action.key),
-        text: '▶️ 会话已启动，开始处理排队的消息…',
-        reply_parameters: { message_id: action.messageId, allow_sending_without_reply: true },
-      }).catch(() => null);
+      const placeholder = quiet(latest, action.key)
+        ? null
+        : await api('sendMessage', {
+            chat_id: routeChatId(action.key),
+            ...threadParams(action.key),
+            text: '▶️ 会话已启动，开始处理排队的消息…',
+            reply_parameters: { message_id: action.messageId, allow_sending_without_reply: true },
+          }).catch(() => null);
       await update((state) =>
         markPending(state, action.sessionId, { key: action.key, placeholderId: placeholder?.message_id })
       );
@@ -439,12 +443,14 @@ export function activate(enso, { loop = true } = {}) {
       return true;
     }
     const steer = action.deliverAs === 'steer';
-    const placeholder = await api('sendMessage', {
-      chat_id: routeChatId(action.key),
-      ...threadParams(action.key),
-      text: steer ? '↪️ 已插入当前任务' : '⏳ 已收到，处理中…',
-      reply_parameters: { message_id: action.messageId, allow_sending_without_reply: true },
-    }).catch(() => null);
+    const placeholder = quiet(latest, action.key)
+      ? null
+      : await api('sendMessage', {
+          chat_id: routeChatId(action.key),
+          ...threadParams(action.key),
+          text: steer ? '↪️ 已插入当前任务' : '⏳ 已收到，处理中…',
+          reply_parameters: { message_id: action.messageId, allow_sending_without_reply: true },
+        }).catch(() => null);
     await update((state) => {
       const existing = pendingTargets(state, action.sessionId).find((t) => t.key === action.key);
       if (!(steer && existing)) markPending(state, action.sessionId, { key: action.key, placeholderId: placeholder?.message_id });
@@ -596,7 +602,7 @@ export function activate(enso, { loop = true } = {}) {
     if (decision.deliver) return flushTextBuffer(bufKey);
     scheduleBuffer(bufKey, decision.waitMs);
     // 给用户一个已入缓冲的即时反馈（仅第一次）
-    if (buf.actions.length === 1) {
+    if (buf.actions.length === 1 && !quiet(state, action.key)) {
       await api('sendMessage', {
         chat_id: routeChatId(action.key),
         ...threadParams(action.key),
@@ -940,7 +946,7 @@ export function activate(enso, { loop = true } = {}) {
     if (Date.now() - entry.at < PROGRESS_EVERY_MS) return;
     entry.at = Date.now();
     const state = await load();
-    const targets = pendingTargets(state, key).filter((t) => t.placeholderId && !isMuted(state, t.key));
+    const targets = pendingTargets(state, key).filter((t) => t.placeholderId && !isMuted(state, t.key) && !quiet(state, t.key));
     const who = ctx.agent ? `${ctx.agent.name} · ` : '';
     for (const t of targets)
       await edit(t.key, t.placeholderId, `⏳ 处理中…（第 ${entry.steps} 步：${who}${data?.toolName ?? '工具'}）`);
@@ -961,7 +967,11 @@ export function activate(enso, { loop = true } = {}) {
       progress.delete(rootSession(ctx.sessionId));
       for (const t of silentTargets) {
         typingStop(t.key);
-        if (t.placeholderId && !isMuted(before, t.key)) await edit(t.key, t.placeholderId, '🤫 本轮已在别处静默处理。');
+        if (!t.placeholderId || isMuted(before, t.key)) continue;
+        // 关进度提示前留下的占位直接删掉，免得聊天里一直卡着「⏳」
+        if (quiet(before, t.key))
+          await api('deleteMessage', { chat_id: routeChatId(t.key), message_id: t.placeholderId }).catch(() => {});
+        else await edit(t.key, t.placeholderId, '🤫 本轮已在别处静默处理。');
       }
       return;
     }
@@ -1195,6 +1205,7 @@ export function activate(enso, { loop = true } = {}) {
       sync: r.sync,
       enabled: r.enabled !== false,
       directTrigger: r.directTrigger,
+      showProgress: r.showProgress !== false,
       whitelistMode: r.whitelistMode,
       allow: r.allow,
       requests: r.requests,
@@ -1356,23 +1367,27 @@ export function activate(enso, { loop = true } = {}) {
     return view(ctx?.sessionId ?? null);
   });
 
-  enso.renderer.handle('route', async (args, ctx) =>
-    editRoute(args, ctx, (r) => {
-      const patch = args?.patch ?? {};
-      if (patch.sessionId !== undefined) r.sessionId = rootSession(patch.sessionId);
+  enso.renderer.handle('route', async (args, ctx) => {
+    const patch = args?.patch ?? {};
+    // 「绑定当前」取点击时宿主传来的实时会话，面板上的 view.sessionId 可能还落后一次 1.5s 轮询
+    const current = patch.bindCurrent === true ? needSession(ctx) : undefined;
+    return editRoute(args, ctx, (r) => {
+      if (current) r.sessionId = current;
+      else if (patch.sessionId !== undefined) r.sessionId = rootSession(patch.sessionId);
       if (patch.enabled !== undefined) {
         r.enabled = patch.enabled === true;
         if (!r.enabled) silence(args.key);
       }
       if (patch.sync !== undefined) r.sync = patch.sync === true;
       if (patch.directTrigger !== undefined) r.directTrigger = patch.directTrigger === true;
+      if (patch.showProgress !== undefined) r.showProgress = patch.showProgress === true;
       if (patch.whitelistMode !== undefined && ['inherit', 'custom', 'open'].includes(patch.whitelistMode)) r.whitelistMode = patch.whitelistMode;
       if (patch.context !== undefined) r.context = patch.context;
       if (patch.debounceSec !== undefined) r.debounceSec = patch.debounceSec;
       if (patch.minIntervalSec !== undefined) r.minIntervalSec = patch.minIntervalSec;
       if (patch.promptPrefix !== undefined) r.promptPrefix = String(patch.promptPrefix).slice(0, MAX_PREFIX);
-    })
-  );
+    });
+  });
 
   /** 新建会话（宿主要求手势触发）并把路由改绑过去 */
   enso.renderer.handle('fresh', async (args, ctx) => {

@@ -25,11 +25,13 @@
       .rt.muted > .head .grow, .rt.muted > .head .sess-chip { opacity: .5; }
       .rt > .body { padding: 8px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
       label.switch { display: flex; align-items: center; gap: 6px; color: var(--muted-foreground); font-size: 11px; cursor: pointer; white-space: nowrap; }
-      /* 标签 + 下拉框：标签不折行，下拉框吃掉剩余宽度 */
-      .field-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+      /* 标签 + 下拉框：标签不折行，下拉框吃掉剩余宽度；放不下时操作按钮整组折到下一行靠右，不挤压下拉框 */
+      .field-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0; }
       .field-row > .lbl { white-space: nowrap; flex-shrink: 0; font-size: 12px; color: var(--foreground); }
-      .field-row > select.ui-input { flex: 1; min-width: 0; height: 26px; font-size: 11px; }
-      .field-row > .ui-btn { flex-shrink: 0; }
+      .field-row > select.ui-input { flex: 1 1 140px; min-width: 140px; height: 26px; font-size: 11px; }
+      .field-row > .acts { display: flex; gap: 6px; margin-left: auto; flex-shrink: 0; }
+      /* 禁用按钮 pointer-events:none 收不到悬停，tooltip 挂在外层 */
+      .tip { display: inline-flex; }
       .sess-chip { flex-shrink: 1; min-width: 0; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 1px solid var(--border); border-radius: var(--radius-md); background: none; padding: 1px 6px; font: inherit; font-size: 11px; color: var(--muted-foreground); cursor: pointer; }
       .sess-chip:hover { color: var(--foreground); background: var(--background); }
       .card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -159,13 +161,22 @@
         const req = (r.requests ?? []).map((u) => `<span class="ui-badge ui-badge--warning">${esc(u.name)}<button class="x" data-tip="批准为普通用户（进白名单）" data-approve="${esc(r.key)}|${u.id}">＋</button></span>`).join('');
         const allow = (r.allow ?? []).map((u) => `<span class="ui-badge">${esc(u.name)}<button class="x" data-tip="移出本路由名单" data-deny="${esc(r.key)}|${u.id}">×</button></span>`).join('');
         const sizes = [...new Set([0, 3, 5, 10, 20, r.context ?? 0])].sort((a, b) => a - b);
+        const cur = view.sessionId;
+        const curTitle = (view.sessions ?? []).find((s) => s.id === cur)?.title;
+        const [bindLabel, bindTip, bindable] = !cur
+          ? ['绑定当前', '先在主界面打开一个会话', false]
+          : r.sessionId === cur
+            ? ['已绑当前', '已经绑定到当前会话', false]
+            : ['绑定当前', curTitle ? `改绑到当前会话：${curTitle}` : '改绑到当前会话', true];
         const body = `<div class="body">
           <div class="field-row"><span class="lbl">目标会话</span>
             <select class="ui-input" data-route="sessionId" data-key="${esc(r.key)}">${sessOptions(r.sessionId)}</select>
-            ${r.sessionId ? `<button class="ui-btn ui-btn--sm ui-btn--outline" data-focus="${esc(r.sessionId)}" data-tip="跳到这个会话">跳转 ↗</button>` : ''}</div>
+            <span class="acts">${r.sessionId ? `<button class="ui-btn ui-btn--sm ui-btn--outline" data-focus="${esc(r.sessionId)}" data-tip="跳到这个会话">跳转 ↗</button>` : ''}
+              <span class="tip" data-tip="${esc(bindTip)}"><button class="ui-btn ui-btn--sm ui-btn--outline" data-bind-current="${esc(r.key)}"${bindable ? '' : ' disabled'}>${bindLabel}</button></span></span></div>
           <div class="row wrap">
             <label class="switch" data-tip="把 EnsoCode 里的对话也发到这个聊天"><input type="checkbox" class="ui-switch" data-route="sync" data-key="${esc(r.key)}" ${r.sync ? 'checked' : ''}/>同步</label>
             <label class="switch" data-tip="开启后成员无需 @机器人，直接发消息即可触发（受白名单约束）"><input type="checkbox" class="ui-switch" data-route="directTrigger" data-key="${esc(r.key)}" ${r.directTrigger ? 'checked' : ''}/>免 @ 直发</label>
+            <label class="switch" data-tip="关闭后不再发「已收到，处理中」「处理进度」「已静默处理」等过程提示，只发最终回复"><input type="checkbox" class="ui-switch" data-route="showProgress" data-key="${esc(r.key)}" ${r.showProgress !== false ? 'checked' : ''}/>进度提示</label>
             <span class="btns"><button class="ui-btn ui-btn--sm ui-btn--outline" data-fresh="${esc(r.key)}" data-tip="新建一个会话并把这个聊天改绑过去">新建会话</button>
             <button class="ui-btn ui-btn--sm ui-btn--destructive" data-unbind="${esc(r.key)}">解绑</button></span>
           </div>
@@ -351,6 +362,7 @@
         else if (t.dataset.cancelPair) run('cancelPair', { code: t.dataset.cancelPair });
         else if (t.dataset.unbind) run('unbind', { key: t.dataset.unbind });
         else if (t.dataset.fresh) run('fresh', { key: t.dataset.fresh });
+        else if (t.dataset.bindCurrent) run('route', { key: t.dataset.bindCurrent, patch: { bindCurrent: true } });
         else if (t.dataset.bind) {
           const [chatId, topicId] = t.dataset.bind.split('|');
           run('bind', { chatId, topicId: topicId || undefined });

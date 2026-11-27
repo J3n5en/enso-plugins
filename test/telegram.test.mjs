@@ -653,6 +653,17 @@ test('路由开关：默认开，1.0 旧路由迁移后仍开，显式关掉才�
   assert.equal(isRouteEnabled(undefined), false);
 });
 
+test('进度提示：默认开，旧路由迁移后仍开，显式关掉才关；/status 显示开关', () => {
+  const state = bound();
+  assert.equal(state.routes['42'].showProgress, true);
+  assert.match(route(state, msg('/status'), 0, BOT).text, /进度提示：开/);
+  const legacy = migrate({ version: 2, routes: { '42': { sessionId: 's1', chatType: 'private' }, '-1': { sessionId: 's1', showProgress: false } } });
+  assert.equal(legacy.routes['42'].showProgress, true);
+  assert.equal(legacy.routes['-1'].showProgress, false);
+  state.routes['42'].showProgress = false;
+  assert.match(route(state, msg('/status'), 0, BOT).text, /进度提示：关/);
+});
+
 test('静音路由入站全静默：消息、@、非白名单、指令、/id 都忽略，也不记上下文', () => {
   const state = emptyState();
   bindRoute(state, { key: '-100', chatId: -100, chatType: 'supergroup', sessionId: 's1', user: { id: 7, name: '@alice' } });
