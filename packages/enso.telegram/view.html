@@ -288,7 +288,7 @@
           conn = `<div class="ui-card card"><b>连接 Telegram 机器人</b>
             <input type="password" class="ui-input" id="tk" placeholder="粘贴 Bot Token" autocomplete="off"/>
             <button class="ui-btn ui-btn--primary ui-btn--block" data-connect>校验并连接</button>
-            ${v.canSetToken === false ? '<div class="m">当前 EnsoCode 版本不支持从面板保存 Token：请到 设置 → 插件 → Telegram 填写，并建议升级 EnsoCode。</div>' : ''}
+            ${v.canSetToken === false ? '<div class="m">当前 EnsoCode 版本不支持从面板保存 Token：请到 设置 → 插件 → Telegram Bot 填写，并建议升级 EnsoCode。</div>' : ''}
             <details><summary>怎么拿 Token？（3 步）</summary>
               <ol><li>在 Telegram 找 @BotFather，发 /newbot 创建机器人</li>
               <li>复制它给的 Token（形如 123456:ABC…）</li><li>粘到上面的框里，点「校验并连接」</li></ol>
