@@ -56,7 +56,7 @@ async function mount(responder) {
   const click = (dataset) => {
     let stopped = false;
     const btn = { dataset, hasAttribute: () => false };
-    nodes.app.listeners.click.forEach((fn) => fn({ target: { closest: () => btn }, stopPropagation: () => (stopped = true) }));
+    nodes.app.listeners.click.forEach((fn) => fn({ target: { closest: (sel) => (sel.includes('.rt-toggle') ? null : btn) }, stopPropagation: () => (stopped = true) }));
     return { stopped: () => stopped };
   };
   const writes = () => Object.fromEntries(['conn', 'tabs', 'body', 'err'].map((id) => [id, nodes[id].writes]));
@@ -240,4 +240,29 @@ test('用户操作不会因为轮询在途而被吞掉', async () => {
   await settle();
   assert.ok(ui.calls.some((c) => c.method === 'approve'));
   release();
+});
+
+test('头部路由开关：切换不误触折叠，发 route 补丁；静音时加 muted 与「已静音」', async () => {
+  let current = baseView();
+  const ui = await mount(async (method, args) => {
+    if (method === 'route') current = baseView({ routes: [{ ...current.routes[0], enabled: args.patch.enabled }] });
+    return current;
+  });
+  assert.match(ui.nodes.body.html, /<label class="rt-toggle" data-tip="开启\/暂停这条路由（关掉即暂时静音，停止收发消息）"><input type="checkbox" class="ui-switch" data-route="enabled" data-key="-100" checked\/>/);
+  // 点开关：根监听排除 .rt-toggle，不会展开卡片
+  let stopped = false;
+  const label = { dataset: {} };
+  ui.nodes.app.listeners.click.forEach((fn) =>
+    fn({ target: { closest: (sel) => (sel.includes('.rt-toggle') ? label : { dataset: { toggle: '-100' }, hasAttribute: () => false }) }, stopPropagation: () => (stopped = true) })
+  );
+  assert.equal(stopped, true);
+  assert.doesNotMatch(ui.nodes.body.html, /class="body"/, '没有被展开');
+  // change 事件提交开关
+  ui.document.activeElement = { tagName: 'INPUT', type: 'checkbox', slot: ui.nodes.body };
+  ui.nodes.app.listeners.change.forEach((fn) => fn({ target: { dataset: { route: 'enabled', key: '-100' }, type: 'checkbox', checked: false } }));
+  await settle();
+  assert.deepEqual(ui.calls.at(-1), { method: 'route', args: { key: '-100', patch: { enabled: false } } });
+  assert.match(ui.nodes.body.html, /class="rt muted"/, '复选框聚焦也立即重绘');
+  assert.match(ui.nodes.body.html, /已静音/);
+  assert.doesNotMatch(ui.nodes.body.html, /data-route="enabled" data-key="-100" checked/);
 });

@@ -130,6 +130,7 @@ export const defaultRoute = () => ({
   chatType: 'group',
   title: '',
   sessionId: null,
+  enabled: true,
   sync: false,
   directTrigger: false,
   whitelistMode: 'inherit', // inherit | custom | open
@@ -210,6 +211,7 @@ export function migrate(raw) {
 export function normalizeRoute(r) {
   const d = defaultRoute();
   for (const key of Object.keys(d)) if (r[key] === undefined) r[key] = d[key];
+  r.enabled = r.enabled !== false;
   r.sync = r.sync === true;
   r.directTrigger = r.directTrigger === true;
   if (!['inherit', 'custom', 'open'].includes(r.whitelistMode)) r.whitelistMode = 'inherit';
@@ -221,6 +223,9 @@ export function normalizeRoute(r) {
   if (!Array.isArray(r.requests)) r.requests = [];
   return r;
 }
+
+/** 路由开关：关掉即静音，入站出站都不走这条路由；缺省（1.0 旧路由）为开 */
+export const isRouteEnabled = (r) => Boolean(r && r.enabled !== false);
 
 const clampInt = (v, lo, hi, dflt) => {
   const n = Number(v);
@@ -489,6 +494,8 @@ export function route(state, update, now, bot = {}) {
   // context 配置按路由匹配读（含整群兜底）；history 一律按实际话题 key 存取，
   // 这样只绑整群时各话题的上下文也互相隔离
   const hit = findRoute(state, m.chat.id, topicOf(m));
+  // 静音的路由连上下文也不记
+  if (hit && !isRouteEnabled(hit)) return action;
   const key = routeKeyOf(m.chat.id, topicOf(m));
   const size = hit?.context ?? 0;
   if (!size) {
@@ -528,9 +535,10 @@ function decide(state, update, now, bot) {
     return { kind: 'ignore' };
   const mention = isGroup && bot.username ? new RegExp(`@${bot.username}\\b`, 'i') : null;
   const repliedToBot = m.reply_to_message?.from?.id === bot.id && bot.id !== undefined && !isTopicRootReply(m);
+  const muted = hit != null && !isRouteEnabled(hit);
 
   // /id 不看绑定与白名单：只回发送者自己的 id 与本聊天 id，方便把人加进名单
-  if (command?.name === 'id') {
+  if (command?.name === 'id' && !muted) {
     const anonymous = !m.from || m.from.id === ANONYMOUS_ADMIN;
     return reply(
       [
@@ -574,6 +582,7 @@ function decide(state, update, now, bot) {
           : '\n⚠️ 匿名管理员认不出是谁，不能成为管理员。目前还没有管理员，请在 EnsoCode「Telegram」面板的「权限」页添加。';
     }
     const where = inTopic ? '本话题' : '本聊天';
+    if (!isRouteEnabled(state.routes[bindKey])) note += '\n🔇 这条路由目前已静音：在 EnsoCode「Telegram」面板打开它的开关后才会收发消息。';
     return {
       kind: 'bound',
       key: bindKey,
@@ -591,6 +600,8 @@ function decide(state, update, now, bot) {
   const key2 = hit.key;
   // findRoute 返回副本，找回 state 里的本体以便命令就地修改
   const live = state.routes[key2];
+  // 静音：不注入、不回白名单提示、不响应任何指令
+  if (!isRouteEnabled(live)) return { kind: 'ignore' };
   const reply2 = (t) => ({ kind: 'reply', key: key2, chatId, topicId, text: t });
 
   if (isGroup && m.from && !isBotUser(m.from) && !isAllowed(state, live, m.from.id)) {
@@ -720,6 +731,8 @@ function routeCallback(state, q) {
   });
   const hit = findRoute(state, chatId, topicId);
   const key = hit?.key ?? routeKeyOf(chatId, topicId);
+  // 静音路由上的按钮只静默应答，免得 Telegram 客户端一直转圈
+  if (hit && !isRouteEnabled(hit)) return answer();
 
   // ask_user 按钮：ask:<shortId>:<idx>
   const askHit = /^ask:([a-z0-9]+):(\d+)$/i.exec(q.data ?? '');
@@ -797,14 +810,17 @@ export function takeReply(state, sessionId, text) {
 /** 开启同步的路由 key，排除本轮已经回发过的 */
 export const mirrorTargets = (state, sessionId, exclude = []) =>
   Object.entries(state.routes)
-    .filter(([key, r]) => r.sync && r.sessionId === rootSession(sessionId) && !exclude.includes(key))
+    .filter(([key, r]) => r.sync && isRouteEnabled(r) && r.sessionId === rootSession(sessionId) && !exclude.includes(key))
     .map(([key]) => key);
 
-/** 该会话绑定的全部路由 */
+/** 该会话绑定的全部路由（含静音的；只要能收发的用 activeRoutesOfSession） */
 export const routesOfSession = (state, sessionId) =>
   Object.entries(state.routes)
     .filter(([, r]) => r.sessionId === rootSession(sessionId))
     .map(([key, r]) => ({ key, route: r }));
+
+export const activeRoutesOfSession = (state, sessionId) =>
+  routesOfSession(state, sessionId).filter(({ route: r }) => isRouteEnabled(r));
 
 // ---------- Markdown → Telegram HTML ----------
 

@@ -18,6 +18,7 @@ import {
   findRoute,
   inboundText,
   isAdmin,
+  isRouteEnabled,
   isTopicRootReply,
   markPending,
   markdownToHtml,
@@ -352,6 +353,11 @@ export function activate(enso, { loop = true } = {}) {
   /** 返回 false 表示会话仍没运行，留在队列里 */
   const deliverInject = async (action, retry = false) => {
     const latest = await load().catch(() => null);
+    // 关掉开关前已进缓冲/队列的消息：投递前再看一次，静音了就丢掉
+    if (latest?.routes[action.key]?.enabled === false) {
+      typingStop(action.key);
+      return true;
+    }
     // 提示词前置：以当前路由配置为准
     if (action.promptPrefix === undefined) {
       const r = latest?.routes[action.key];
@@ -496,6 +502,20 @@ export function activate(enso, { loop = true } = {}) {
   /** steer/stop 等控制指令不进入攒批 */
   const instantKind = (action) => action.deliverAs === 'steer';
 
+  /** 路由刚被关掉：停 typing，丢掉它还没投出去的攒批与相册（deliverInject 投递前还会再查一次开关） */
+  const silence = (key) => {
+    typingStop(key);
+    for (const [id, buf] of [...textBuffers, ...albums]) {
+      if ((buf.routeKey ?? id.slice(0, id.lastIndexOf('|'))) !== key) continue;
+      if (buf.timer) {
+        clearTimeout(buf.timer);
+        self.timeouts.delete(buf.timer);
+      }
+      textBuffers.delete(id);
+      albums.delete(id);
+    }
+  };
+
   /** 立即投递一个缓冲；给的是路由 key 时投递该路由的全部角色缓冲 */
   const flushTextBuffer = async (key) => {
     if (!textBuffers.has(key)) {
@@ -632,7 +652,7 @@ export function activate(enso, { loop = true } = {}) {
 
   // ---- ask_user ----
   const askCards = async (state, ask, shortId) => {
-    const routes = routesOfSession(state, ask.sessionId);
+    const routes = routesOfSession(state, ask.sessionId).filter(({ route: r }) => isRouteEnabled(r));
     if (!routes.length) return [];
     const question = ask.question;
     const body = ask.options?.length
@@ -909,6 +929,8 @@ export function activate(enso, { loop = true } = {}) {
 
   // ---- 出站事件 ----
   const progress = new Map();
+  /** 路由被关掉（静音）：回发、进度、镜像都跳过；路由已不存在时沿用旧行为照发 */
+  const isMuted = (state, key) => state.routes[key]?.enabled === false;
   enso.events.on('tool_call', async (data, ctx) => {
     if (!ctx?.sessionId) return;
     const key = rootSession(ctx.sessionId);
@@ -917,7 +939,8 @@ export function activate(enso, { loop = true } = {}) {
     progress.set(key, entry);
     if (Date.now() - entry.at < PROGRESS_EVERY_MS) return;
     entry.at = Date.now();
-    const targets = pendingTargets(await load(), key).filter((t) => t.placeholderId);
+    const state = await load();
+    const targets = pendingTargets(state, key).filter((t) => t.placeholderId && !isMuted(state, t.key));
     const who = ctx.agent ? `${ctx.agent.name} · ` : '';
     for (const t of targets)
       await edit(t.key, t.placeholderId, `⏳ 处理中…（第 ${entry.steps} 步：${who}${data?.toolName ?? '工具'}）`);
@@ -930,24 +953,29 @@ export function activate(enso, { loop = true } = {}) {
     // silent：秘书 silence_turn 等不回发不镜像
     if (data?.silent === true) {
       // 秘书 silence_turn 等：既不回发也不镜像，但要把待回清掉，避免下轮借尸还魂
-      const silentTargets = pendingTargets(await load(), ctx.sessionId);
+      const before = await load();
+      const silentTargets = pendingTargets(before, ctx.sessionId);
       await update((state) => {
         delete state.pending[rootSession(ctx.sessionId)];
       });
       progress.delete(rootSession(ctx.sessionId));
       for (const t of silentTargets) {
         typingStop(t.key);
-        if (t.placeholderId) await edit(t.key, t.placeholderId, '🤫 本轮已在别处静默处理。');
+        if (t.placeholderId && !isMuted(before, t.key)) await edit(t.key, t.placeholderId, '🤫 本轮已在别处静默处理。');
       }
       return;
     }
     const text = String(data?.text ?? '').trim();
-    const reply = await update((state) => takeReply(state, ctx.sessionId, text));
+    // 待回照样从 pending 取走（避免堆积），只是静音路由不发
+    const { reply, muted } = await update((state) => {
+      const taken = takeReply(state, ctx.sessionId, text);
+      return { reply: taken, muted: new Set((taken?.targets ?? []).filter((t) => isMuted(state, t.key)).map((t) => t.key)) };
+    });
     progress.delete(rootSession(ctx.sessionId));
     for (const t of reply?.targets ?? []) typingStop(t.key);
     const answered = [];
     for (const t of reply?.targets ?? []) {
-      if (!visuallyEmpty(reply.text)) {
+      if (!visuallyEmpty(reply.text) && !muted.has(t.key)) {
         await send(t.key, reply.text, t.placeholderId).catch((e) => console.error('[telegram]', e.message));
       }
       answered.push(t.key);
@@ -1165,6 +1193,7 @@ export function activate(enso, { loop = true } = {}) {
       session: r.sessionId ? titleOf(r.sessionId) : null,
       project: r.sessionId ? projectOf(r.sessionId) : undefined,
       sync: r.sync,
+      enabled: r.enabled !== false,
       directTrigger: r.directTrigger,
       whitelistMode: r.whitelistMode,
       allow: r.allow,
@@ -1331,6 +1360,10 @@ export function activate(enso, { loop = true } = {}) {
     editRoute(args, ctx, (r) => {
       const patch = args?.patch ?? {};
       if (patch.sessionId !== undefined) r.sessionId = rootSession(patch.sessionId);
+      if (patch.enabled !== undefined) {
+        r.enabled = patch.enabled === true;
+        if (!r.enabled) silence(args.key);
+      }
       if (patch.sync !== undefined) r.sync = patch.sync === true;
       if (patch.directTrigger !== undefined) r.directTrigger = patch.directTrigger === true;
       if (patch.whitelistMode !== undefined && ['inherit', 'custom', 'open'].includes(patch.whitelistMode)) r.whitelistMode = patch.whitelistMode;
@@ -1429,22 +1462,30 @@ export function activate(enso, { loop = true } = {}) {
   });
 
   // ---- Agent 工具 ----
+  /** 工具的目标路由：广播时跳过静音路由；显式指定静音路由或全都静音时说清楚 */
+  const toolTargets = (state, sessionId, target) => {
+    if (target) {
+      const r = state.routes[target];
+      if (!r) throw new Error(`没有这条路由：${target}`);
+      if (!isRouteEnabled(r)) throw new Error(`该路由已暂停（静音）：${target}。在 EnsoCode「Telegram」面板打开它的开关后才能发送。`);
+      return { targets: [target], skipped: 0 };
+    }
+    const all = routesOfSession(state, sessionId);
+    if (!all.length) throw new Error('本会话没有绑定 Telegram 聊天');
+    const targets = all.filter(({ route: r }) => isRouteEnabled(r)).map((x) => x.key);
+    if (!targets.length) throw new Error('本会话绑定的 Telegram 路由都已暂停（静音），没有发送。在 EnsoCode「Telegram」面板打开开关后再试。');
+    return { targets, skipped: all.length - targets.length };
+  };
+  const skippedNote = (n) => (n ? `（跳过 ${n} 个已静音的路由）` : '');
+
   enso.tools.register('telegram_reply', async (args, ctx) => {
     const text = String(args?.text ?? '').trim();
     if (!text) throw new Error('text 不能为空');
     if (!ctx.sessionId) throw new Error('调用不属于任何会话');
     const sessionId = rootSession(ctx.sessionId);
-    const state = await load();
-    let targets;
-    if (args?.target) {
-      targets = state.routes[args.target] ? [args.target] : [];
-      if (!targets.length) throw new Error(`没有这条路由：${args.target}`);
-    } else {
-      targets = routesOfSession(state, sessionId).map((x) => x.key);
-    }
-    if (!targets.length) throw new Error('本会话没有绑定 Telegram 聊天');
+    const { targets, skipped } = toolTargets(await load(), sessionId, args?.target);
     for (const key of targets) await send(key, text);
-    return `已发送到 ${targets.length} 个 Telegram 聊天`;
+    return `已发送到 ${targets.length} 个 Telegram 聊天${skippedNote(skipped)}`;
   });
 
   enso.tools.register('telegram_send_media', async (args, ctx) => {
@@ -1453,15 +1494,7 @@ export function activate(enso, { loop = true } = {}) {
     if (!files.length) throw new Error('files 需要 1-10 个本地图片绝对路径');
     if (files.length > 10) throw new Error('一次最多 10 张');
     const sessionId = rootSession(ctx.sessionId);
-    const state = await load();
-    let targets;
-    if (args?.target) {
-      if (!state.routes[args.target]) throw new Error(`没有这条路由：${args.target}`);
-      targets = [args.target];
-    } else {
-      targets = routesOfSession(state, sessionId).map((x) => x.key);
-    }
-    if (!targets.length) throw new Error('本会话没有绑定 Telegram 聊天');
+    const { targets, skipped } = toolTargets(await load(), sessionId, args?.target);
     // 多路由循环外只读一次文件；项目目录以调用会话的 projectRoot 为准
     const media = [];
     const roots = mediaRoots({ projectRoot: ctx?.projectRoot });
@@ -1498,7 +1531,7 @@ export function activate(enso, { loop = true } = {}) {
     }
     const tail = failures.length ? `；注意：${failures.join('；')}`.slice(0, 900) : '';
     if (!totalSent && failures.length) throw new Error(`全部发送失败：${failures.join('；')}`.slice(0, 900));
-    return `已发送 ${totalSent} 张图片到 ${targets.length} 个 Telegram 聊天${tail}`;
+    return `已发送 ${totalSent} 张图片到 ${targets.length} 个 Telegram 聊天${skippedNote(skipped)}${tail}`;
   });
 
   if (loop) {

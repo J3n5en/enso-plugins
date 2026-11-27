@@ -21,6 +21,8 @@
       .rt { border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
       .rt > .head { padding: 6px 8px; display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
       .rt > .head:hover { background: var(--muted); }
+      .rt-toggle { display: flex; align-items: center; flex-shrink: 0; cursor: pointer; }
+      .rt.muted > .head .grow, .rt.muted > .head .sess-chip { opacity: .5; }
       .rt > .body { padding: 8px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
       label.switch { display: flex; align-items: center; gap: 6px; color: var(--muted-foreground); font-size: 11px; cursor: pointer; white-space: nowrap; }
       /* 标签 + 下拉框：标签不折行，下拉框吃掉剩余宽度 */
@@ -73,7 +75,12 @@
       let applied = 0;
       let pressTarget = null; // 按下未松开的元素：它所在的插槽等点击结束再重绘
       const stale = new Set(); // 因正在输入/按下而推迟重绘的插槽
-      const editing = () => ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
+      // 开关和复选框点完就算完事，不算「正在输入」，否则状态变化要等失焦才画出来
+      const editing = () => {
+        const el = document.activeElement;
+        if (el?.tagName === 'INPUT' && (el.type === 'checkbox' || el.type === 'radio')) return false;
+        return ['INPUT', 'TEXTAREA', 'SELECT'].includes(el?.tagName);
+      };
 
       /** 轮询只在没有请求在途时发；用户操作永不被轮询吞掉。过期的响应不覆盖更新的视图。 */
       async function run(method, args) {
@@ -137,15 +144,18 @@
 
       function routeCard(r) {
         const open = openKeys.has(r.key);
+        const on = r.enabled !== false;
         const icon = r.chatType === 'private' ? '👤' : '👥';
         const topicBit = r.topicId ? ` <span class="m"># ${esc(r.topicName ?? r.topicId)}</span>` : '';
         const sess = r.sessionId
           ? `<button class="sess-chip" data-focus="${esc(r.sessionId)}" data-tip="跳到这个会话">${esc(r.session ?? r.sessionId)} ↗</button>`
           : '<span class="ui-badge ui-badge--warning">未绑会话</span>';
         const head = `<div class="head" data-toggle="${esc(r.key)}">
-          <span class="grow">${icon} ${esc(r.title)}${topicBit}</span>${sess}
+          <label class="rt-toggle" data-tip="开启/暂停这条路由（关掉即暂时静音，停止收发消息）"><input type="checkbox" class="ui-switch" data-route="enabled" data-key="${esc(r.key)}" ${on ? 'checked' : ''}/></label>
+          <span class="grow">${icon} ${esc(r.title)}${topicBit}</span>${on ? '' : '<span class="ui-badge ui-badge--warning">已静音</span>'}${sess}
           <span class="m">${open ? '▾' : '▸'}</span></div>`;
-        if (!open) return `<div class="rt">${head}</div>`;
+        const cls = on ? 'rt' : 'rt muted';
+        if (!open) return `<div class="${cls}">${head}</div>`;
         const req = (r.requests ?? []).map((u) => `<span class="ui-badge ui-badge--warning">${esc(u.name)}<button class="x" data-tip="批准为普通用户（进白名单）" data-approve="${esc(r.key)}|${u.id}">＋</button></span>`).join('');
         const allow = (r.allow ?? []).map((u) => `<span class="ui-badge">${esc(u.name)}<button class="x" data-tip="移出本路由名单" data-deny="${esc(r.key)}|${u.id}">×</button></span>`).join('');
         const sizes = [...new Set([0, 3, 5, 10, 20, r.context ?? 0])].sort((a, b) => a - b);
@@ -183,7 +193,7 @@
             <textarea class="ui-input" data-route="promptPrefix" data-key="${esc(r.key)}" placeholder="例如：你是本群的客服助手，回答控制在三句话以内。">${esc(r.promptPrefix ?? '')}</textarea></label>
           ${r.context && view.bot?.readsAll === false ? '<div class="m err">机器人开着隐私模式，只能看到 @ 它或回复它的消息。到 @BotFather 发 /setprivacy 选 Disable，再把机器人移出群重新拉进来。</div>' : ''}
         </div>`;
-        return `<div class="rt">${head}${body}</div>`;
+        return `<div class="${cls}">${head}${body}</div>`;
       }
 
       function routesTab() {
@@ -315,6 +325,8 @@
       }
 
       app.addEventListener('click', (e) => {
+        // 头部的路由开关：交给 change 事件处理，不能冒泡成折叠/展开
+        if (e.target.closest('.rt-toggle, input[data-route]')) { e.stopPropagation(); return; }
         const t = e.target.closest('button, .head');
         if (!t) return;
         if (t.dataset.focus) { e.stopPropagation(); jump(t.dataset.focus); return; }

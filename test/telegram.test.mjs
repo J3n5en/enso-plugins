@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   ANONYMOUS_ADMIN,
+  activeRoutesOfSession,
+  isRouteEnabled,
+  routesOfSession,
   COMMANDS,
   bindRoute,
   cancelPairing,
@@ -635,4 +638,68 @@ test('cancelPairing：作废本会话配对码，之后 /bind 被拒；别的会
   createPairing(state, 's1', 0, () => 0.3);
   assert.equal(cancelPairing(state, 's1'), 1);
   assert.equal(route(state, msg(`/bind ${other}`), 0, BOT).kind, 'bound');
+});
+
+// ---------- 1.1：路由开关（静音） ----------
+
+test('路由开关：默认开，1.0 旧路由迁移后仍开，显式关掉才算静音', () => {
+  const state = bound();
+  assert.equal(state.routes['42'].enabled, true);
+  const legacy = migrate({ version: 2, routes: { '42': { sessionId: 's1', chatType: 'private' }, '-1': { sessionId: 's1', enabled: false } } });
+  assert.equal(legacy.routes['42'].enabled, true);
+  assert.equal(legacy.routes['-1'].enabled, false);
+  assert.equal(isRouteEnabled(legacy.routes['42']), true);
+  assert.equal(isRouteEnabled(legacy.routes['-1']), false);
+  assert.equal(isRouteEnabled(undefined), false);
+});
+
+test('静音路由入站全静默：消息、@、非白名单、指令、/id 都忽略，也不记上下文', () => {
+  const state = emptyState();
+  bindRoute(state, { key: '-100', chatId: -100, chatType: 'supergroup', sessionId: 's1', user: { id: 7, name: '@alice' } });
+  state.admins = [{ id: 7, name: '@alice' }];
+  const r = state.routes['-100'];
+  r.context = 5;
+  r.directTrigger = true;
+  r.enabled = false;
+  const ignore = { kind: 'ignore' };
+  for (const text of ['直接说', '@enso_bot 在吗', '/status', '/stop', '/steer 插话', '/help', '/id', '/sync on', '/unbind'])
+    assert.deepEqual(route(state, group(text), 0, BOT), ignore, text);
+  assert.deepEqual(route(state, group('@enso_bot 让我进', { from: BOB }), 0, BOT), ignore);
+  assert.deepEqual(r.requests, [], '不记待批准');
+  assert.equal(state.history['-100'], undefined, '不记上下文');
+  assert.equal(r.sync, false);
+  assert.ok(state.routes['-100'], '/unbind 也不生效');
+  // 打开后恢复
+  r.enabled = true;
+  assert.equal(route(state, group('@enso_bot 在吗'), 0, BOT).kind, 'inject');
+});
+
+test('静音路由上的 ask:/sess: 按钮静默应答', () => {
+  const state = bound();
+  state.routes['42'].enabled = false;
+  state.menus['42'] = [{ id: 's2', title: 'B' }];
+  const cb = (data) => ({ callback_query: { id: 'q', data, from: { id: 7 }, message: { message_id: 1, chat: { id: 42, type: 'private' } } } });
+  assert.deepEqual(route(state, cb('sess:1'), 0, BOT), { kind: 'answer', callbackId: 'q', text: '' });
+  assert.deepEqual(route(state, cb(`ask:${shortIdOf('r')}:0`), 0, BOT), { kind: 'answer', callbackId: 'q', text: '' });
+  assert.equal(state.routes['42'].sessionId, 's1');
+});
+
+test('出站：mirrorTargets 与 activeRoutesOfSession 排除静音路由，routesOfSession 仍能看到', () => {
+  const state = emptyState();
+  bindRoute(state, { key: '-100', chatId: -100, sessionId: 's1', sync: true });
+  bindRoute(state, { key: '-200', chatId: -200, sessionId: 's1', sync: true });
+  state.routes['-200'].enabled = false;
+  assert.deepEqual(mirrorTargets(state, 's1'), ['-100']);
+  assert.deepEqual(activeRoutesOfSession(state, 's1').map((x) => x.key), ['-100']);
+  assert.deepEqual(routesOfSession(state, 's1').map((x) => x.key), ['-100', '-200']);
+});
+
+test('在静音路由上用配对码重绑：保持静音并提示', () => {
+  const state = bound();
+  state.routes['42'].enabled = false;
+  const code = createPairing(state, 's2', 0, () => 0.5);
+  const res = route(state, msg(`/bind ${code}`), 0, BOT);
+  assert.equal(res.kind, 'bound');
+  assert.match(res.text, /已静音/);
+  assert.equal(state.routes['42'].enabled, false);
 });

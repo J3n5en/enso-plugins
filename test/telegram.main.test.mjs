@@ -971,3 +971,95 @@ test('清单：1.1.0，声明 injectTrusted/session.focus 与新方法', async (
   const t = await setup();
   for (const m of methods) assert.equal(typeof t.handlers.renderer[m], 'function', `${m} 已注册`);
 });
+
+// ---------- 1.1：路由开关（静音） ----------
+
+const mute = (t, key, on = false) => t.handlers.renderer.route({ key, patch: { enabled: on } }, { sessionId: 's1' });
+
+test('静音路由：入站消息与指令全忽略，view 显示 enabled=false，打开后恢复', async () => {
+  const t = await setup();
+  await t.pair();
+  await runPoll(t);
+  const v = await mute(t, '42');
+  assert.equal(v.routes.find((r) => r.key === '42').enabled, false);
+  const sent = t.of('sendMessage').length;
+  t.message('在吗');
+  t.message('/status');
+  t.message('/stop');
+  await runPoll(t);
+  assert.equal(t.injected.length, 0);
+  assert.equal(t.of('sendMessage').length, sent, '不回任何东西');
+  await mute(t, '42', true);
+  t.message('在吗');
+  await runPoll(t);
+  assert.equal(t.injected.length, 1);
+});
+
+test('关掉开关：丢掉攒批里没投出去的消息，排队的补投也不再投', async () => {
+  const t = await setup();
+  await t.pair();
+  await runPoll(t);
+  await t.handlers.renderer.route({ key: '42', patch: { debounceSec: 60 } }, { sessionId: 's1' });
+  t.message('攒着的');
+  await runPoll(t);
+  await mute(t, '42');
+  await t.flushTextBuffer('42');
+  assert.equal(t.injected.length, 0, '缓冲已清');
+
+  // 排队中的消息：关掉后补投直接丢弃
+  await mute(t, '42', true);
+  await t.handlers.renderer.route({ key: '42', patch: { debounceSec: 0 } }, { sessionId: 's1' });
+  const real = t.enso.session.inject;
+  t.enso.session.inject = async () => {
+    throw Object.assign(new Error('会话不在运行'), { code: 'INJECT_FAILED' });
+  };
+  t.message('排着的');
+  await runPoll(t);
+  await mute(t, '42');
+  t.enso.session.inject = real;
+  await t.flush();
+  assert.equal(t.injected.length, 0);
+  const raw = JSON.parse(await (await import('node:fs/promises')).readFile(join(t.enso.dataDir, 'state.json'), 'utf8'));
+  assert.equal(raw.queue.s1, undefined, '队列清空，不堆积');
+});
+
+test('出站：静音路由不收回发、进度、镜像与提问卡片，pending 仍被清掉', async () => {
+  const t = await setup();
+  await t.pair();
+  await runPoll(t);
+  await groupBound(t);
+  assert.equal((await t.handlers.renderer.state({}, { sessionId: 's1' })).routes.length, 2);
+  t.message('hi');
+  t.message('@enso_bot hi', { chat: GROUP });
+  await runPoll(t);
+  await t.handlers.renderer.route({ key: '-100', patch: { sync: true } }, { sessionId: 's1' });
+  await mute(t, '-100');
+  const touched = () => t.calls.filter((c) => c.body?.chat_id === -100 && c.method !== 'sendChatAction').length;
+  const before = touched();
+  await t.handlers.events.tool_call({ toolName: 'bash' }, { sessionId: 's1', agent: null });
+  await t.handlers.events.agent_end({ text: '完成' }, { sessionId: 's1', agent: null });
+  await t.handlers.events.input({ text: '本地', source: 'interactive' }, { sessionId: 's1', agent: null });
+  await t.handlers.events.ask_request({ sessionId: 's1', requestId: 'req-m', question: 'q', options: ['A'] }, { sessionId: 's1' });
+  assert.equal(touched(), before, '静音路由一条都没收到');
+  assert.ok(t.calls.some((c) => c.body?.chat_id === 42 && c.body?.text === '完成'), '开着的私聊照常回发');
+  assert.ok(t.of('sendMessage').some((c) => c.body.chat_id === 42 && c.body.text?.startsWith('❓')), '开着的路由收到提问卡片');
+  const raw = JSON.parse(await (await import('node:fs/promises')).readFile(join(t.enso.dataDir, 'state.json'), 'utf8'));
+  assert.equal(raw.pending.s1, undefined, 'pending 不堆积');
+});
+
+test('工具：广播跳过静音路由；显式指定或全都静音时报清楚', async () => {
+  const t = await setup();
+  await t.pair();
+  await runPoll(t);
+  await groupBound(t);
+  assert.equal((await t.handlers.renderer.state({}, { sessionId: 's1' })).routes.length, 2);
+  await mute(t, '-100');
+  const r = await t.handlers.tools.telegram_reply({ text: '进度' }, { sessionId: 's1' });
+  assert.match(r, /1 个 Telegram 聊天（跳过 1 个已静音的路由）/);
+  assert.ok(!t.of('sendMessage').some((c) => c.body.chat_id === -100 && c.body.text === '进度'));
+  await assert.rejects(t.handlers.tools.telegram_reply({ text: 'x', target: '-100' }, { sessionId: 's1' }), /该路由已暂停（静音）/);
+  await assert.rejects(t.handlers.tools.telegram_send_media({ files: ['/tmp/x.png'], target: '-100' }, { sessionId: 's1' }), /该路由已暂停（静音）/);
+  await mute(t, '42');
+  await assert.rejects(t.handlers.tools.telegram_reply({ text: 'x' }, { sessionId: 's1' }), /都已暂停（静音）/);
+  await assert.rejects(t.handlers.tools.telegram_send_media({ files: ['/tmp/x.png'] }, { sessionId: 's1' }), /都已暂停（静音）/);
+});
