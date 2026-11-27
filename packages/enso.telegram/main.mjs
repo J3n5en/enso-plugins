@@ -323,7 +323,10 @@ export function activate(enso, { loop = true } = {}) {
     });
   };
 
-  // ---- typing 指示：注入后开始，轮末/90s 停止 ----
+  /** 路由关了进度提示：不发占位、攒批回执、工具进度、「已静默处理」和「正在输入」，只发最终回复；路由不存在时照旧显示 */
+  const quiet = (state, key) => state?.routes[key]?.showProgress === false;
+
+  // ---- typing 指示：注入后开始，轮末/90s/关掉进度提示时停止 ----
   const typingKeys = new Map(); // key -> expiry
   const typingStart = (key) => {
     typingKeys.set(key, Date.now() + TYPING_MAX_MS);
@@ -334,24 +337,22 @@ export function activate(enso, { loop = true } = {}) {
       if (key === sessionIdOrKey) typingKeys.delete(key);
     }
   };
-  if (loop) {
-    self.timers.push(
-      setInterval(() => {
-        const now = Date.now();
-        for (const [key, expiry] of typingKeys) {
-          if (now >= expiry) {
-            typingKeys.delete(key);
-            continue;
-          }
-          void api('sendChatAction', { chat_id: routeChatId(key), ...threadParams(key), action: 'typing' }).catch(() => {});
-        }
-      }, 4_000)
-    );
-  }
+  /** 续发 typing；续发前按最新配置再查一次，投递途中才关掉进度提示的路由也不再续发 */
+  const typingTick = async () => {
+    if (!typingKeys.size) return;
+    const state = await load().catch(() => null);
+    const now = Date.now();
+    for (const [key, expiry] of typingKeys) {
+      if (now >= expiry || quiet(state, key)) {
+        typingKeys.delete(key);
+        continue;
+      }
+      void api('sendChatAction', { chat_id: routeChatId(key), ...threadParams(key), action: 'typing' }).catch(() => {});
+    }
+  };
+  if (loop) self.timers.push(setInterval(() => void typingTick(), 4_000));
 
   // ---- 入站投递（含排队与补投） ----
-  /** 路由关了进度提示：不发占位、攒批回执、工具进度与「已静默处理」，只发最终回复；路由不存在时照旧显示 */
-  const quiet = (state, key) => state?.routes[key]?.showProgress === false;
   /** 返回 false 表示会话仍没运行，留在队列里 */
   const deliverInject = async (action, retry = false) => {
     const latest = await load().catch(() => null);
@@ -439,7 +440,7 @@ export function activate(enso, { loop = true } = {}) {
       await update((state) =>
         markPending(state, action.sessionId, { key: action.key, placeholderId: placeholder?.message_id })
       );
-      typingStart(action.key);
+      if (!quiet(latest, action.key)) typingStart(action.key);
       return true;
     }
     const steer = action.deliverAs === 'steer';
@@ -457,7 +458,7 @@ export function activate(enso, { loop = true } = {}) {
     });
     try {
       await inject();
-      typingStart(action.key);
+      if (!quiet(latest, action.key)) typingStart(action.key);
       done();
     } catch (error) {
       const queue = notRunning(error);
@@ -1380,7 +1381,11 @@ export function activate(enso, { loop = true } = {}) {
       }
       if (patch.sync !== undefined) r.sync = patch.sync === true;
       if (patch.directTrigger !== undefined) r.directTrigger = patch.directTrigger === true;
-      if (patch.showProgress !== undefined) r.showProgress = patch.showProgress === true;
+      if (patch.showProgress !== undefined) {
+        r.showProgress = patch.showProgress === true;
+        // 进行中的轮次也立刻停掉「正在输入」
+        if (!r.showProgress) typingStop(args.key);
+      }
       if (patch.whitelistMode !== undefined && ['inherit', 'custom', 'open'].includes(patch.whitelistMode)) r.whitelistMode = patch.whitelistMode;
       if (patch.context !== undefined) r.context = patch.context;
       if (patch.debounceSec !== undefined) r.debounceSec = patch.debounceSec;
@@ -1558,5 +1563,5 @@ export function activate(enso, { loop = true } = {}) {
       )
     );
   }
-  return { tick, flush, flushTextBuffer, flushAlbum, view };
+  return { tick, flush, flushTextBuffer, flushAlbum, typingTick, view };
 }

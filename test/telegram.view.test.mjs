@@ -230,6 +230,7 @@ test('「进度提示」开关：默认勾选，切换发 route 补丁 showProgr
   });
   ui.click({ toggle: '-100' });
   const box = () => ui.nodes.body.html.match(/<label class="switch" data-tip="([^"]*)"><input type="checkbox" class="ui-switch" data-route="showProgress" data-key="-100" ?(checked)?\/>进度提示<\/label>/);
+  assert.match(box()[1], /正在输入/);
   assert.match(box()[1], /只发最终回复/);
   assert.equal(box()[2], 'checked', '旧视图没有 showProgress 字段时按开处理');
   ui.nodes.app.listeners.change.forEach((fn) => fn({ target: { dataset: { route: 'showProgress', key: '-100' }, type: 'checkbox', checked: false } }));
