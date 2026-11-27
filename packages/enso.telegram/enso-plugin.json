@@ -2,24 +2,24 @@
   "schemaVersion": 1,
   "id": "enso.telegram",
   "name": "Telegram",
-  "version": "0.4.0",
+  "version": "1.0.0",
   "icon": "icon.svg",
-  "description": "用 Telegram Bot 远程使用 EnsoCode 会话：配对后发消息即进入会话，执行进度原位更新，回复以富文本发回；支持图片、群聊绑定、成员白名单与群聊上下文、插话、远程停止和双向同步。",
+  "description": "用 Telegram Bot 远程使用 EnsoCode 会话：面板直填 Token 即连；私聊、群聊与论坛话题各自绑定任意会话（含秘书）；两层白名单与全群开放模式、逐话题免 @ 直发；上下文条数、限速攒批与提示词前置按路由配置；双向图片与相册；ask_user 按钮直接在群里作答。",
   "engines": {
     "enso": ">=0.3.14"
   },
   "main": "main.mjs",
   "resident": true,
   "permissions": [
-    "agent.tool",
-    "agent.observe",
     "agent.inject",
-    "session.read",
-    "session.create",
-    "process.background",
+    "agent.observe",
+    "agent.tool",
     "net.fetch",
-    "ui.view",
-    "ui.openExternal"
+    "session.create",
+    "session.read",
+    "session.readAll",
+    "ui.openExternal",
+    "ui.view"
   ],
   "net": {
     "domains": [
@@ -36,11 +36,46 @@
           "properties": {
             "text": {
               "type": "string",
-              "description": "要发送的纯文本"
+              "description": "要发送的文本（支持 Markdown）"
+            },
+            "target": {
+              "type": "string",
+              "description": "可选：指定路由 key（chatId 或 chatId:topicId），缺省发往本会话绑定的全部路由"
             }
           },
           "required": [
             "text"
+          ]
+        }
+      },
+      {
+        "name": "telegram_send_media",
+        "description": "向本会话绑定的 Telegram 聊天发送 1-10 张本地图片（png/jpg/gif/webp，每张 ≤10MB）。多张默认合成相册。",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "files": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "1-10 个本地图片绝对路径（须在 /tmp、/var/folders 或项目目录内）"
+            },
+            "caption": {
+              "type": "string",
+              "description": "图片说明（超过 1024 字符的部分会拆成独立消息）"
+            },
+            "asAlbum": {
+              "type": "boolean",
+              "description": "默认 true：多张合成相册；false 逐张发送"
+            },
+            "target": {
+              "type": "string",
+              "description": "可选：指定路由 key，缺省发往本会话绑定的全部路由"
+            }
+          },
+          "required": [
+            "files"
           ]
         }
       }
@@ -54,6 +89,12 @@
       },
       {
         "event": "input"
+      },
+      {
+        "event": "ask_request"
+      },
+      {
+        "event": "ask_resolved"
       }
     ],
     "configuration": [
@@ -78,7 +119,19 @@
         "timeoutMs": 15000
       },
       {
+        "name": "connect",
+        "timeoutMs": 15000
+      },
+      {
+        "name": "disconnect",
+        "timeoutMs": 15000
+      },
+      {
         "name": "pair",
+        "timeoutMs": 15000
+      },
+      {
+        "name": "bind",
         "timeoutMs": 15000
       },
       {
@@ -86,27 +139,23 @@
         "timeoutMs": 15000
       },
       {
-        "name": "sync",
-        "timeoutMs": 15000
-      },
-      {
-        "name": "whitelist",
-        "timeoutMs": 15000
-      },
-      {
-        "name": "allow",
-        "timeoutMs": 15000
-      },
-      {
-        "name": "context",
-        "timeoutMs": 15000
-      },
-      {
-        "name": "move",
+        "name": "route",
         "timeoutMs": 15000
       },
       {
         "name": "fresh",
+        "timeoutMs": 15000
+      },
+      {
+        "name": "globalAllow",
+        "timeoutMs": 15000
+      },
+      {
+        "name": "approve",
+        "timeoutMs": 15000
+      },
+      {
+        "name": "open",
         "timeoutMs": 15000
       }
     ]

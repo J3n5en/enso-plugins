@@ -340,7 +340,14 @@ export async function readPackages(root) {
   }
   const metaDir = join(root, 'registry/meta');
   if (existsSync(metaDir)) {
+    // 外部插件（registry/external）不在 packages/ 里但同样需要市场元数据
     const known = new Set(names.filter((ent) => ent.isDirectory()).map((ent) => ent.name));
+    const externalDir = join(root, 'registry/external');
+    if (existsSync(externalDir)) {
+      for (const name of await readdir(externalDir)) {
+        if (name.endsWith('.json')) known.add(name.slice(0, -5));
+      }
+    }
     for (const name of await readdir(metaDir)) {
       if (name.endsWith('.json') && !known.has(name.slice(0, -5))) errors.push(`多余的市场元数据 ${name}`);
     }
