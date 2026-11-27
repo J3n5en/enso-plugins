@@ -961,6 +961,89 @@ test('route bindCurrent：按点击时实时的 ctx.sessionId 改绑（子会话
   assert.equal(t.injected.at(-1).sessionId, 's2');
 });
 
+test('进度提示关闭：不发占位/插入/进度/静默处理，typing 照常，最终回复直接发；再打开恢复', async () => {
+  const t = await setup();
+  await t.pair();
+  await runPoll(t);
+  assert.equal((await t.handlers.renderer.state({}, { sessionId: 's1' })).routes[0].showProgress, true, '默认开');
+  const v = await t.handlers.renderer.route({ key: '42', patch: { showProgress: false } }, { sessionId: 's1' });
+  assert.equal(v.routes[0].showProgress, false);
+  const steps = /^(⏳|↪️|▶️|📥|🤫)/;
+  const noise = () => t.calls.filter((c) => ['sendMessage', 'editMessageText'].includes(c.method) && steps.test(c.body.text ?? ''));
+
+  t.message('帮我看下测试');
+  await runPoll(t);
+  assert.equal(t.injected.at(-1).sessionId, 's1');
+  assert.ok(t.of('sendChatAction').length >= 1, '原生「正在输入」保留');
+  await t.handlers.events.tool_call({ toolName: 'bash' }, { sessionId: 's1', agent: null });
+  t.message('/steer 插一句');
+  await runPoll(t);
+  assert.equal(t.injected.at(-1).deliverAs, 'steer');
+  await t.handlers.events.agent_end({ text: '**全部通过**' }, { sessionId: 's1', agent: null });
+  assert.equal(t.of('sendMessage').at(-1).body.text, '<b>全部通过</b>', '最终回复作为新消息直接发');
+  assert.equal(t.of('editMessageText').length, 0);
+
+  t.message('这轮静默');
+  await runPoll(t);
+  await t.handlers.events.agent_end({ text: 'x', silent: true }, { sessionId: 's1', agent: null });
+  assert.equal(t.of('deleteMessage').length, 0, '没有占位就不用删');
+
+  // 攒批回执
+  await t.handlers.renderer.route({ key: '42', patch: { debounceSec: 60 } }, { sessionId: 's1' });
+  t.message('攒着');
+  await runPoll(t);
+  await t.flushTextBuffer('42');
+  await t.handlers.renderer.route({ key: '42', patch: { debounceSec: 0 } }, { sessionId: 's1' });
+
+  // 排队与补投：排队提示照发（它不是进度），补投不发「▶️」
+  const realInject = t.enso.session.inject;
+  t.enso.session.inject = async () => {
+    throw Object.assign(new Error('会话不在运行'), { code: 'INJECT_FAILED' });
+  };
+  t.message('先排着');
+  await runPoll(t);
+  assert.match(t.of('sendMessage').at(-1).body.text, /已排队/);
+  t.enso.session.inject = realInject;
+  await t.flush();
+  assert.match(t.injected.at(-1).text, /先排着$/);
+  assert.deepEqual(noise(), [], '一条过程提示都没有');
+
+  // 关之前留下的占位：静默结束时删掉
+  await t.handlers.events.agent_end({ text: '清掉补投的待回' }, { sessionId: 's1', agent: null });
+  await t.handlers.renderer.route({ key: '42', patch: { showProgress: true } }, { sessionId: 's1' });
+  t.message('再来');
+  await runPoll(t);
+  const placeholder = t.of('sendMessage').find((c) => c.body.text === '⏳ 已收到，处理中…');
+  assert.ok(placeholder, '重新打开后恢复占位');
+  await t.handlers.renderer.route({ key: '42', patch: { showProgress: false } }, { sessionId: 's1' });
+  await t.handlers.events.agent_end({ text: 'x', silent: true }, { sessionId: 's1', agent: null });
+  assert.deepEqual(t.of('deleteMessage').map((c) => c.body), [{ chat_id: 42, message_id: placeholder.resultMessageId }]);
+  assert.ok(!t.of('editMessageText').some((c) => c.body.text?.startsWith('🤫')));
+});
+
+test('进度提示开启：攒批回执、补投与静默处理的过程提示照旧', async () => {
+  const t = await setup();
+  await t.pair();
+  await runPoll(t);
+  await t.handlers.renderer.route({ key: '42', patch: { debounceSec: 60 } }, { sessionId: 's1' });
+  t.message('攒着');
+  await runPoll(t);
+  assert.ok(t.of('sendMessage').some((c) => c.body.text?.startsWith('📥')));
+  await t.flushTextBuffer('42');
+  await t.handlers.events.agent_end({ text: 'x', silent: true }, { sessionId: 's1', agent: null });
+  assert.match(t.of('editMessageText').at(-1).body.text, /🤫 本轮已在别处静默处理/);
+  await t.handlers.renderer.route({ key: '42', patch: { debounceSec: 0 } }, { sessionId: 's1' });
+  const realInject = t.enso.session.inject;
+  t.enso.session.inject = async () => {
+    throw Object.assign(new Error('会话不在运行'), { code: 'INJECT_FAILED' });
+  };
+  t.message('先排着');
+  await runPoll(t);
+  t.enso.session.inject = realInject;
+  await t.flush();
+  assert.ok(t.of('sendMessage').some((c) => c.body.text?.startsWith('▶️')));
+});
+
 test('cancelPair：关闭配对卡片即作废配对码，再 /bind 被拒', async () => {
   const t = await setup();
   const v1 = await t.handlers.renderer.pair({}, { sessionId: 's1' });
@@ -978,10 +1061,10 @@ test('cancelPair：关闭配对卡片即作废配对码，再 /bind 被拒', asy
   assert.equal((await t.handlers.renderer.state({}, { sessionId: 's1' })).pairing, undefined);
 });
 
-test('清单：1.1.0，声明 injectTrusted/session.focus 与新方法', async () => {
+test('清单：1.1.1，声明 injectTrusted/session.focus 与新方法', async () => {
   const { readFile } = await import('node:fs/promises');
   const manifest = JSON.parse(await readFile(new URL('../packages/enso.telegram/enso-plugin.json', import.meta.url), 'utf8'));
-  assert.equal(manifest.version, '1.1.0');
+  assert.equal(manifest.version, '1.1.1');
   assert.equal(manifest.engines.enso, '>=0.3.14');
   for (const p of ['agent.injectTrusted', 'session.focus']) assert.ok(manifest.permissions.includes(p), p);
   const methods = manifest.contributes.methods.map((m) => m.name);

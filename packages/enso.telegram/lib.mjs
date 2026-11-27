@@ -133,6 +133,7 @@ export const defaultRoute = () => ({
   enabled: true,
   sync: false,
   directTrigger: false,
+  showProgress: true, // 「已收到，处理中」、工具进度、「已静默处理」等过程提示
   whitelistMode: 'inherit', // inherit | custom | open
   allow: [],
   requests: [],
@@ -214,6 +215,7 @@ export function normalizeRoute(r) {
   r.enabled = r.enabled !== false;
   r.sync = r.sync === true;
   r.directTrigger = r.directTrigger === true;
+  r.showProgress = r.showProgress !== false;
   if (!['inherit', 'custom', 'open'].includes(r.whitelistMode)) r.whitelistMode = 'inherit';
   r.context = clampInt(r.context, 0, MAX_CONTEXT, 0);
   r.debounceSec = clampInt(r.debounceSec, 0, MAX_DEBOUNCE, 0);
@@ -626,6 +628,7 @@ function decide(state, update, now, bot) {
         return reply2(
           `已绑定会话 ${live.sessionId}\n同步 EnsoCode 对话：${live.sync ? '开' : '关'}` +
             `\n免 @ 直发：${live.directTrigger ? '开' : '关'}` +
+            `\n进度提示：${live.showProgress !== false ? '开' : '关'}` +
             `\n白名单：${{ inherit: '继承全局', custom: `本路由（${live.allow?.length ?? 0} 人）`, open: '全群开放' }[live.whitelistMode]}` +
             `\n上下文：${live.context ? `最近 ${live.context} 条` : '关'}` +
             `\n攒批：${live.debounceSec ? `${live.debounceSec}s 安静期` : '即时'}；限速：${live.minIntervalSec ? `${live.minIntervalSec}s` : '不限'}` +

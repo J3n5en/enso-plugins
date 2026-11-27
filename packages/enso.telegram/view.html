@@ -176,6 +176,7 @@
           <div class="row wrap">
             <label class="switch" data-tip="把 EnsoCode 里的对话也发到这个聊天"><input type="checkbox" class="ui-switch" data-route="sync" data-key="${esc(r.key)}" ${r.sync ? 'checked' : ''}/>同步</label>
             <label class="switch" data-tip="开启后成员无需 @机器人，直接发消息即可触发（受白名单约束）"><input type="checkbox" class="ui-switch" data-route="directTrigger" data-key="${esc(r.key)}" ${r.directTrigger ? 'checked' : ''}/>免 @ 直发</label>
+            <label class="switch" data-tip="关闭后不再发「已收到，处理中」「处理进度」「已静默处理」等过程提示，只发最终回复"><input type="checkbox" class="ui-switch" data-route="showProgress" data-key="${esc(r.key)}" ${r.showProgress !== false ? 'checked' : ''}/>进度提示</label>
             <span class="btns"><button class="ui-btn ui-btn--sm ui-btn--outline" data-fresh="${esc(r.key)}" data-tip="新建一个会话并把这个聊天改绑过去">新建会话</button>
             <button class="ui-btn ui-btn--sm ui-btn--destructive" data-unbind="${esc(r.key)}">解绑</button></span>
           </div>

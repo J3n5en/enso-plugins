@@ -222,6 +222,22 @@ test('「绑定当前」三态：无当前会话禁用、已绑当前禁用、�
   assert.equal(button(ui.nodes.body.html)[1], '改绑到当前会话');
 });
 
+test('「进度提示」开关：默认勾选，切换发 route 补丁 showProgress', async () => {
+  let current = baseView();
+  const ui = await mount(async (method, args) => {
+    if (method === 'route') current = baseView({ routes: [{ ...current.routes[0], showProgress: args.patch.showProgress }] });
+    return current;
+  });
+  ui.click({ toggle: '-100' });
+  const box = () => ui.nodes.body.html.match(/<label class="switch" data-tip="([^"]*)"><input type="checkbox" class="ui-switch" data-route="showProgress" data-key="-100" ?(checked)?\/>进度提示<\/label>/);
+  assert.match(box()[1], /只发最终回复/);
+  assert.equal(box()[2], 'checked', '旧视图没有 showProgress 字段时按开处理');
+  ui.nodes.app.listeners.change.forEach((fn) => fn({ target: { dataset: { route: 'showProgress', key: '-100' }, type: 'checkbox', checked: false } }));
+  await settle();
+  assert.deepEqual(ui.calls.at(-1), { method: 'route', args: { key: '-100', patch: { showProgress: false } } });
+  assert.equal(box()[2], undefined);
+});
+
 test('跳转失败把中文提示显示出来', async () => {
   const ui = await mount(async (method) => {
     if (method === 'focus') throw new Error('跳转失败：这个会话不在当前窗口');
