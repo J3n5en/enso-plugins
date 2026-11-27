@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-27T05:19:00.030Z",
-  "sequence": 145,
+  "generatedAt": "2026-11-27T12:54:57.666Z",
+  "sequence": 146,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -2492,7 +2492,7 @@
     {
       "id": "enso.telegram",
       "name": "Telegram",
-      "description": "用 Telegram Bot 远程使用 EnsoCode 会话：配对后发消息即进入会话，执行进度原位更新，回复以富文本发回；支持图片、群聊绑定、成员白名单与群聊上下文、插话、远程停止和双向同步。",
+      "description": "用 Telegram Bot 远程使用 EnsoCode 会话：面板直填 Token 即连；私聊、群聊与论坛话题各自绑定任意会话（含秘书）；两层白名单与全群开放模式、逐话题免 @ 直发；上下文条数、限速攒批与提示词前置按路由配置；双向图片与相册；ask_user 按钮直接在群里作答。",
       "tier": "official",
       "tags": [
         "remote",
@@ -2501,11 +2501,11 @@
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.telegram.svg",
       "category": "integrations",
       "readme": {
-        "path": "packages/enso.telegram/0.4.0.readme.md",
-        "sha256": "8f3c8901d71bbbc22a76922fa5d13ae911cf49b3860a1d22e772ae3eb86fa718",
-        "size": 3430
+        "path": "packages/enso.telegram/1.0.0.readme.md",
+        "sha256": "833df70be0461a69f28bbe541f95326356997899b1cb3681ac2df30de55fb4e5",
+        "size": 3180
       },
-      "latest": "0.4.0",
+      "latest": "1.0.0",
       "versions": [
         {
           "version": "0.2.0",
@@ -2647,6 +2647,28 @@
           "sha256": "67907208f77ddf76efd8ec5ea137948dcba6e383b9d08029976d3b2dd30fa38c",
           "size": 84145,
           "publishedAt": "2026-11-23T17:15:57.087Z"
+        },
+        {
+          "version": "1.0.0",
+          "engines": {
+            "enso": ">=0.3.14"
+          },
+          "permissions": [
+            "process.background",
+            "agent.inject",
+            "agent.observe",
+            "agent.tool",
+            "net.fetch",
+            "session.create",
+            "session.read",
+            "session.readAll",
+            "ui.openExternal",
+            "ui.view"
+          ],
+          "path": "packages/enso.telegram/1.0.0.zip",
+          "sha256": "af30e89ab7d77ff6c835863bb20043e5f1555f1dc4de701856639c5a3d36aa08",
+          "size": 148289,
+          "publishedAt": "2026-11-27T12:54:57.666Z"
         }
       ]
     },
