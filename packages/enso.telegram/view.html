@@ -10,24 +10,33 @@
       h3 { margin: 0; font-size: 11px; font-weight: 500; color: var(--muted-foreground); }
       b { font-weight: 600; }
       .row { display: flex; align-items: center; gap: 8px; min-width: 0; }
-      .chats { display: flex; flex-direction: column; gap: 2px; margin: 0 -6px; }
-      .chats > .row { padding: 4px 6px; border-radius: var(--radius-md); }
       .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .m { color: var(--muted-foreground); font-size: 11px; }
-      .code { font-size: 26px; font-weight: 600; line-height: 1; letter-spacing: 6px; text-align: center; padding: 10px 0; border-radius: var(--radius-md); background: var(--muted); user-select: all; }
-      .code > span { padding-left: 6px; }
-      .ui-btn--block { width: 100%; height: 32px; }
-      ol { margin: 0; padding-left: 18px; color: var(--muted-foreground); display: flex; flex-direction: column; gap: 2px; }
-      label.switch { display: flex; align-items: center; gap: 6px; color: var(--muted-foreground); font-size: 11px; cursor: pointer; flex: none; }
       .err { color: var(--destructive); font-size: 11px; }
-      .wl { display: flex; flex-direction: column; gap: 6px; padding: 2px 6px 8px 26px; }
+      .tabs { display: flex; gap: 4px; padding: 2px; background: var(--muted); border-radius: var(--radius-md); }
+      .tab { flex: 1; height: 26px; border: 0; border-radius: calc(var(--radius-md) - 2px); background: none; font: inherit; font-size: 12px; cursor: pointer; color: var(--muted-foreground); }
+      .tab.on { background: var(--background); color: var(--foreground); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+      .rt { border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
+      .rt > .head { padding: 6px 8px; display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+      .rt > .head:hover { background: var(--muted); }
+      .rt > .body { padding: 8px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
+      label.switch { display: flex; align-items: center; gap: 6px; color: var(--muted-foreground); font-size: 11px; cursor: pointer; }
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; align-items: center; }
+      .grid label { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--muted-foreground); }
+      .grid .ui-input, .grid select { height: 24px; font-size: 11px; }
+      textarea.ui-input { font-size: 11px; min-height: 52px; resize: vertical; }
       .users { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
-      .users .ui-badge { gap: 4px; }
       .x { border: 0; background: none; padding: 0; cursor: pointer; color: inherit; opacity: .6; font: inherit; }
       .x:hover { opacity: 1; }
+      .code { font-size: 26px; font-weight: 600; line-height: 1; letter-spacing: 6px; text-align: center; padding: 10px 0; border-radius: var(--radius-md); background: var(--muted); user-select: all; }
       .btns { display: flex; gap: 6px; }
-      .btns > .ui-btn { flex: 1; height: 32px; }
-      select.ctx { height: 22px; padding: 0 4px; width: auto; font-size: 11px; }
+      .btns > .ui-btn { flex: 1; height: 30px; }
+      ol { margin: 0; padding-left: 18px; color: var(--muted-foreground); display: flex; flex-direction: column; gap: 2px; }
+      details > summary { cursor: pointer; color: var(--muted-foreground); font-size: 11px; }
+      .chat { display: flex; flex-direction: column; gap: 2px; }
+      .topicrow { padding-left: 18px; }
+      input[type=password].ui-input, input[type=text].ui-input { height: 28px; width: 100%; }
+      .ui-btn--block { width: 100%; height: 30px; }
     </style>
   </head>
   <body>
@@ -39,136 +48,276 @@
       let view = null;
       let error = '';
       let busy = false;
-      let lastCode = '';
+      let tab = 'routes';
+      let changingToken = false; // 「更换 Token」展开态：轮询重绘不得把它折叠掉
+      const openKeys = new Set(); // 展开编辑的路由
       ensoUI.tooltip();
 
       let last = '';
       let stale = false;
-      // 下拉框展开时 innerHTML 重绘会把它关掉，先记着，失焦后再画
-      const picking = () => document.activeElement?.tagName === 'SELECT';
+      // 正在编辑 input/textarea/select 时不重绘，避免打断输入与焦点
+      const editing = () => ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
       async function run(method, args) {
         if (busy) return;
         busy = true;
         let changed = true;
         try {
           const next = await window.enso.call(method, args ?? {});
-          const key = JSON.stringify(next);
-          // 轮询结果没变就不重绘，避免打断正在点的控件
-          if (method === 'state' && key === last && !error) return (changed = false);
-          last = key;
-          view = next;
-          error = '';
+          if (method === 'connect') {
+            if (next.needsUpgrade) {
+              error = next.message; // 内联展示，不再 alert
+            } else if (next.ok) {
+              // 后端直接返回了最新视图，无需再拉一次 state（也避免覆盖错误提示）
+              view = next;
+              last = JSON.stringify(next);
+              error = '';
+              changingToken = false;
+            } else {
+              error = next.message || '连接失败';
+            }
+            busy = false;
+            render();
+            return;
+          } else {
+            const key = JSON.stringify(next);
+            if (method === 'state' && key === last && !error) { busy = false; return; }
+            last = key;
+            view = next;
+            error = '';
+          }
         } catch (e) {
           error = e?.message ?? String(e);
         } finally {
           busy = false;
-          if (changed && method === 'state' && picking()) stale = true;
-          else if (changed) render();
+          if (method === 'state' && editing()) stale = true;
+          else render();
         }
       }
       document.addEventListener('focusout', () => setTimeout(() => {
-        if (stale && !picking()) (stale = false), render();
+        if (stale && !editing()) { stale = false; render(); }
       }));
+
+      function sessOptions(selected) {
+        const sessions = view.sessions ?? [];
+        const groups = {};
+        for (const s of sessions) {
+          const g = s.kind === 'secretary' ? '秘书' : (s.projectName || '未分组');
+          (groups[g] ??= []).push(s);
+        }
+        // 绑定的会话不在当前列表里（已归档/跨项目拿不到）时补一个占位项，避免下拉误显示成第一项
+        const fallback = selected && !sessions.some((s) => s.id === selected)
+          ? `<optgroup label="当前绑定"><option value="${esc(selected)}" selected>${esc(selected)}（不在会话列表）</option></optgroup>`
+          : '';
+        return fallback + Object.entries(groups).map(([g, list]) =>
+          `<optgroup label="${esc(g)}">${list.map((s) => `<option value="${esc(s.id)}" ${s.id === selected ? 'selected' : ''}>${esc(s.title)}</option>`).join('')}</optgroup>`
+        ).join('');
+      }
+
+      function routeCard(r) {
+        const open = openKeys.has(r.key);
+        const icon = r.chatType === 'private' ? '👤' : '👥';
+        const topicBit = r.topicId ? ` <span class="m"># ${esc(r.topicName ?? r.topicId)}</span>` : '';
+        const head = `<div class="head" data-toggle="${esc(r.key)}">
+          <span class="grow">${icon} ${esc(r.title)}${topicBit}</span>
+          ${r.session ? `<span class="m">${esc(r.session)}</span>` : '<span class="ui-badge ui-badge--warning">未绑会话</span>'}
+          <span class="m">${open ? '▾' : '▸'}</span></div>`;
+        if (!open) return `<div class="rt">${head}</div>`;
+        const req = (r.requests ?? []).map((u) => `<span class="ui-badge ui-badge--warning">${esc(u.name)}<button class="x" data-tip="批准进白名单" data-approve="${esc(r.key)}|${u.id}">＋</button></span>`).join('');
+        const allow = (r.allow ?? []).map((u) => `<span class="ui-badge">${esc(u.name)}<button class="x" data-tip="移出本路由名单" data-deny="${esc(r.key)}|${u.id}">×</button></span>`).join('');
+        const sizes = [...new Set([0, 3, 5, 10, 20, r.context ?? 0])].sort((a, b) => a - b);
+        const body = `<div class="body">
+          <label class="switch" style="font-size:12px;color:var(--foreground)">目标会话
+            <select class="ui-input" data-route="sessionId" data-key="${esc(r.key)}">${sessOptions(r.sessionId)}</select></label>
+          <div class="row">
+            <label class="switch" data-tip="把 EnsoCode 里的对话也发到这个聊天"><input type="checkbox" class="ui-switch" data-route="sync" data-key="${esc(r.key)}" ${r.sync ? 'checked' : ''}/>同步</label>
+            <label class="switch" data-tip="开启后成员无需 @机器人，直接发消息即可触发（受白名单约束）"><input type="checkbox" class="ui-switch" data-route="directTrigger" data-key="${esc(r.key)}" ${r.directTrigger ? 'checked' : ''}/>免 @ 直发</label>
+            <button class="ui-btn ui-btn--sm ui-btn--outline" data-fresh="${esc(r.key)}" data-tip="新建一个会话并把这个聊天改绑过去">新建会话</button>
+            <button class="ui-btn ui-btn--sm ui-btn--destructive" data-unbind="${esc(r.key)}">解绑</button>
+          </div>
+          ${r.chatType !== 'private' ? `<div class="row"><label class="switch" style="font-size:11px">白名单
+            <select class="ui-input" data-route="whitelistMode" data-key="${esc(r.key)}">
+              <option value="inherit" ${r.whitelistMode === 'inherit' ? 'selected' : ''}>继承全局</option>
+              <option value="custom" ${r.whitelistMode === 'custom' ? 'selected' : ''}>本路由独立</option>
+              <option value="open" ${r.whitelistMode === 'open' ? 'selected' : ''}>全群开放</option>
+            </select></label></div>
+          <div class="users">${allow || (r.whitelistMode === 'open'
+            ? '<span class="m">全群开放：群内所有成员均可触发</span>'
+            : r.whitelistMode === 'inherit'
+              ? '<span class="m">本路由追加名单为空（叠加全局名单生效）</span>'
+              : '<span class="m">本路由名单为空</span>')}</div>
+          ${req ? `<div class="users"><span class="m">待批准：</span>${req}</div>` : ''}` : ''}
+          <div class="grid">
+            <label>上下文条数
+              <select class="ui-input" data-route="context" data-key="${esc(r.key)}">${sizes.map((n) => `<option value="${n}" ${n === r.context ? 'selected' : ''}>${n ? `最近 ${n} 条` : '关'}</option>`).join('')}</select></label>
+            <label>攒批安静期（秒，0 即时）
+              <input class="ui-input" type="number" min="0" max="3600" value="${r.debounceSec ?? 0}" data-route="debounceSec" data-key="${esc(r.key)}" data-num/></label>
+            <label>最小触发间隔（秒，0 不限）
+              <input class="ui-input" type="number" min="0" max="86400" value="${r.minIntervalSec ?? 0}" data-route="minIntervalSec" data-key="${esc(r.key)}" data-num/></label>
+          </div>
+          <label class="switch" style="align-items:flex-start;flex-direction:column;gap:4px">提示词前置（每次注入拼在消息顶部）
+            <textarea class="ui-input" data-route="promptPrefix" data-key="${esc(r.key)}" placeholder="例如：你是本群的客服助手，回答控制在三句话以内。">${esc(r.promptPrefix ?? '')}</textarea></label>
+          ${r.context && view.bot?.readsAll === false ? '<div class="m err">机器人开着隐私模式，只能看到 @ 它或回复它的消息。到 @BotFather 发 /setprivacy 选 Disable，再把机器人移出群重新拉进来。</div>' : ''}
+        </div>`;
+        return `<div class="rt">${head}${body}</div>`;
+      }
+
+      function routesTab() {
+        const routes = view.routes ?? [];
+        const list = routes.length
+          ? routes.map(routeCard).join('')
+          : '<div class="m">还没有绑定。在群里发 /bind 配对码，或从下方已发现的聊天一键绑定。</div>';
+        const pairing = view.pairing
+          ? `<div class="code ui-mono">${esc(view.pairing.code)}</div>
+             ${view.pairing.link ? `<div class="btns"><button class="ui-btn ui-btn--primary" data-open="${esc(view.pairing.link)}">绑定私聊</button>
+               <button class="ui-btn ui-btn--outline" data-open="${esc(view.pairing.groupLink)}">绑定到群聊</button></div>` : ''}
+             <div class="m">或在 Bot 私聊里发 <b>/bind ${esc(view.pairing.code)}</b>；群/话题里发 <b>/bind@${esc(view.bot?.username ?? 'bot')} ${esc(view.pairing.code)}</b>（话题内发出即绑该话题）。</div>`
+          : `<button class="ui-btn ui-btn--primary ui-btn--block" data-pair ${view.sessionId ? '' : 'disabled'}>＋ 配对绑定</button>${view.sessionId ? '' : '<div class="m">打开一个会话后才能配对</div>'}`;
+        const unbound = (view.knownChats ?? []).flatMap((c) => {
+          const rows = [];
+          const chatKey = String(c.id);
+          if (!c.boundKeys.includes(chatKey)) {
+            rows.push(`<div class="row"><span class="grow">${c.type === 'private' ? '👤' : '👥'} ${esc(c.title || c.id)}</span>
+              <button class="ui-btn ui-btn--sm ui-btn--outline" data-bind="${chatKey}|">${c.type === 'private' ? '绑定私聊' : '绑定整群'}</button></div>`);
+          }
+          if (c.isForum) {
+            for (const t of c.topics ?? []) {
+              const k = `${chatKey}:${t.id}`;
+              if (!c.boundKeys.includes(k)) {
+                rows.push(`<div class="row topicrow"><span class="grow"># ${esc(t.name)}</span>
+                  <button class="ui-btn ui-btn--sm ui-btn--outline" data-bind="${chatKey}|${t.id}">绑定话题</button></div>`);
+              }
+            }
+          }
+          return rows;
+        });
+        const idle = routes.length && view.running === false
+          ? `<div class="m">本会话还没启动，收到 Telegram 消息时会自动启动${view.queued ? `（已排队 ${view.queued} 条）` : ''}。</div>`
+          : '';
+        return `<div class="ui-card card"><h3>路由绑定</h3>${idle}${list}</div>
+          <div class="ui-card card">${pairing}</div>
+          ${unbound.length ? `<div class="ui-card card"><h3>已发现的群与话题（一键绑定到本会话）</h3><div class="chat">${unbound.join('')}</div></div>` : ''}`;
+      }
+
+      function whitelistTab() {
+        const users = (view.globalAllow ?? []).map((u) =>
+          `<span class="ui-badge">${esc(u.name)} <span class="m">${u.id}</span><button class="x" data-tip="移出全局白名单" data-gdeny="${u.id}">×</button></span>`
+        ).join('') || '<span class="m">全局白名单为空。继承模式下，只有名单内成员（与各路由自己的名单）能使用机器人。</span>';
+        const reqs = (view.routes ?? []).flatMap((r) => (r.requests ?? []).map((u) => ({ r, u })));
+        const reqHtml = reqs.map(({ r, u }) =>
+          `<div class="row"><span class="grow">${esc(u.name)} <span class="m">@${esc(r.title)}${r.topicName ? ' #' + esc(r.topicName) : ''}</span></span>
+            <button class="ui-btn ui-btn--sm ui-btn--primary" data-approve="${esc(r.key)}|${u.id}">批准</button></div>`
+        ).join('');
+        return `<div class="ui-card card"><h3>全局白名单</h3>
+            <div class="users">${users}</div>
+            <div class="row"><input class="ui-input" type="text" id="wl-id" placeholder="Telegram User ID（数字）" style="flex:1"/>
+              <input class="ui-input" type="text" id="wl-name" placeholder="备注名（可选）" style="flex:1"/>
+              <button class="ui-btn ui-btn--sm ui-btn--primary" data-gadd>添加</button></div>
+            <div class="m">用 @userinfobot 可以查到某人的 User ID。</div></div>
+          ${reqs.length ? `<div class="ui-card card"><h3>待批准请求</h3>${reqHtml}</div>` : ''}`;
+      }
 
       function render() {
         const v = view;
-        if (!v) return (app.innerHTML = error ? `<div class="ui-empty err">${esc(error)}</div>` : '<div class="ui-empty">加载中…</div>');
-        if (!v.configured) {
-          app.innerHTML = `<div class="ui-card card ui-enter"><b>还没有 Bot Token</b>
-            <ol><li>在 Telegram 找 @BotFather，发 /newbot 创建机器人</li>
-            <li>复制它给的 Token</li><li>填到 设置 → 插件 → Telegram → Bot Token</li></ol></div>`;
+        if (!v) {
+          app.innerHTML = error ? `<div class="ui-empty err">${esc(error)}</div>` : '<div class="ui-empty">加载中…</div>';
           return;
         }
-        const bot = v.bot
-          ? `<div class="row"><span class="grow"><b>@${esc(v.bot.username)}</b> <span class="m">${esc(v.bot.name)}</span></span><span class="ui-badge ui-badge--success">已连接</span></div>`
-          : `<div class="row"><span class="grow err">${esc(v.error)}</span><span class="ui-badge ui-badge--destructive">连不上 Telegram</span></div>`;
-        let body;
-        if (!v.sessionId) body = '<div class="ui-empty">打开一个会话后在这里绑定</div>';
-        else {
-          const sessionPick = (b) => `<label class="switch" data-tip="改绑到另一个会话，之后这个聊天的消息发到那里">会话
-              <select class="ui-input ctx" data-move="${b.chatId}">${v.sessions.map((s) => `<option value="${esc(s.id)}" ${s.id === v.sessionId ? 'selected' : ''}>${esc(s.title)}</option>`).join('')}</select></label>`;
-          const whitelist = (b) => {
-            if (b.chatType === 'private') return v.sessions.length > 1 ? `<div class="wl">${sessionPick(b)}</div>` : '';
-            const allow = (b.allow ?? []).map((u) => `<span class="ui-badge">${esc(u.name)}<button class="x" data-tip="移出白名单" data-deny="${b.chatId}:${u.id}">×</button></span>`).join('') || '<span class="m">名单为空，群里没人能用</span>';
-            const req = (b.requests ?? []).map((u) => `<span class="ui-badge ui-badge--warning">${esc(u.name)}<button class="x" data-tip="加入白名单" data-allow="${b.chatId}:${u.id}">＋</button></span>`).join('');
-            const sizes = [...new Set([0, 3, 5, 10, 20, b.context ?? 0])].sort((x, y) => x - y);
-            const ctx = `<label class="switch" data-tip="有人触发机器人时，附带群里此前未投递的其他人消息">附带群聊上下文
-              <select class="ui-input ctx" data-ctx="${b.chatId}">${sizes.map((n) => `<option value="${n}" ${n === (b.context ?? 0) ? 'selected' : ''}>${n ? `最近 ${n} 条` : '关'}</option>`).join('')}</select></label>
-              ${b.context && v.bot?.readsAll === false ? '<div class="m err">机器人开着隐私模式，只能看到 @ 它或回复它的消息。到 @BotFather 发 /setprivacy 选 Disable，再把机器人移出群重新拉进来。</div>' : ''}`;
-            return `<div class="wl">${v.sessions.length > 1 ? sessionPick(b) : ''}${ctx}
-              <label class="switch" data-tip="开启后只有名单内的成员能使用机器人"><input type="checkbox" class="ui-switch" data-wl="${b.chatId}" ${b.whitelist ? 'checked' : ''}/>仅白名单成员可用</label>
-              ${b.whitelist ? `<div class="users">${allow}</div>${req ? `<div class="users"><span class="m">待批准：</span>${req}</div>` : ''}
-              <div class="m">在群里回复某人的消息发 /allow 或 /deny 也可管理。</div>` : ''}</div>`;
-          };
-          const chats = v.bindings.length
-            ? '<div class="chats">' + v.bindings.map((b) => `<div><div class="row" data-fill>
-                <span class="grow">${b.chatType === 'private' ? '👤' : '👥'} ${esc(b.title ?? b.chatId)}</span>
-                <label class="switch" data-tip="把在 EnsoCode 里的对话也发到这个聊天"><input type="checkbox" class="ui-switch" data-sync="${b.chatId}" ${b.sync ? 'checked' : ''}/>同步</label>
-                <button class="ui-btn ui-btn--sm ui-btn--outline" data-fresh="${b.chatId}" data-tip="新建一个会话并把这个聊天改绑过去">新会话</button>
-                <button class="ui-btn ui-btn--sm ui-btn--destructive" data-unbind="${b.chatId}">解绑</button></div>${whitelist(b)}</div>`).join('') + '</div>'
-            : '<div class="m">还没有绑定聊天</div>';
-          const pairing = v.pairing
-            ? `<div class="code ui-mono" data-code></div>
-               ${v.pairing.link ? `<div class="btns"><button class="ui-btn ui-btn--primary" data-open="${esc(v.pairing.link)}">绑定私聊</button>
-                 <button class="ui-btn ui-btn--outline" data-open="${esc(v.pairing.groupLink)}" data-tip="选择一个群并把机器人加进去，自动完成绑定">绑定到群聊</button></div>` : ''}
-               <div class="m">或在 Bot 私聊里发 <b>/bind ${esc(v.pairing.code)}</b>；群聊里发 <b>/bind@${esc(v.bot?.username ?? 'bot')} ${esc(v.pairing.code)}</b>。<span data-left></span></div>`
-            : `<button class="ui-btn ui-btn--primary ui-btn--block" data-pair>绑定 Telegram 聊天</button>`;
-          const idle = v.bindings.length && v.running === false
-            ? `<div class="m">本会话还没启动，收到 Telegram 消息时会自动启动${v.queued ? `（已排队 ${v.queued} 条）` : ''}。</div>`
+        let connCard;
+        if (!v.configured) {
+          connCard = `<div class="ui-card card ui-enter"><b>连接 Telegram 机器人</b>
+            <input type="password" class="ui-input" id="tk" placeholder="粘贴 Bot Token" autocomplete="off"/>
+            <button class="ui-btn ui-btn--primary ui-btn--block" data-connect>校验并连接</button>
+            ${v.canSetToken === false ? '<div class="m">当前 EnsoCode 版本不支持从面板保存 Token：请到 设置 → 插件 → Telegram 填写，并建议升级 EnsoCode。</div>' : ''}
+            <details><summary>怎么拿 Token？（3 步）</summary>
+              <ol><li>在 Telegram 找 @BotFather，发 /newbot 创建机器人</li>
+              <li>复制它给的 Token（形如 123456:ABC…）</li><li>粘到上面的框里，点「校验并连接」</li></ol>
+              <div class="m">要在群里看到所有消息：@BotFather 发 /setprivacy 选 Disable，再把机器人移出群重新拉进来。</div></details></div>`;
+        } else {
+          const botLine = v.bot
+            ? `<div class="row"><span class="grow"><b>@${esc(v.bot.username)}</b> <span class="m">${esc(v.bot.name)} · ${esc(v.tokenHint ?? '')}</span></span><span class="ui-badge ui-badge--success">已连接</span></div>`
+            : `<div class="row"><span class="grow err">${esc(v.error ?? '连不上 Telegram')}</span><span class="ui-badge ui-badge--destructive">连接失败</span></div>`;
+          const warn = v.bot?.readsAll === false
+            ? '<div class="m err">隐私模式开启中：机器人在群里只能看到 @ 它或回复它的消息。需要群上下文/免@直发时请关闭：@BotFather → /setprivacy → Disable，再把机器人移出群重新拉进来。</div>'
             : '';
-          body = `<div class="ui-card card"><h3>本会话的聊天</h3>${chats}${idle}</div><div class="ui-card card">${pairing}</div>`;
+          connCard = `<div class="ui-card card">${botLine}${warn}
+            <div class="btns"><button class="ui-btn ui-btn--outline" data-change>更换 Token</button>
+            <button class="ui-btn ui-btn--destructive" data-disconnect>断开连接</button></div>
+            ${changingToken ? `<div class="row"><input type="password" class="ui-input" id="tk" placeholder="粘贴新 Token" autocomplete="off"/>
+              <button class="ui-btn ui-btn--sm ui-btn--primary" data-connect>校验并连接</button></div>` : ''}</div>`;
         }
-        const others = v.others.length && v.sessionId
-          ? `<div class="ui-card card"><h3>其他会话的聊天</h3><div class="chats">${v.others.map((o) => `<div class="row" data-fill>
-              <span class="grow">${o.chatType === 'private' ? '👤' : '👥'} ${esc(o.title ?? o.chatId)} <span class="m">· ${esc(o.session)}</span></span>
-              <button class="ui-btn ui-btn--sm ui-btn--outline" data-pull="${o.chatId}">移到本会话</button></div>`).join('')}</div></div>`
+        const tabs = v.configured
+          ? `<div class="tabs"><button class="tab ${tab === 'routes' ? 'on' : ''}" data-tab="routes">路由绑定</button>
+             <button class="tab ${tab === 'whitelist' ? 'on' : ''}" data-tab="whitelist">白名单</button></div>`
           : '';
-        app.innerHTML = `<div class="ui-card card">${bot}</div>${body}${others}${error ? `<div class="err">${esc(error)}</div>` : ''}`;
-        app.querySelectorAll('.chats').forEach((el) => ensoUI.fill(el));
-        const codeEl = app.querySelector('[data-code]');
-        if (codeEl) {
-          // innerHTML 重绘后先放回旧码，配对码变化时再做一次 TextSwap
-          if (lastCode) ensoUI.swap(codeEl, lastCode);
-          ensoUI.swap(codeEl, v.pairing.code);
-          lastCode = v.pairing.code;
-        }
-        tick();
-      }
-
-      function tick() {
-        const el = app.querySelector('[data-left]');
-        if (!el || !view?.pairing) return;
-        const s = Math.max(0, Math.round((view.pairing.expiresAt - Date.now()) / 1000));
-        el.textContent = s ? ` ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')} 后失效` : ' 已失效';
+        const body = v.configured ? (tab === 'routes' ? routesTab() : whitelistTab()) : '';
+        app.innerHTML = `${connCard}${tabs}${body}${error ? `<div class="err">${esc(error)}</div>` : ''}`;
       }
 
       app.addEventListener('click', (e) => {
-        const t = e.target.closest('button');
+        const t = e.target.closest('button, .head');
         if (!t) return;
-        if (t.hasAttribute('data-pair')) run('pair');
-        else if (t.dataset.unbind) run('unbind', { chatId: Number(t.dataset.unbind) });
-        else if (t.dataset.pull) run('move', { chatId: Number(t.dataset.pull), sessionId: view.sessionId });
-        else if (t.dataset.fresh) run('fresh', { chatId: Number(t.dataset.fresh) });
-        else if (t.dataset.allow || t.dataset.deny) {
-          const [chatId, userId] = (t.dataset.allow || t.dataset.deny).split(':').map(Number);
-          run('allow', { chatId, userId, on: !!t.dataset.allow });
+        if (t.dataset.tab) { tab = t.dataset.tab; render(); return; }
+        if (t.dataset.toggle) {
+          openKeys.has(t.dataset.toggle) ? openKeys.delete(t.dataset.toggle) : openKeys.add(t.dataset.toggle);
+          render(); return;
         }
-        else if (t.dataset.open) window.enso.call('open', { url: t.dataset.open }).catch((err) => ((error = err.message), render()));
+        if (t.hasAttribute('data-change')) {
+          changingToken = !changingToken;
+          render();
+          if (changingToken) document.getElementById('tk')?.focus();
+          return;
+        }
+        if (t.hasAttribute('data-connect')) {
+          const input = document.getElementById('tk');
+          run('connect', { token: input?.value ?? '' });
+          return;
+        }
+        if (t.hasAttribute('data-disconnect')) { changingToken = false; run('disconnect'); }
+        else if (t.hasAttribute('data-pair')) run('pair');
+        else if (t.dataset.unbind) run('unbind', { key: t.dataset.unbind });
+        else if (t.dataset.fresh) run('fresh', { key: t.dataset.fresh });
+        else if (t.dataset.bind) {
+          const [chatId, topicId] = t.dataset.bind.split('|');
+          run('bind', { chatId, topicId: topicId || undefined });
+        }
+        else if (t.dataset.approve) {
+          const [key, userId] = t.dataset.approve.split('|');
+          run('approve', { key, userId: Number(userId), on: true });
+        }
+        else if (t.dataset.deny) {
+          const [key, userId] = t.dataset.deny.split('|');
+          run('approve', { key, userId: Number(userId), on: false });
+        }
+        else if (t.dataset.gdeny) run('globalAllow', { userId: Number(t.dataset.gdeny), on: false });
+        else if (t.hasAttribute('data-gadd')) {
+          const id = Number(document.getElementById('wl-id')?.value);
+          const name = document.getElementById('wl-name')?.value?.trim();
+          if (!Number.isInteger(id) || id <= 0) { error = 'User ID 要是正整数'; render(); return; }
+          run('globalAllow', { userId: id, name: name || String(id), on: true });
+        }
+        else if (t.dataset.open) window.enso.call('open', { url: t.dataset.open }).catch((err) => { error = err.message; render(); });
       });
+
+      const patchRoute = (key, patch) => run('route', { key, patch });
       app.addEventListener('change', (e) => {
-        const { sync, wl, ctx, move } = e.target.dataset ?? {};
-        if (sync) run('sync', { chatId: Number(sync), on: e.target.checked });
-        else if (wl) run('whitelist', { chatId: Number(wl), on: e.target.checked });
-        else if (ctx) run('context', { chatId: Number(ctx), count: Number(e.target.value) });
-        else if (move) run('move', { chatId: Number(move), sessionId: e.target.value });
+        const { route: field, key, num } = e.target.dataset ?? {};
+        if (!field || !key) return;
+        let value;
+        if (e.target.type === 'checkbox') value = e.target.checked;
+        else if (num !== undefined || ['context', 'debounceSec', 'minIntervalSec'].includes(field)) value = Number(e.target.value);
+        else value = e.target.value;
+        patchRoute(key, { [field]: value });
+      });
+      // textarea 用 blur 提交，避免逐字符触发
+      app.addEventListener('focusout', (e) => {
+        const { route: field, key } = e.target.dataset ?? {};
+        if (field === 'promptPrefix' && key) patchRoute(key, { promptPrefix: e.target.value });
       });
 
       run('state');
-      // 跟随会话切换和后台完成的绑定；state 只读本地文件，开销很小
+      // 跟随会话切换和后台完成的绑定；不中断正在编辑的控件（见 editing()）
       setInterval(() => run('state'), 1500);
-      // 全局侧栏页面切会话时不重载，立即换成新会话的绑定
       if (typeof window.enso?.onSession === 'function') window.enso.onSession(() => run('state'));
-      setInterval(tick, 1000);
     </script>
   </body>
 </html>
