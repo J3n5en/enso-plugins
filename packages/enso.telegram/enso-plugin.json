@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "id": "enso.telegram",
   "name": "Telegram",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "icon": "icon.svg",
-  "description": "用 Telegram Bot 远程使用 EnsoCode 会话：面板直填 Token 即连；私聊、群聊与论坛话题各自绑定任意会话（含秘书）；两层白名单与全群开放模式、逐话题免 @ 直发；上下文条数、限速攒批与提示词前置按路由配置；双向图片与相册；ask_user 按钮直接在群里作答。",
+  "description": "用 Telegram Bot 远程使用 EnsoCode 会话：面板直填 Token 即连；私聊、群聊与论坛话题各自绑定任意会话（含秘书），面板一键跳到目标会话；管理员消息可信直达、普通用户按外部数据隔离；两层白名单与全群开放模式、逐话题免 @ 直发；上下文条数、限速攒批与提示词前置按路由配置；双向图片与相册；ask_user 按钮直接在群里作答。",
   "engines": {
     "enso": ">=0.3.14"
   },
@@ -13,10 +13,12 @@
   "permissions": [
     "process.background",
     "agent.inject",
+    "agent.injectTrusted",
     "agent.observe",
     "agent.tool",
     "net.fetch",
     "session.create",
+    "session.focus",
     "session.read",
     "session.readAll",
     "ui.openExternal",
@@ -157,6 +159,18 @@
       },
       {
         "name": "open",
+        "timeoutMs": 15000
+      },
+      {
+        "name": "focus",
+        "timeoutMs": 15000
+      },
+      {
+        "name": "admin",
+        "timeoutMs": 15000
+      },
+      {
+        "name": "cancelPair",
         "timeoutMs": 15000
       }
     ]

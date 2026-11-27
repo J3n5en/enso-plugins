@@ -2,6 +2,7 @@ import { mkdir, open, readFile, realpath, rename, writeFile } from 'node:fs/prom
 import { homedir, tmpdir } from 'node:os';
 import { basename, delimiter, extname, isAbsolute, join, relative } from 'node:path';
 import {
+  ANONYMOUS_ADMIN,
   COMMANDS,
   MAX_CONTEXT,
   MAX_DEBOUNCE,
@@ -9,14 +10,15 @@ import {
   MAX_PREFIX,
   bindRoute,
   bufferDecision,
+  cancelPairing,
   chunkMarkdown,
   closeAsksFor,
   createPairing,
   encodeAskCallback,
   findRoute,
   inboundText,
+  isAdmin,
   isTopicRootReply,
-  isAllowed,
   markPending,
   markdownToHtml,
   mergeBuffered,
@@ -32,6 +34,7 @@ import {
   routeChatId,
   routesOfSession,
   senderOf,
+  setAdmin,
   setAllowed,
   shortIdOf,
   splitRouteKey,
@@ -48,7 +51,9 @@ const POLL_SECONDS = 25;
 const BACKOFF_START_MS = 3_000;
 const BACKOFF_MAX_MS = 60_000;
 const PROGRESS_EVERY_MS = 3_000;
-const COMMANDS_VERSION = 6;
+const COMMANDS_VERSION = 7;
+/** 可信注入被宿主拒绝（旧宿主没有该字段/未授予 agent.injectTrusted）时降级为外部消息再投一次 */
+const TRUST_FALLBACK = new Set(['PERMISSION_DENIED', 'INVALID_ARGS', 'UNSUPPORTED']);
 /** /session 列出的会话数，太多按钮在手机上不好点 */
 const MENU_SIZE = 10;
 const RETRY_EVERY_MS = 5_000;
@@ -346,13 +351,14 @@ export function activate(enso, { loop = true } = {}) {
   // ---- 入站投递（含排队与补投） ----
   /** 返回 false 表示会话仍没运行，留在队列里 */
   const deliverInject = async (action, retry = false) => {
+    const latest = await load().catch(() => null);
     // 提示词前置：以当前路由配置为准
     if (action.promptPrefix === undefined) {
-      try {
-        const r = (await load()).routes[action.key];
-        if (r?.promptPrefix) action.promptPrefix = r.promptPrefix;
-      } catch {}
+      const r = latest?.routes[action.key];
+      if (r?.promptPrefix) action.promptPrefix = r.promptPrefix;
     }
+    // 投递时按最新名单重新认人：排队期间被取消管理员的消息不再可信
+    const trusted = action.admin === true && !!latest && isAdmin(latest, action.fromId);
     // 收集图片：单张 action.image 或相册 action.images
     const imageRefs = action.images?.length ? action.images : action.image ? [action.image] : [];
     let attached;
@@ -364,27 +370,43 @@ export function activate(enso, { loop = true } = {}) {
         return true;
       }
     }
-    const note = action.note ? `\n\n（${action.note}）` : '';
-    const injectOnce = (imgs) =>
+    // 管理员：trusted 且不带 sender（带 sender 的注入宿主一律按外部数据包裹）；普通用户：不可信 + sender
+    const injectOnce = (imgs, asTrusted) =>
       enso.session.inject({
         sessionId: action.sessionId,
-        text: inboundText({ ...action, text: action.text + note }) + '',
+        text: inboundText({ ...action, admin: trusted, text: action.text + (action.note ? `\n\n（${action.note}）` : '') }),
         ...(imgs?.length ? { images: imgs } : {}),
         deliverAs: retry ? 'followUp' : action.deliverAs,
         triggerTurn: true,
-        sender: senderOf(action),
+        ...(asTrusted ? { trusted: true } : { trusted: false, sender: senderOf(action) }),
       });
+    let downgraded = false;
+    const injectTrust = async (imgs) => {
+      if (!trusted) return injectOnce(imgs, false);
+      try {
+        await injectOnce(imgs, true);
+      } catch (error) {
+        if (!TRUST_FALLBACK.has(error?.code)) throw error;
+        await injectOnce(imgs, false);
+        downgraded = true;
+      }
+    };
     const inject = async () => {
       try {
-        await injectOnce(attached);
+        await injectTrust(attached);
       } catch (error) {
         // 新宿主上限 10 张；旧宿主 4 张。INVALID_ARGS 且图片数 > 4 时降级前 4 张并附提示
         if (error?.code === 'INVALID_ARGS' && attached?.length > 4) {
           action.note = [action.note, `图片一次最多 4 张，已只附前 4 张（升级 EnsoCode 可到 10 张）`].filter(Boolean).join('；');
-          await injectOnce(attached.slice(0, 4));
-          return;
-        }
-        throw error;
+          await injectTrust(attached.slice(0, 4));
+        } else throw error;
+      }
+      if (downgraded && !self.trustWarned) {
+        self.trustWarned = true;
+        await send(
+          action.key,
+          '⚠️ 当前 EnsoCode 没有接受可信投递（旧版本或未授予 agent.injectTrusted 权限），管理员消息已按外部消息投递。请升级 EnsoCode，或在 设置 → 插件 → Telegram 确认权限。'
+        ).catch(() => {});
       }
     };
     const done = () => imageRefs.forEach(dropImage);
@@ -467,14 +489,20 @@ export function activate(enso, { loop = true } = {}) {
     })().finally(() => (flushing = null)));
 
   // ---- 攒批与相册缓冲（内存态；重启丢失可接受，Telegram 不会重投同一条） ----
-  const textBuffers = new Map(); // key -> { actions: [], firstAt, lastAt, timer }
+  // 缓冲按「路由 + 角色」分组，管理员与普通用户的消息绝不合并进同一条注入
+  const textBuffers = new Map(); // `${routeKey}|admin|user` -> { routeKey, actions: [], firstAt, lastAt, timer }
   const albums = new Map(); // `${key}|${mediaGroupId}` -> { actions: [], timer, inflight, done }
+  const bufferKeyOf = (action) => `${action.key}|${action.admin ? 'admin' : 'user'}`;
   /** steer/stop 等控制指令不进入攒批 */
   const instantKind = (action) => action.deliverAs === 'steer';
 
+  /** 立即投递一个缓冲；给的是路由 key 时投递该路由的全部角色缓冲 */
   const flushTextBuffer = async (key) => {
+    if (!textBuffers.has(key)) {
+      for (const [bk, b] of [...textBuffers]) if (b.routeKey === key) await flushTextBuffer(bk);
+      return;
+    }
     const buf = textBuffers.get(key);
-    if (!buf) return;
     textBuffers.delete(key);
     if (buf.timer) {
       clearTimeout(buf.timer);
@@ -482,7 +510,7 @@ export function activate(enso, { loop = true } = {}) {
     }
     const merged = mergeBuffered(buf.actions);
     await update((state) => {
-      const r = state.routes[key];
+      const r = state.routes[buf.routeKey];
       if (r) r.lastDeliveredAt = Date.now();
     });
     await deliverInject(merged).catch((e) => console.error('[telegram]', e?.message ?? e));
@@ -513,7 +541,7 @@ export function activate(enso, { loop = true } = {}) {
   const tryFlushTextBuffer = async (key) => {
     const buf = textBuffers.get(key);
     if (!buf) return;
-    const r = (await load()).routes[key];
+    const r = (await load()).routes[buf.routeKey];
     const decision = bufferDecision(
       { debounceSec: r?.debounceSec ?? 0, minIntervalSec: r?.minIntervalSec ?? 0, lastDeliveredAt: r?.lastDeliveredAt ?? 0 },
       buf,
@@ -532,10 +560,11 @@ export function activate(enso, { loop = true } = {}) {
     const intervalMs = (r?.minIntervalSec ?? 0) * 1000;
     if (!debounceMs && !intervalMs) return deliverInject(action);
     const now = Date.now();
-    let buf = textBuffers.get(action.key);
+    const bufKey = bufferKeyOf(action);
+    let buf = textBuffers.get(bufKey);
     if (!buf) {
-      buf = { actions: [], firstAt: now, lastAt: now, timer: null };
-      textBuffers.set(action.key, buf);
+      buf = { routeKey: action.key, actions: [], firstAt: now, lastAt: now, timer: null };
+      textBuffers.set(bufKey, buf);
     }
     buf.actions.push(action);
     buf.lastAt = now;
@@ -544,8 +573,8 @@ export function activate(enso, { loop = true } = {}) {
       buf,
       now
     );
-    if (decision.deliver) return flushTextBuffer(action.key);
-    scheduleBuffer(action.key, decision.waitMs);
+    if (decision.deliver) return flushTextBuffer(bufKey);
+    scheduleBuffer(bufKey, decision.waitMs);
     // 给用户一个已入缓冲的即时反馈（仅第一次）
     if (buf.actions.length === 1) {
       await api('sendMessage', {
@@ -701,11 +730,9 @@ export function activate(enso, { loop = true } = {}) {
       }
       return;
     }
-    // 权限：群聊里必须找到路由且过白名单（无路由不代表默认可点），私聊默认可
-    const hit = state0.routes[action.key];
-    const isGroup = action.chatType ? action.chatType !== 'private' : hit?.chatType !== 'private';
-    if (isGroup && (!hit || !isAllowed(state0, hit, action.userId))) {
-      await answerCb('你不在白名单里');
+    // 作答等于替会话拿主意：只有管理员可以
+    if (!isAdmin(state0, action.userId)) {
+      await answerCb('⛔ 只有管理员可以作答');
       return;
     }
     if (typeof enso.session.answerAsk !== 'function') {
@@ -755,9 +782,16 @@ export function activate(enso, { loop = true } = {}) {
       // 卡片消息 id 跨群可能碰撞：路由 key 也必须一致
       ask = open.find((a) => (a.cards ?? []).some((c) => c.key === action.key && c.messageId === replyToId)) ?? null;
     }
+    const explicit = !!ask;
     // 唯一待答 + 普通文字消息（未回复卡片但会话只有一个待答）
     if (!ask && open.length === 1 && (!m.reply_to_message || isRootReply)) ask = open[0];
     if (!ask || typeof enso.session.answerAsk !== 'function') return false;
+    // 普通用户不能替会话作答：明确回复卡片的告知一声，其余照常当普通消息投递
+    if (!action.admin) {
+      if (!explicit) return false;
+      await send(action.key, '⛔ 只有管理员可以回答提问，你的回复没有提交。').catch(() => {});
+      return true;
+    }
     answeringAsks.add(String(ask.requestId));
     try {
       const res = await enso.session.answerAsk({ sessionId: ask.sessionId, requestId: ask.requestId, answer: action.text });
@@ -1141,6 +1175,18 @@ export function activate(enso, { loop = true } = {}) {
       promptPrefix: r.promptPrefix,
     });
     const routes = Object.entries(state.routes).map(routeView);
+    const admins = state.admins ?? [];
+    // 可一键设为管理员的熟人：白名单成员与私聊绑定的人（待批准的陌生人不算）
+    const adminCandidates = [];
+    for (const u of [
+      ...(state.globalAllow ?? []),
+      ...routes.flatMap((r) => r.allow ?? []),
+      ...routes.filter((r) => r.chatType === 'private').map((r) => ({ id: Number(r.chatId), name: r.title })),
+    ]) {
+      if (!Number.isInteger(u?.id) || u.id <= 0 || u.id === ANONYMOUS_ADMIN) continue;
+      if (admins.some((a) => a.id === u.id) || adminCandidates.some((a) => a.id === u.id)) continue;
+      adminCandidates.push({ id: u.id, name: u.name || String(u.id) });
+    }
     const knownChats = Object.values(state.knownChats)
       .map((c) => ({
         id: c.id,
@@ -1169,6 +1215,8 @@ export function activate(enso, { loop = true } = {}) {
       knownChats,
       sessions,
       globalAllow: state.globalAllow ?? [],
+      admins,
+      adminCandidates,
       running: root && sessions.length ? sessions.some((s) => s.id === root && s.running) : null,
       queued: root ? (state.queue?.[root] ?? []).length : 0,
     };
@@ -1236,6 +1284,18 @@ export function activate(enso, { loop = true } = {}) {
     const sessionId = needSession(ctx);
     await update((state) => createPairing(state, sessionId, Date.now()));
     return view(sessionId);
+  });
+
+  /** 关掉配对卡片：配对码立刻作废，之后再发 /bind 这个码会被拒 */
+  enso.renderer.handle('cancelPair', async (args, ctx) => {
+    const code = args?.code != null && args.code !== '' ? String(args.code) : undefined;
+    const sessionId = ctx?.sessionId ? rootSession(ctx.sessionId) : null;
+    if (!sessionId && !code) throw new Error('请先打开一个会话');
+    await update((state) => {
+      if (sessionId) cancelPairing(state, sessionId, code);
+      else state.pairings = state.pairings.filter((p) => p.code !== code);
+    });
+    return view(ctx?.sessionId ?? null);
   });
 
   /** 从已发现的群/话题直接绑定（不需要配对码） */
@@ -1310,15 +1370,17 @@ export function activate(enso, { loop = true } = {}) {
     return view(ctx?.sessionId ?? null);
   });
 
-  /** 批准/拒绝某条路由的待批准请求；on=true 同时进路由名单与全局名单 */
+  /** 批准/拒绝某条路由的待批准请求；on=true 同时进路由名单与全局名单；asAdmin=true 直接设为管理员 */
   enso.renderer.handle('approve', async (args, ctx) => {
     await update((state) => {
       const r = state.routes[args?.key];
       if (!r) return;
       const userId = Number(args?.userId);
       const user = [...(r.allow ?? []), ...(r.requests ?? [])].find((u) => u.id === userId) ?? { id: userId, name: String(userId) };
+      if (args?.on === true && args?.asAdmin === true && !setAdmin(state, user, true))
+        throw new Error('匿名管理员认不出是谁，不能设为管理员');
       r.requests = (r.requests ?? []).filter((u) => u.id !== userId);
-      if (args?.on === true) {
+      if (args?.on === true && args?.asAdmin !== true) {
         r.allow = setAllowed(r.allow, user, true);
         state.globalAllow = setAllowed(state.globalAllow, user, true);
       } else if (args?.on === false) {
@@ -1326,6 +1388,39 @@ export function activate(enso, { loop = true } = {}) {
       }
     });
     return view(ctx?.sessionId ?? null);
+  });
+
+  /** 面板增删管理员（可信）；匿名管理员与非法 id 拒绝 */
+  enso.renderer.handle('admin', async (args, ctx) => {
+    const id = Number(args?.userId);
+    if (!Number.isInteger(id) || id <= 0) throw new Error('User ID 要是正整数');
+    if (id === ANONYMOUS_ADMIN) throw new Error('匿名管理员认不出是谁，不能设为管理员');
+    await update((state) => {
+      const known = [
+        ...(state.admins ?? []),
+        ...(state.globalAllow ?? []),
+        ...Object.values(state.routes).flatMap((r) => [...(r.allow ?? []), ...(r.requests ?? [])]),
+      ].find((u) => u.id === id);
+      const name = String(args?.name || known?.name || id).slice(0, 100);
+      setAdmin(state, { id, name }, args?.on !== false);
+    });
+    return view(ctx?.sessionId ?? null);
+  });
+
+  /** 跳到路由绑定的会话；旧宿主跨项目跳转会报找不到 */
+  enso.renderer.handle('focus', async (args) => {
+    const raw = String(args?.sessionId ?? '').trim();
+    if (!raw || raw.length > 256) throw new Error('缺少要跳转的会话');
+    if (typeof enso.session?.focus !== 'function') throw new Error('当前 EnsoCode 版本不支持跳转会话，请升级 EnsoCode。');
+    try {
+      await enso.session.focus(rootSession(raw));
+    } catch (error) {
+      if (error?.code === 'NOT_FOUND' || error?.code === 'NO_SESSION')
+        throw new Error('跳转失败：这个会话不在当前窗口（可能属于别的项目或已关闭）。请先打开它所在的项目；当前 EnsoCode 版本若不支持跨项目跳转，升级后即可直接跳过去。');
+      if (error?.code === 'PERMISSION_DENIED') throw new Error('没有跳转会话的权限：请在 设置 → 插件 → Telegram 确认 session.focus 权限，或升级 EnsoCode。');
+      throw new Error(`跳转失败：${error?.message ?? error}`);
+    }
+    return { ok: true };
   });
 
   enso.renderer.handle('open', async (args) => {
