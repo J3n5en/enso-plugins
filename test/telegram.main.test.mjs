@@ -380,7 +380,11 @@ test('侧栏 state：未配置与已配置；knownChats 出现在名册里', asy
   const chat = v.knownChats.find((c) => c.id === '-200' || c.id === -200);
   assert.ok(chat);
   assert.equal(chat.title, '论坛群');
-  assert.deepEqual(chat.topics, [{ id: '5', name: '发布讨论' }]);
+  // forum_topic_created 更新为真实话题名；论坛群自动登记 General
+  assert.deepEqual(chat.topics, [
+    { id: '1', name: 'General' },
+    { id: '5', name: '发布讨论' },
+  ]);
 });
 
 test('侧栏 bind：从名册一键绑定话题， Telegram 侧收到提示', async () => {
@@ -551,4 +555,228 @@ test('/sync on 后 EnsoCode 输入与回复镜像过来；/stop 停止会话', a
   t.message('/stop');
   await runPoll(t);
   assert.deepEqual(t.injected.at(-1), { abort: 's1' });
+});
+
+test('connect 换 Bot：重置 offset 与 commandsVersion；connect 返回完整 view', async () => {
+  const { readFile: rf } = await import('node:fs/promises');
+  const t = await setup();
+  await t.pair();
+  await runPoll(t);
+  // 模拟已经跑了一阵
+  let meId = 99;
+  const origFetch = t.enso.net.fetch;
+  // connect 到另一个 Bot（id 不同）
+  t.enso.net.fetch = async (url, init) => {
+    if (url.includes('/getMe')) return { status: 200, body: JSON.stringify({ ok: true, result: { id: 555, username: 'new_bot', can_read_all_group_messages: true } }) };
+    return origFetch(url, init);
+  };
+  const res = await t.handlers.renderer.connect({ token: '999999:ABCDEFGHIJKLMNOPQRSTUVWX' }, { sessionId: 's1' });
+  assert.equal(res.ok, true);
+  assert.equal(res.bot.username, 'new_bot');
+  assert.ok(Array.isArray(res.routes), 'connect 直接返回完整 view');
+  const raw = JSON.parse(await rf(join(t.enso.dataDir, 'state.json'), 'utf8'));
+  assert.equal(raw.offset, 0, '换 Bot 重置 offset');
+  assert.equal(raw.commandsVersion, 0, '换 Bot 重新注册命令');
+});
+
+test('token 不做内存阴影缓存：设置页改 Token 后下一轮即用新值', async () => {
+  const t = await setup();
+  await t.pair();
+  await runPoll(t);
+  let usedToken = null;
+  const origFetch = t.enso.net.fetch;
+  t.enso.net.fetch = async (url, init) => {
+    const m = /bot([^/]+)\//.exec(url);
+    if (m) usedToken = m[1];
+    return origFetch(url, init);
+  };
+  // 设置页直接改了 token（不经过 connect）
+  const cfg = await t.enso.config.get();
+  cfg.botToken = '777777:NEWTOKENNEWTOKENNEWTOKEN';
+  t.enso.config.get = async () => cfg;
+  await runPoll(t);
+  assert.equal(usedToken, '777777:NEWTOKENNEWTOKENNEWTOKEN', '新一轮轮询用新 token');
+});
+
+test('ask_request/sessionId 走 ctx.sessionId（宿主标准位置）', async () => {
+  const t = await setup();
+  await t.pair();
+  await runPoll(t);
+  // data 里没有 sessionId，只在 ctx 上
+  await t.handlers.events.ask_request({ requestId: 'req-ctx', question: '走 ctx 吗？', options: ['好'] }, { sessionId: 's1' });
+  const card = t.of('sendMessage').at(-1).body;
+  assert.match(card.text, /走 ctx 吗/);
+  t.callback({
+    id: 'qc',
+    data: card.reply_markup.inline_keyboard[0][0].callback_data,
+    from: { id: 7 },
+    message: { message_id: t.of('sendMessage').at(-1).resultMessageId ?? 100, chat: { id: 42, type: 'private' } },
+  });
+  await runPoll(t);
+  assert.equal(t.askAnswers.length, 1);
+  assert.equal(t.askAnswers[0].sessionId, 's1');
+});
+
+test('本插件作答后宿主 ask_resolved 不得覆盖「选择了：X」', async () => {
+  const t = await setup();
+  await t.pair();
+  await runPoll(t);
+  await t.handlers.events.ask_request({ sessionId: 's1', requestId: 'req-guard', question: 'q', options: ['A', 'B'] }, { sessionId: 's1' });
+  const card = t.of('sendMessage').at(-1).body;
+  const mid = t.of('sendMessage').at(-1).resultMessageId;
+  t.callback({ id: 'qg', data: card.reply_markup.inline_keyboard[0][0].callback_data, from: { id: 7 }, message: { message_id: mid, chat: { id: 42, type: 'private' } } });
+  await runPoll(t);
+  assert.match(t.of('editMessageText').at(-1).body.text, /选择了：A/);
+  // 宿主推回 ask_resolved（by 非 telegram 字段也无所谓）
+  await t.handlers.events.ask_resolved({ requestId: 'req-guard', by: 'telegram', answer: 'A' }, { sessionId: 's1' });
+  const last = t.of('editMessageText').at(-1).body;
+  assert.match(last.text, /选择了：A/, '不被覆盖成「已在别处作答」');
+  assert.doesNotMatch(last.text, /已在别处作答/);
+});
+
+test('群聊无路由的 ask 按钮点击被拒；steer 不会被当成自由文本答案', async () => {
+  const t = await setup();
+  // 群绑定
+  const view = await t.handlers.renderer.pair({}, { sessionId: 's1' });
+  const chat = { id: -100, type: 'supergroup', title: 'G' };
+  t.message(`/start@enso_bot ${view.pairing.code}`, { chat });
+  await runPoll(t);
+  await t.handlers.events.ask_request({ sessionId: 's1', requestId: 'req-g', question: 'q', options: ['A'] }, { sessionId: 's1' });
+  const cards = t.of('sendMessage').filter((c) => c.body.text?.startsWith('❓'));
+  const groupCard = cards.find((c) => c.body.chat_id === -100);
+  assert.ok(groupCard, '群里也发了卡片');
+  const cb = groupCard.body.reply_markup.inline_keyboard[0][0].callback_data;
+  // 非白名单成员 bob 点击：拒绝
+  t.callback({ id: 'qb', data: cb, from: { id: 8, first_name: 'Bob' }, message: { message_id: 1, chat: { id: -100, type: 'supergroup' } } });
+  await runPoll(t);
+  assert.match(t.of('answerCallbackQuery').at(-1).body.text, /不在白名单/);
+  assert.equal(t.askAnswers.length, 0);
+  // 白名单成员 alice 点击：通过
+  t.callback({ id: 'qa', data: cb, from: { id: 7, username: 'al' }, message: { message_id: 1, chat: { id: -100, type: 'supergroup' } } });
+  await runPoll(t);
+  assert.equal(t.askAnswers.length, 1);
+
+  // steer 不当答案：重新发一个开放式提问
+  await t.handlers.events.ask_request({ sessionId: 's1', requestId: 'req-open', question: '开放题' }, { sessionId: 's1' });
+  t.message('/steer 插一句', { chat });
+  await runPoll(t);
+  assert.equal(t.askAnswers.filter((a) => a.answer === '插一句').length, 0, 'steer 未被吞');
+  assert.ok(t.injected.some((x) => x.deliverAs === 'steer' && x.text?.includes('插一句')), 'steer 正常投递');
+});
+
+test('debounceSec + minIntervalSec 组合：安静期到了也要等限速间隔', async () => {
+  const t = await setup();
+  await t.pair();
+  await runPoll(t);
+  await t.handlers.renderer.route({ key: '42', patch: { debounceSec: 1, minIntervalSec: 300 } }, { sessionId: 's1' });
+  // 先发一条让它投递，建立 lastDeliveredAt
+  t.message('第一条');
+  await runPoll(t);
+  await t.flushTextBuffer('42');
+  const injectedCount = t.injected.filter((x) => x.text?.includes('第一条')).length;
+  assert.equal(injectedCount, 1);
+  // 第二条进入缓冲；安静期（1s）到点但 minInterval 远未到——tryFlushTextBuffer 应继续等待
+  t.message('第二条');
+  await runPoll(t);
+  // 手工模拟定时器到点：此刻安静期已过但限速未到，不得投递
+  await t.flushTextBuffer === undefined; // noop
+  // 直接调用内部逻辑的等价路径：tryFlushTextBuffer 不导出，用 flushTextBuffer 语义无法测等待。
+  // 改测 bufferDecision 层：路由 lastDeliveredAt 已更新，minInterval 内 decision.deliver=false
+  const { bufferDecision } = await import('../packages/enso.telegram/lib.mjs');
+  const raw = JSON.parse(await (await import('node:fs/promises')).readFile(join(t.enso.dataDir, 'state.json'), 'utf8'));
+  assert.ok(raw.routes['42'].lastDeliveredAt > 0, 'lastDeliveredAt 已记录');
+  const decision = bufferDecision(
+    { debounceSec: 1, minIntervalSec: 300, lastDeliveredAt: raw.routes['42'].lastDeliveredAt },
+    { lastAt: Date.now() - 2000, firstAt: Date.now() - 2000 },
+    Date.now()
+  );
+  assert.equal(decision.deliver, false, '安静期过了仍被 minInterval 拦住');
+  assert.ok(decision.waitMs > 1000, '等待时间指向限速窗口');
+});
+
+test('media 白名单：ctx.projectRoot 放行项目图片；其余目录拒绝', async () => {
+  const { writeFile, mkdir } = await import('node:fs/promises');
+  const proj = await mkdtemp(join(tmpdir(), 'tg-proj-'));
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...Array(20).fill(0)]);
+  await writeFile(join(proj, 'shot.png'), png);
+  // 一个不在任何白名单目录的位置：直接用 /etc/hosts 前面测过；这里造个假的——项目外但 tmp 内一定放行
+  const t = await setup();
+  await t.pair();
+  await runPoll(t);
+  const r = await t.handlers.tools.telegram_send_media({ files: [join(proj, 'shot.png')] }, { sessionId: 's1', projectRoot: proj });
+  assert.match(r, /已发送/);
+  assert.ok(t.of('sendPhoto').length >= 1);
+  // 没有 projectRoot 时项目目录不在白名单（但 proj 在 /tmp 下其实放行——用非法路径验证拒绝逻辑）
+  await assert.rejects(
+    t.handlers.tools.telegram_send_media({ files: ['/etc/passwd'] }, { sessionId: 's1', projectRoot: proj }),
+    /不在允许的目录|不是支持的图片/
+  );
+  await assert.rejects(
+    t.handlers.tools.telegram_send_media({ files: ['relative/path.png'] }, { sessionId: 's1', projectRoot: proj }),
+    /绝对路径/
+  );
+});
+
+test('media 分块：单批字节超 14MB 自动拆批；上传失败如实回报不吞错', async () => {
+  const { writeFile } = await import('node:fs/promises');
+  // 两张 ~5.5MB png（原始字节合计 ~11MB 在一批内；再来一张共 16.5MB 必须拆）
+  const big = (seed) => {
+    const b = Buffer.alloc(5.5 * 1024 * 1024, seed);
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(b, 0);
+    return b;
+  };
+  const paths = [];
+  for (let i = 0; i < 3; i++) {
+    const p = join(tmpdir(), `tg-big-${process.pid}-${i}.png`);
+    await writeFile(p, big(i));
+    paths.push(p);
+  }
+  const t = await setup();
+  await t.pair();
+  await runPoll(t);
+  await t.handlers.tools.telegram_send_media({ files: paths }, { sessionId: 's1' });
+  const groups = t.of('sendMediaGroup');
+  // 3×5.5MB=16.5MB > 14MB：必须拆成至少两批（或两批 + 单张）
+  const total = groups.length + t.of('sendPhoto').filter((c) => c.body.__upload).length;
+  assert.ok(groups.length + t.of('sendPhoto').length >= 2, `拆批发送（sendMediaGroup=${groups.length}, sendPhoto=${t.of('sendPhoto').length}）`);
+
+  // 上传 5xx：回报失败原因，不静默成功
+  const origFetch = t.enso.net.fetch;
+  t.enso.net.fetch = async (url, init) => {
+    if (url.includes('sendPhoto') || url.includes('sendMediaGroup')) {
+      return { status: 500, body: JSON.stringify({ ok: false, description: 'server error' }) };
+    }
+    return origFetch(url, init);
+  };
+  const small = join(tmpdir(), `tg-sm-${process.pid}.png`);
+  await writeFile(small, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...Array(10).fill(0)]));
+  await assert.rejects(
+    t.handlers.tools.telegram_send_media({ files: [small] }, { sessionId: 's1' }),
+    /回执不明|失败/,
+    '回执不明不能静默报成功'
+  );
+  // 混杂：一个能发一个失败时结果文案里带失败说明
+  t.enso.net.fetch = origFetch;
+});
+
+test('filename 头注入防护：引号/换行被替换', async () => {
+  const { writeFile } = await import('node:fs/promises');
+  const evil = join(tmpdir(), `evil"\r\ninjected-${process.pid}.png`);
+  await writeFile(evil, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...Array(10).fill(0)]));
+  const t = await setup();
+  await t.pair();
+  await runPoll(t);
+  let raw = null;
+  const origFetch = t.enso.net.fetch;
+  t.enso.net.fetch = async (url, init) => {
+    if (init?.bodyEncoding === 'base64') raw = Buffer.from(init.body, 'base64').toString('latin1');
+    return origFetch(url, init);
+  };
+  await t.handlers.tools.telegram_send_media({ files: [evil] }, { sessionId: 's1' });
+  assert.ok(raw);
+  // 危险字符被替换成下划线：头里找不到原始的引号/回车换行注入序列
+  const m = /filename="([^"]*)"/.exec(raw);
+  assert.ok(m, '有 filename 头');
+  assert.ok(!/[\r\n"\\]/.test(m[1]), 'filename 不含引号、反斜杠与换行');
+  assert.ok(!raw.includes('evil"'), '原始引号不出现');
 });

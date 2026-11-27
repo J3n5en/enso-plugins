@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 // enso.telegram 1.0 —— 纯函数核心：路由、迁移、富文本、限速、白名单判定。
 // 不碰宿主与网络，main.mjs 负责 IO。state 形状见 migrate()。
 
@@ -184,6 +185,7 @@ export function migrate(raw) {
     normalizeRoute(r);
     r.key = k;
   }
+  pruneAsks(state);
   return state;
 }
 
@@ -235,6 +237,12 @@ export function observeNames(state, m) {
   if (!m?.chat) return;
   const chat = rememberChat(state, m.chat);
   if (!chat) return;
+  if (chat.isForum) {
+    // 论坛群永远有 General；未见过的话题先记占位名，见到真名后覆盖
+    chat.topics['1'] ??= 'General';
+    const tid = topicOf(m);
+    if (tid != null && chat.topics[tid] == null) chat.topics[tid] = `话题 #${tid}`;
+  }
   if (m.forum_topic_created) rememberTopic(state, m.chat.id, m.message_thread_id, m.forum_topic_created.name);
   if (m.forum_topic_edited?.name) rememberTopic(state, m.chat.id, m.message_thread_id, m.forum_topic_edited.name);
   const replied = m.reply_to_message?.forum_topic_created;
@@ -318,6 +326,13 @@ export function unbindRoute(state, key) {
   delete state.routes[key];
   delete state.history[key];
   delete state.menus[key];
+  // 解绑整群时，顺带清掉该群下没有单独绑定的话题历史
+  if (!splitRouteKey(key).topicId) {
+    const prefix = `${splitRouteKey(key).chatId}:`;
+    for (const hk of Object.keys(state.history)) {
+      if (hk.startsWith(prefix) && !state.routes[hk]) delete state.history[hk];
+    }
+  }
   for (const sid of Object.keys(state.pending)) {
     const rest = (state.pending[sid] ?? []).filter((t) => t.key !== key);
     if (rest.length) state.pending[sid] = rest;
@@ -334,6 +349,11 @@ export const parseCommand = (text) => {
 };
 
 export const isGroupChat = (chat) => chat?.type === 'group' || chat?.type === 'supergroup';
+
+/** 论坛话题的「根消息自动挂载回复」：不是用户有意回复，不应当作回复机器人/回复卡片 */
+export const isTopicRootReply = (m) =>
+  m?.reply_to_message?.forum_topic_created != null ||
+  (m?.is_topic_message === true && m?.reply_to_message?.message_id != null && m.reply_to_message.message_id === m.message_thread_id);
 
 function summarize(m) {
   const text = String(m.text ?? m.caption ?? '').trim();
@@ -416,8 +436,10 @@ export function route(state, update, now, bot = {}) {
   const action = decide(state, update, now, bot);
   const m = update?.message;
   if (!isGroupChat(m?.chat)) return action;
-  const key = action.key ?? routeKeyOf(m.chat.id, topicOf(m));
-  const hit = state.routes[key];
+  // context 配置按路由匹配读（含整群兜底）；history 一律按实际话题 key 存取，
+  // 这样只绑整群时各话题的上下文也互相隔离
+  const hit = findRoute(state, m.chat.id, topicOf(m));
+  const key = routeKeyOf(m.chat.id, topicOf(m));
   const size = hit?.context ?? 0;
   if (!size) {
     delete state.history[key];
@@ -454,7 +476,7 @@ function decide(state, update, now, bot) {
   if (command?.target && command.target.toLowerCase() !== String(bot.username).toLowerCase())
     return { kind: 'ignore' };
   const mention = isGroup && bot.username ? new RegExp(`@${bot.username}\\b`, 'i') : null;
-  const repliedToBot = m.reply_to_message?.from?.id === bot.id && bot.id !== undefined;
+  const repliedToBot = m.reply_to_message?.from?.id === bot.id && bot.id !== undefined && !isTopicRootReply(m);
 
   // 配对绑定：/bind <码> 或深链 /start <码>；在话题里发出即绑定当前话题
   if (command?.name === 'bind' || (command?.name === 'start' && command.arg)) {
@@ -604,6 +626,7 @@ function routeCallback(state, q) {
       kind: 'askAnswer',
       key,
       chatId,
+      chatType: q.message.chat.type,
       topicId,
       callbackId: q.id,
       messageId: q.message?.message_id,
@@ -764,13 +787,8 @@ export function chunkMarkdown(md, size = 3500) {
 
 // ---------- ask_user ----------
 
-export const shortIdOf = (requestId) => {
-  const clean = String(requestId).replace(/[^a-z0-9]/gi, '').toLowerCase();
-  if (clean) return clean.slice(0, 24);
-  let h = 0;
-  for (const c of String(requestId)) h = (h * 31 + c.charCodeAt(0)) | 0;
-  return Math.abs(h).toString(36).slice(0, 8);
-};
+export const shortIdOf = (requestId) =>
+  createHash('sha256').update(String(requestId)).digest('hex').slice(0, 16);
 
 /** callback_data 预算 64 字节：ask:<shortId>:<idx> */
 export function encodeAskCallback(requestId, idx) {
@@ -778,8 +796,22 @@ export function encodeAskCallback(requestId, idx) {
   return Buffer.byteLength(data) <= 64 ? data : null;
 }
 
+const ASK_CLOSED_TTL_MS = 24 * 3600_000;
+const ASK_CLOSED_KEEP = 50;
+
+/** 清理已关闭的 ask：超过 24h 的删掉，最多只保留最近 50 条，避免 state.asks 无限膨胀 */
+export function pruneAsks(state, now = Date.now()) {
+  const closed = Object.entries(state.asks ?? {}).filter(([, a]) => !a.open);
+  for (const [id, a] of closed) if (now - (a.closedAt ?? a.createdAt ?? 0) > ASK_CLOSED_TTL_MS) delete state.asks[id];
+  const rest = Object.entries(state.asks ?? {})
+    .filter(([, a]) => !a.open)
+    .sort((a, b) => (b[1].closedAt ?? b[1].createdAt ?? 0) - (a[1].closedAt ?? a[1].createdAt ?? 0));
+  for (const [id] of rest.slice(ASK_CLOSED_KEEP)) delete state.asks[id];
+}
+
 /** state.asks: shortId -> { sessionId, requestId, question, options, createdAt, cards: [{key,messageId}], open } */
 export function registerAsk(state, { sessionId, requestId, question, options }) {
+  pruneAsks(state);
   const shortId = shortIdOf(requestId);
   for (const [id, ask] of Object.entries(state.asks)) {
     if (ask.requestId === requestId && ask.sessionId === rootSession(sessionId) && id !== shortId) delete state.asks[id];
@@ -804,8 +836,10 @@ export function closeAsksFor(state, sessionId, requestId) {
     if (ask.sessionId !== rootSession(sessionId)) continue;
     if (requestId != null && ask.requestId !== requestId) continue;
     ask.open = false;
+    ask.closedAt = Date.now();
     closed.push(ask);
   }
+  pruneAsks(state);
   return closed;
 }
 

@@ -1,5 +1,6 @@
-import { mkdir, readFile, realpath, rename, writeFile } from 'node:fs/promises';
-import { basename, join } from 'node:path';
+import { mkdir, open, readFile, realpath, rename, writeFile } from 'node:fs/promises';
+import { homedir, tmpdir } from 'node:os';
+import { basename, delimiter, extname, isAbsolute, join, relative } from 'node:path';
 import {
   COMMANDS,
   MAX_CONTEXT,
@@ -14,6 +15,7 @@ import {
   encodeAskCallback,
   findRoute,
   inboundText,
+  isTopicRootReply,
   isAllowed,
   markPending,
   markdownToHtml,
@@ -76,6 +78,7 @@ export function deactivate() {
   current.stopped = true;
   for (const t of current.timers ?? []) clearInterval(t);
   for (const t of current.timeouts ?? []) clearTimeout(t);
+  current.timeouts?.clear?.();
   void current.wake?.();
   current = null;
 }
@@ -83,7 +86,7 @@ export function deactivate() {
 /** options.loop=false 时不起常驻轮询，返回 tick() 供测试逐轮驱动 */
 export function activate(enso, { loop = true } = {}) {
   deactivate();
-  const self = { stopped: false, timers: [], timeouts: [], wake: null };
+  const self = { stopped: false, timers: [], timeouts: new Set(), wake: null };
   current = self;
   const file = join(enso.dataDir, 'state.json');
   let chain = Promise.resolve();
@@ -115,8 +118,9 @@ export function activate(enso, { loop = true } = {}) {
 
   // ---- Bot API ----
   let bot = null;
-  let botTokenMem = null;
-  const tokenOf = async () => botTokenMem ?? (await enso.config.get())?.botToken ?? null;
+  let botTokenUsed = null;
+  // 只信配置中心：用户在 设置 → 插件 里改/清 Token 立即生效，不做内存阴影缓存
+  const tokenOf = async () => (await enso.config.get())?.botToken ?? null;
   const api = async (method, body, retry = true, tokenOverride) => {
     const token = tokenOverride ?? (await tokenOf());
     if (!token) throw new Error('还没有 Bot Token：在右侧「Telegram」面板直接填写，或到 设置 → 插件 → Telegram。');
@@ -151,9 +155,11 @@ export function activate(enso, { loop = true } = {}) {
       parts.push(Buffer.from(`--${boundary}\r\ncontent-disposition: form-data; name="${name}"\r\n\r\n${typeof value === 'string' ? value : JSON.stringify(value)}\r\n`, 'utf8'));
     }
     for (const file of files) {
+      // 文件名里的引号/反斜杠/换行会破坏 multipart 头
+      const safeName = String(file.filename ?? 'image').replace(/["\\\r\n]/g, '_');
       parts.push(
         Buffer.from(
-          `--${boundary}\r\ncontent-disposition: form-data; name="${file.name}"; filename="${file.filename}"\r\ncontent-type: ${file.mime}\r\n\r\n`,
+          `--${boundary}\r\ncontent-disposition: form-data; name="${file.name}"; filename="${safeName}"\r\ncontent-type: ${file.mime}\r\n\r\n`,
           'utf8'
         )
       );
@@ -178,11 +184,13 @@ export function activate(enso, { loop = true } = {}) {
     return data.result;
   };
 
+  /** 当前 token 的身份缓存：token 变化（面板更换/设置页修改）时自动重拉 getMe */
   const identity = async (tokenOverride) => {
-    if (!bot || tokenOverride) {
-      const me = await api('getMe', {}, true, tokenOverride);
-      if (!tokenOverride) bot = me;
-      return me;
+    if (tokenOverride) return api('getMe', {}, true, tokenOverride);
+    const token = await tokenOf();
+    if (!bot || botTokenUsed !== token) {
+      bot = await api('getMe', {}, true);
+      botTokenUsed = token;
     }
     return bot;
   };
@@ -468,7 +476,10 @@ export function activate(enso, { loop = true } = {}) {
     const buf = textBuffers.get(key);
     if (!buf) return;
     textBuffers.delete(key);
-    clearTimeout(buf.timer);
+    if (buf.timer) {
+      clearTimeout(buf.timer);
+      self.timeouts.delete(buf.timer);
+    }
     const merged = mergeBuffered(buf.actions);
     await update((state) => {
       const r = state.routes[key];
@@ -477,13 +488,39 @@ export function activate(enso, { loop = true } = {}) {
     await deliverInject(merged).catch((e) => console.error('[telegram]', e?.message ?? e));
   };
 
+  /** 统一登记一次性定时器：触发即自动注销，避免常驻运行时无限增长 */
+  const armTimeout = (fn, ms) => {
+    const t = setTimeout(() => {
+      self.timeouts.delete(t);
+      fn();
+    }, ms);
+    if (t.unref) t.unref();
+    self.timeouts.add(t);
+    return t;
+  };
+
   const scheduleBuffer = (key, waitMs) => {
     const buf = textBuffers.get(key);
     if (!buf) return;
-    clearTimeout(buf.timer);
-    buf.timer = setTimeout(() => void flushTextBuffer(key).catch(() => {}), Math.max(waitMs, 100));
-    if (buf.timer.unref) buf.timer.unref();
-    self.timeouts.push(buf.timer);
+    if (buf.timer) {
+      clearTimeout(buf.timer);
+      self.timeouts.delete(buf.timer);
+    }
+    buf.timer = armTimeout(() => void tryFlushTextBuffer(key).catch(() => {}), Math.max(waitMs, 100));
+  };
+
+  /** 定时器到点不代表该发：重读最新路由配置重新判定，仍需等待就继续排下一跳 */
+  const tryFlushTextBuffer = async (key) => {
+    const buf = textBuffers.get(key);
+    if (!buf) return;
+    const r = (await load()).routes[key];
+    const decision = bufferDecision(
+      { debounceSec: r?.debounceSec ?? 0, minIntervalSec: r?.minIntervalSec ?? 0, lastDeliveredAt: r?.lastDeliveredAt ?? 0 },
+      buf,
+      Date.now()
+    );
+    if (decision.deliver) return flushTextBuffer(key);
+    scheduleBuffer(key, decision.waitMs);
   };
 
   /** 普通注入动作：按路由 debounce/minInterval 攒批；steer 立即投递 */
@@ -529,9 +566,11 @@ export function activate(enso, { loop = true } = {}) {
       albums.set(aid, album);
     }
     album.actions.push(action);
-    clearTimeout(album.timer);
-    album.timer = setTimeout(() => void flushAlbum(aid).catch((e) => console.error('[telegram]', e?.message ?? e)), ALBUM_DEBOUNCE_MS);
-    if (album.timer.unref) album.timer.unref();
+    if (album.timer) {
+      clearTimeout(album.timer);
+      self.timeouts.delete(album.timer);
+    }
+    album.timer = armTimeout(() => void flushAlbum(aid).catch((e) => console.error('[telegram]', e?.message ?? e)), ALBUM_DEBOUNCE_MS);
     // 超时兜底：8s 还没凑齐也投递
     if (Date.now() - album.firstAt > ALBUM_WAIT_MS) void flushAlbum(aid).catch(() => {});
   };
@@ -540,7 +579,10 @@ export function activate(enso, { loop = true } = {}) {
     const album = albums.get(aid);
     if (!album) return;
     albums.delete(aid);
-    clearTimeout(album.timer);
+    if (album.timer) {
+      clearTimeout(album.timer);
+      self.timeouts.delete(album.timer);
+    }
     const actions = album.actions;
     // 整组唯一 caption：第一个非空文本；无文本则占位
     const caption = actions.map((a) => (a.text === '（用户发来图片）' ? '' : a.text)).find((t) => t) || '（用户发来一组图片）';
@@ -631,11 +673,15 @@ export function activate(enso, { loop = true } = {}) {
     }
   };
 
+  // 本插件正在/刚处理完的 requestId：宿主推回的 ask_resolved 不得把「某人选择了：X」覆盖成「已在别处作答」
+  const answeringAsks = new Set();
+
   const onAskResolved = async (data) => {
     if (!data?.requestId || !data?.sessionId) return;
+    if (answeringAsks.has(String(data.requestId))) return;
     const closed = await update((state) => closeAsksFor(state, data.sessionId, data.requestId));
-    const by = data.by === 'telegram' ? null : data.answer ? `已在别处作答：${String(data.answer).slice(0, 80)}` : '已在别处作答或已取消';
-    if (by) await closeAskCards(closed, by);
+    const by = data.answer ? `已在别处作答：${String(data.answer).slice(0, 80)}` : '已在别处作答或已取消';
+    await closeAskCards(closed, by);
   };
 
   /** 点击选项按钮 */
@@ -655,9 +701,10 @@ export function activate(enso, { loop = true } = {}) {
       }
       return;
     }
-    // 权限：群里需白名单，私聊默认可
+    // 权限：群聊里必须找到路由且过白名单（无路由不代表默认可点），私聊默认可
     const hit = state0.routes[action.key];
-    if (hit && hit.chatType !== 'private' && !isAllowed(state0, hit, action.userId)) {
+    const isGroup = action.chatType ? action.chatType !== 'private' : hit?.chatType !== 'private';
+    if (isGroup && (!hit || !isAllowed(state0, hit, action.userId))) {
       await answerCb('你不在白名单里');
       return;
     }
@@ -670,42 +717,55 @@ export function activate(enso, { loop = true } = {}) {
       await answerCb('选项已失效');
       return;
     }
-    let res;
+    answeringAsks.add(String(ask.requestId));
     try {
-      res = await enso.session.answerAsk({ sessionId: ask.sessionId, requestId: ask.requestId, answer });
-    } catch (error) {
-      await answerCb(`作答失败：${error?.message ?? error}`.slice(0, 180));
-      return;
+      let res;
+      try {
+        res = await enso.session.answerAsk({ sessionId: ask.sessionId, requestId: ask.requestId, answer });
+      } catch (error) {
+        await answerCb(`作答失败：${error?.message ?? error}`.slice(0, 180));
+        return;
+      }
+      if (!res?.ok) {
+        await answerCb((res?.error ? `作答失败：${res.error}` : '该提问已失效').slice(0, 180));
+        return;
+      }
+      await answerCb(`✓ ${answer}`.slice(0, 180));
+      const closed = await update((state) => closeAsksFor(state, ask.sessionId, ask.requestId));
+      await closeAskCards(closed, `${action.userName ?? '有人'} 选择了：${answer}`);
+    } finally {
+      // 稍后再清，挡住紧随其后的宿主 ask_resolved 推送
+      setTimeout(() => answeringAsks.delete(String(ask.requestId)), 5_000).unref?.();
     }
-    if (!res?.ok) {
-      await answerCb((res?.error ? `作答失败：${res.error}` : '该提问已失效').slice(0, 180));
-      return;
-    }
-    await answerCb(`✓ ${answer}`.slice(0, 180));
-    const closed = await update((state) => closeAsksFor(state, ask.sessionId, ask.requestId));
-    await closeAskCards(closed, `${action.userName ?? '有人'} 选择了：${answer}`);
   };
 
   /** 自由文本作答：返回 true 表示这条消息被当作答案消费掉了 */
   const tryAnswerFreeText = async (update, action) => {
-    if (action.kind !== 'inject' || action.image || action.images) return false;
+    // steer 是显式控制指令，绝不能被当成答案吞掉；带图消息也不是答案
+    if (action.kind !== 'inject' || action.deliverAs === 'steer' || action.image || action.images) return false;
     const m = update.message;
     const state = await load();
     const open = openAsksForSession(state, action.sessionId);
     if (!open.length) return false;
-    const replyToId = m.reply_to_message?.message_id;
+    // 论坛话题的根消息自动挂载不是用户有意回复
+    const isRootReply = isTopicRootReply(m);
+    const replyToId = isRootReply ? undefined : m.reply_to_message?.message_id;
     let ask = null;
     if (replyToId != null) {
-      ask = open.find((a) => (a.cards ?? []).some((c) => c.messageId === replyToId)) ?? null;
+      // 卡片消息 id 跨群可能碰撞：路由 key 也必须一致
+      ask = open.find((a) => (a.cards ?? []).some((c) => c.key === action.key && c.messageId === replyToId)) ?? null;
     }
     // 唯一待答 + 普通文字消息（未回复卡片但会话只有一个待答）
-    if (!ask && open.length === 1 && !m.reply_to_message) ask = open[0];
+    if (!ask && open.length === 1 && (!m.reply_to_message || isRootReply)) ask = open[0];
     if (!ask || typeof enso.session.answerAsk !== 'function') return false;
+    answeringAsks.add(String(ask.requestId));
     try {
       const res = await enso.session.answerAsk({ sessionId: ask.sessionId, requestId: ask.requestId, answer: action.text });
       if (!res?.ok) return false;
     } catch {
       return false;
+    } finally {
+      setTimeout(() => answeringAsks.delete(String(ask.requestId)), 5_000).unref?.();
     }
     const closed = await update((state) => closeAsksFor(state, ask.sessionId, ask.requestId));
     await closeAskCards(closed, `${action.fromName ?? action.from} 回复了：${action.text.slice(0, 80)}`);
@@ -741,6 +801,7 @@ export function activate(enso, { loop = true } = {}) {
       case 'stop': {
         try {
           await enso.session.abort(action.sessionId);
+          typingStop(action.key);
           return send(action.key, '⏹ 已停止当前任务。');
         } catch (error) {
           if (error?.code === 'ABORT_FAILED') return send(action.key, '没有正在运行的任务。');
@@ -760,21 +821,23 @@ export function activate(enso, { loop = true } = {}) {
 
   // ---- 长轮询 ----
   const pollOnce = async (seconds, me) => {
+    const pollToken = await tokenOf();
     const { offset, commandsVersion } = await load();
     if (commandsVersion !== COMMANDS_VERSION) {
-      await api('setMyCommands', { commands: COMMANDS }).catch(() => {});
+      await api('setMyCommands', { commands: COMMANDS }, true, pollToken).catch(() => {});
       await update((state) => {
         state.commandsVersion = COMMANDS_VERSION;
       });
     }
-    self.wake = () => void api('getUpdates', { offset, timeout: 0, limit: 1 }).catch(() => {});
+    // 唤醒/打断必须打同一个 Bot：换 Token 或断开时这轮 25s 长轮询才会立刻返回
+    self.wake = () => void api('getUpdates', { offset, timeout: 0, limit: 1 }, true, pollToken).catch(() => {});
     let updates;
     try {
       updates = await api('getUpdates', {
         offset,
         timeout: seconds,
         allowed_updates: ['message', 'callback_query'],
-      });
+      }, true, pollToken);
     } finally {
       self.wake = null;
     }
@@ -870,39 +933,27 @@ export function activate(enso, { loop = true } = {}) {
       await send(key, `💬 EnsoCode：${text}`).catch(() => {});
   });
 
-  // ask_user 事件（宿主新版；旧宿主没有这两个事件，on 只是注册不上）
-  enso.events.on('ask_request', async (data) => {
-    await onAskRequest(data).catch((e) => console.error('[telegram] ask_request', e?.message ?? e));
+  // ask_user 事件：宿主按清单声明分发；更老的宿主（不认识这两个事件名）会在插件加载校验阶段拒收，根本走不到这里
+  enso.events.on('ask_request', async (data, ctx) => {
+    await onAskRequest({ ...data, sessionId: data?.sessionId ?? ctx?.sessionId }).catch((e) =>
+      console.error('[telegram] ask_request', e?.message ?? e)
+    );
   });
-  enso.events.on('ask_resolved', async (data) => {
-    await onAskResolved(data).catch((e) => console.error('[telegram] ask_resolved', e?.message ?? e));
+  enso.events.on('ask_resolved', async (data, ctx) => {
+    await onAskResolved({ ...data, sessionId: data?.sessionId ?? ctx?.sessionId }).catch((e) =>
+      console.error('[telegram] ask_resolved', e?.message ?? e)
+    );
   });
 
   // ---- 出站媒体：telegram_send_media ----
-  /** 目录白名单（与 tgclient 一致）：/tmp、/var/folders、当前项目、worktrees、bot-chats */
-  const mediaRoots = async () => {
-    const roots = ['/tmp', '/var/folders', '/private/tmp', '/private/var/folders'];
-    try {
-      const sessions = (await listSessions()) ?? [];
-      for (const s of sessions) if (s.projectRoot) roots.push(s.projectRoot);
-    } catch {}
-    roots.push(enso.dataDir);
+  /** 目录白名单（与 tgclient 一致）：系统临时目录、调用会话的项目、EnsoCode 的 worktree 与聊天图片目录、额外配置目录 */
+  const mediaRoots = ({ projectRoot } = {}) => {
+    const roots = ['/tmp', '/private/tmp', tmpdir(), '/var/folders', '/private/var/folders'];
+    if (projectRoot) roots.push(String(projectRoot));
+    const userData = String(enso.dataDir ?? '').match(/^(.+)[\\/]extension-plugins[\\/]data[\\/][^\\/]+[\\/]?$/)?.[1];
+    if (userData) roots.push(join(userData, 'bot-chats'), join(userData, 'worktrees'));
+    for (const d of String(process.env.ENSO_USER_IMAGE_DIRS ?? '').split(delimiter)) if (isAbsolute(d)) roots.push(d);
     return roots;
-  };
-  const mediaAllowed = async (path) => {
-    try {
-      const real = await realpath(path);
-      for (const root of await mediaRoots()) {
-        try {
-          const rr = await realpath(root);
-          if (real === rr || real.startsWith(rr + '/')) return real;
-        } catch {}
-      }
-      if (real.startsWith('/tmp/') || real.startsWith('/var/folders/') || real.startsWith('/private/tmp/') || real.startsWith('/private/var/folders/')) return real;
-      return null;
-    } catch {
-      return null;
-    }
   };
   const sniffImage = (buf) => {
     for (const sig of IMAGE_SIGS) {
@@ -913,30 +964,66 @@ export function activate(enso, { loop = true } = {}) {
     }
     return null;
   };
-  const readMediaFile = async (path) => {
-    if (typeof path !== 'string' || !path.startsWith('/')) throw new Error(`只接受本地绝对路径：${path}`);
-    const real = await mediaAllowed(path);
-    if (!real) throw new Error(`路径不在允许的目录里（/tmp、/var/folders、项目目录）：${path}`);
-    const buf = await readFile(real);
-    if (buf.length > MEDIA_MAX_BYTES) throw new Error(`文件超过 10MB：${basename(real)}`);
+  /** 目录与文件都先 realpath；根目录/家目录本身不能当白名单；同一文件句柄校验大小后再读，防 TOCTOU 与超大文件 OOM */
+  const readMediaFile = async (path, roots) => {
+    if (typeof path !== 'string' || !isAbsolute(path)) throw new Error(`只接受本地绝对路径：${path}`);
+    const real = await realpath(path).catch(() => null);
+    if (!real) throw new Error(`读不到文件：${path}`);
+    const broad = await Promise.all(['/', homedir()].map((p) => realpath(p).catch(() => p)));
+    const allowed = (await Promise.all(roots.map((r) => realpath(r).catch(() => null)))).filter((r) => r && !broad.includes(r));
+    const inside = allowed.some((r) => {
+      const rel = relative(r, real);
+      return rel && !rel.startsWith('..') && !isAbsolute(rel);
+    });
+    if (!inside) throw new Error(`${path} 不在允许的目录里（系统临时目录、当前会话的项目或 worktree、聊天图片目录）`);
+    const fh = await open(real, 'r');
+    let buf;
+    try {
+      const st = await fh.stat();
+      if (!st.isFile()) throw new Error(`不是文件：${path}`);
+      if (st.size > MEDIA_MAX_BYTES) throw new Error(`文件超过 10MB：${basename(real)}`);
+      buf = Buffer.alloc(st.size + 1);
+      const { bytesRead } = await fh.read(buf, 0, buf.length, 0);
+      if (bytesRead > st.size) throw new Error(`${path} 在读取时还在变化，请等它写完再发`);
+      buf = buf.subarray(0, bytesRead);
+    } finally {
+      await fh.close();
+    }
     const mime = sniffImage(buf);
     if (!mime) throw new Error(`不是支持的图片（png/jpg/gif/webp）：${basename(real)}`);
     return { data: buf, mime, filename: basename(real) };
   };
 
-  /** 发送一组图片：gif 单独 sendAnimation，其余 1 张 sendPhoto、2-10 张 sendMediaGroup，超 10 张分块 */
-  const sendMediaTo = async (key, files, caption) => {
+  /**
+   * 发送一组图片（media 为已读取的 {data,mime,filename}）：gif 单独 sendAnimation，其余 1 张 sendPhoto、多张 sendMediaGroup。
+   * 分块同时受「每批 ≤10 张」和「单批原始字节 ≤14MB」限制（宿主 MAX_FETCH_BODY_BYTES 16MB，base64 后留余量）。
+   * 回执不明（5xx/超时/TOO_LARGE 等非 400 错误）绝不自动重发，但计入 failures 如实回报，不静默吞错。
+   */
+  const MEDIA_BATCH_BYTES = 14 * 1024 * 1024;
+  const chunkMedia = (stills) => {
+    const chunks = [];
+    let cur = [];
+    let bytes = 0;
+    for (const m of stills) {
+      if (cur.length && (cur.length >= 10 || bytes + m.data.length > MEDIA_BATCH_BYTES)) {
+        chunks.push(cur);
+        cur = [];
+        bytes = 0;
+      }
+      cur.push(m);
+      bytes += m.data.length;
+    }
+    if (cur.length) chunks.push(cur);
+    return chunks;
+  };
+  const sendMediaTo = async (key, media, caption) => {
     const chatId = routeChatId(key);
     const thread = threadParams(key);
-    const media = [];
-    for (const f of files) media.push(await readMediaFile(f));
     const cap = (caption ?? '').slice(0, CAPTION_MAX);
     const extraCaption = caption && caption.length > CAPTION_MAX ? caption.slice(CAPTION_MAX) : null;
-    // 静态图与 gif 分开；gif 逐张 sendAnimation
     const stills = media.filter((m) => m.mime !== 'image/gif');
     const gifs = media.filter((m) => m.mime === 'image/gif');
-    const chunks = [];
-    for (let i = 0; i < stills.length; i += 10) chunks.push(stills.slice(i, i + 10));
+    const chunks = chunkMedia(stills);
     let captionUsed = false;
     const useCaption = () => {
       if (!captionUsed && cap) {
@@ -945,12 +1032,14 @@ export function activate(enso, { loop = true } = {}) {
       }
       return undefined;
     };
+    let sent = 0;
+    const failures = [];
     const definiteRejects = [];
-    for (const [ci, chunk] of chunks.entries()) {
+    for (const chunk of chunks) {
       try {
         if (chunk.length === 1) {
           const one = chunk[0];
-          await apiUpload('sendPhoto', { chat_id: chatId, ...thread, caption: ci === 0 ? useCaption() : undefined }, [
+          await apiUpload('sendPhoto', { chat_id: chatId, ...thread, caption: useCaption() }, [
             { name: 'photo', filename: one.filename, mime: one.mime, data: one.data },
           ]);
         } else {
@@ -963,31 +1052,41 @@ export function activate(enso, { loop = true } = {}) {
           }));
           await apiUpload('sendMediaGroup', { chat_id: chatId, ...thread, media: JSON.stringify(mediaDesc) }, files2);
         }
+        sent += chunk.length;
       } catch (error) {
-        // 确定被拒（400/429 已内含在 status）才降级逐张；超时/5xx 回执不明不重发防重复
         if (error.status === 400 && chunk.length > 1) {
           definiteRejects.push(...chunk);
         } else if (error.status === 400) {
-          throw error;
+          failures.push(`${chunk.length} 张被 Telegram 拒绝：${error?.message ?? error}`);
         } else {
-          console.error('[telegram] 媒体上传回执不明，不重发防重复：', error?.message ?? error);
-          captionUsed = true; // 避免 caption 重复出现在后续块
+          // 回执不明：可能已送达，绝不自动重发，但要如实回报
+          failures.push(`${chunk.length} 张上传回执不明（未重发防重复）：${error?.message ?? error}`);
         }
+        captionUsed = true;
       }
     }
-    // 降级逐张发送确定被拒的块
     for (const m of definiteRejects) {
-      await apiUpload('sendPhoto', { chat_id: chatId, ...thread, caption: useCaption() }, [
-        { name: 'photo', filename: m.filename, mime: m.mime, data: m.data },
-      ]).catch((e) => console.error('[telegram] 单张降级发送失败：', e?.message ?? e));
+      try {
+        await apiUpload('sendPhoto', { chat_id: chatId, ...thread, caption: useCaption() }, [
+          { name: 'photo', filename: m.filename, mime: m.mime, data: m.data },
+        ]);
+        sent += 1;
+      } catch (e) {
+        failures.push(`单张 ${m.filename} 发送失败：${e?.message ?? e}`);
+      }
     }
     for (const gif of gifs) {
-      await apiUpload('sendAnimation', { chat_id: chatId, ...thread, caption: useCaption() }, [
-        { name: 'animation', filename: gif.filename, mime: gif.mime, data: gif.data },
-      ]).catch((e) => console.error('[telegram] GIF 发送失败：', e?.message ?? e));
+      try {
+        await apiUpload('sendAnimation', { chat_id: chatId, ...thread, caption: useCaption() }, [
+          { name: 'animation', filename: gif.filename, mime: gif.mime, data: gif.data },
+        ]);
+        sent += 1;
+      } catch (e) {
+        failures.push(`GIF ${gif.filename} 发送失败：${e?.message ?? e}`);
+      }
     }
     if (extraCaption) await send(key, extraCaption);
-    return chunks.reduce((n, c) => n + c.length, 0) + gifs.length;
+    return { sent, failures };
   };
 
   // ---- 侧栏 state ----
@@ -1109,17 +1208,26 @@ export function activate(enso, { loop = true } = {}) {
       };
     }
     await enso.config.set({ botToken: token });
-    botTokenMem = token;
+    // 换到不同的 Bot：重置 offset（旧 Bot 的高 update_id 会让新 Bot 收不到消息）并重新注册命令菜单
+    const switched = bot && bot.id !== me.id;
+    if (switched) {
+      await update((state) => {
+        state.offset = 0;
+        state.commandsVersion = 0;
+      });
+    }
     bot = me;
+    botTokenUsed = token;
     void self.wake?.();
-    return { ok: true, bot: { username: me.username, name: me.first_name, readsAll: me.can_read_all_group_messages } };
+    const fresh = await view(ctx?.sessionId ?? null);
+    return { ...fresh, ok: true };
   });
 
   enso.renderer.handle('disconnect', async (_args, ctx) => {
     if (typeof enso.config?.set !== 'function') throw new Error('当前 EnsoCode 版本不支持从面板修改 Token：请到设置里清空，或升级 EnsoCode。');
     await enso.config.set({ botToken: null });
-    botTokenMem = null;
     bot = null;
+    botTokenUsed = null;
     void self.wake?.();
     return view(ctx?.sessionId ?? null);
   });
@@ -1259,24 +1367,43 @@ export function activate(enso, { loop = true } = {}) {
       targets = routesOfSession(state, sessionId).map((x) => x.key);
     }
     if (!targets.length) throw new Error('本会话没有绑定 Telegram 聊天');
+    // 多路由循环外只读一次文件；项目目录以调用会话的 projectRoot 为准
+    const media = [];
+    const roots = mediaRoots({ projectRoot: ctx?.projectRoot });
+    for (const f of files) media.push(await readMediaFile(f, roots));
     const asAlbum = args?.asAlbum !== false;
-    let count = 0;
+    const failures = [];
+    let totalSent = 0;
     for (const key of targets) {
       if (asAlbum) {
-        count = await sendMediaTo(key, files, args?.caption);
+        const r = await sendMediaTo(key, media, args?.caption);
+        totalSent += r.sent;
+        failures.push(...r.failures);
       } else {
-        for (const f of files) {
-          const one = await readMediaFile(f);
+        // 逐张发送：caption ≤1024 放首张，超出部分单独发文字
+        const cap = (args?.caption ?? '').slice(0, CAPTION_MAX);
+        const extraCaption = args?.caption && String(args.caption).length > CAPTION_MAX ? String(args.caption).slice(CAPTION_MAX) : null;
+        let captionUsed = false;
+        for (const one of media) {
           const method = one.mime === 'image/gif' ? 'sendAnimation' : 'sendPhoto';
-          await apiUpload(method, { chat_id: routeChatId(key), ...threadParams(key) }, [
-            { name: method === 'sendPhoto' ? 'photo' : 'animation', filename: one.filename, mime: one.mime, data: one.data },
-          ]);
-          count += 1;
+          try {
+            await apiUpload(
+              method,
+              { chat_id: routeChatId(key), ...threadParams(key), ...(captionUsed || !cap ? {} : { caption: cap }) },
+              [{ name: method === 'sendPhoto' ? 'photo' : 'animation', filename: one.filename, mime: one.mime, data: one.data }]
+            );
+            captionUsed = captionUsed || !!cap;
+            totalSent += 1;
+          } catch (e) {
+            failures.push(`${one.filename} 发送失败：${e?.message ?? e}`);
+          }
         }
-        if (args?.caption) await send(key, String(args.caption));
+        if (extraCaption) await send(key, extraCaption);
       }
     }
-    return `已发送 ${files.length} 张图片到 ${targets.length} 个 Telegram 聊天`;
+    const tail = failures.length ? `；注意：${failures.join('；')}`.slice(0, 900) : '';
+    if (!totalSent && failures.length) throw new Error(`全部发送失败：${failures.join('；')}`.slice(0, 900));
+    return `已发送 ${totalSent} 张图片到 ${targets.length} 个 Telegram 聊天${tail}`;
   });
 
   if (loop) {

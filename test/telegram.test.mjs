@@ -11,6 +11,8 @@ import {
   findRoute,
   inboundText,
   isAllowed,
+  isTopicRootReply,
+  pruneAsks,
   markdownToHtml,
   mergeBuffered,
   migrate,
@@ -25,6 +27,7 @@ import {
   splitRouteKey,
   threadParams,
   topicOf,
+  unbindRoute,
   visuallyEmpty,
 } from '../packages/enso.telegram/lib.mjs';
 
@@ -304,9 +307,12 @@ test('视觉空消息识别', () => {
 });
 
 test('ask：shortId 稳定、callback ≤64 字节、注册/关闭/查询', () => {
-  assert.equal(shortIdOf('req-ABC_123'), 'reqabc123');
+  // sha256 前 16 位：相同前缀的 requestId 不再碰撞
+  assert.equal(shortIdOf('req-ABC_123'), shortIdOf('req-ABC_123'));
+  assert.notEqual(shortIdOf('req-aaaaaaaaaaaaaaaaaaaa1'), shortIdOf('req-aaaaaaaaaaaaaaaaaaaa2'));
+  assert.match(shortIdOf('x'), /^[0-9a-f]{16}$/);
   const data = encodeAskCallback('req-abc', 2);
-  assert.equal(data, 'ask:reqabc:2');
+  assert.match(data, /^ask:[0-9a-f]{16}:2$/);
   assert.ok(Buffer.byteLength(data) <= 64);
   const state = emptyState();
   const sid = registerAsk(state, { sessionId: 's1', requestId: 'r1', question: '继续吗', options: ['好', '不好'] });
@@ -352,4 +358,97 @@ test('senderOf 组出宿主 sender；同步镜像按路由排除', () => {
   bindRoute(state, { key: '-100:5', chatId: -100, topicId: '5', sessionId: 's1', sync: true });
   assert.deepEqual(mirrorTargets(state, 's1', ['-100']), ['-100:5']);
   assert.equal(rootSession('main::child'), 'main');
+});
+
+test('论坛话题根回复不算回复机器人；普通回复才算', () => {
+  const state = emptyState();
+  bindRoute(state, { key: '-200', chatId: -200, chatType: 'supergroup', sessionId: 's1', user: { id: 7, name: '@alice' } });
+  const topic = (text, extra = {}) =>
+    msg(text, -200, {
+      chat: { id: -200, type: 'supergroup', title: 'F', is_forum: true },
+      message_thread_id: 5,
+      is_topic_message: true,
+      ...extra,
+    });
+  // 根消息自动挂载的「回复」（message_id === thread_id 或带 forum_topic_created）不触发
+  const rootReply = topic('没有 @ 的普通消息', {
+    reply_to_message: { message_id: 5, from: { id: 99 }, forum_topic_created: { name: '话题五' } },
+  });
+  assert.deepEqual(route(state, rootReply, 0, BOT), { kind: 'ignore' });
+  const rootReply2 = topic('也没有 @', { reply_to_message: { message_id: 5, from: { id: 99 } } });
+  assert.deepEqual(route(state, rootReply2, 0, BOT), { kind: 'ignore' });
+  // 真正回复机器人某条消息（id 与 thread 不同、无 forum_topic_created）触发
+  const realReply = topic('继续', { reply_to_message: { message_id: 777, from: { id: 99 } } });
+  assert.equal(route(state, realReply, 0, BOT).kind, 'inject');
+});
+
+test('isTopicRootReply 识别两种根回复形态', () => {
+  assert.equal(isTopicRootReply({ reply_to_message: { forum_topic_created: { name: 'x' } } }), true);
+  assert.equal(isTopicRootReply({ is_topic_message: true, message_thread_id: 5, reply_to_message: { message_id: 5 } }), true);
+  assert.equal(isTopicRootReply({ is_topic_message: true, message_thread_id: 5, reply_to_message: { message_id: 9 } }), false);
+  assert.equal(isTopicRootReply({}), false);
+});
+
+test('只绑整群兜底时论坛各话题上下文仍互相隔离；解绑整群清理话题历史', () => {
+  const state = emptyState();
+  bindRoute(state, { key: '-200', chatId: -200, chatType: 'supergroup', sessionId: 's1', user: { id: 7, name: '@alice' } });
+  state.routes['-200'].context = 3;
+  const topic = (text, threadId, extra = {}) =>
+    msg(text, -200, {
+      chat: { id: -200, type: 'supergroup', title: 'F', is_forum: true },
+      message_thread_id: threadId,
+      is_topic_message: true,
+      ...extra,
+    });
+  const bob = { id: 8, first_name: 'Bob' };
+  route(state, topic('五号线索', 5, { from: bob }), 0, BOT);
+  route(state, topic('九号线索', 9, { from: bob }), 0, BOT);
+  // 整群兜底路由：在话题 5 里触发，只能拿到五号线的上下文
+  const a5 = route(state, topic('@enso_bot 总结', 5), 0, BOT);
+  assert.equal(a5.kind, 'inject');
+  assert.equal(a5.key, '-200'); // 走的是兜底路由
+  assert.deepEqual(a5.context, [{ from: 'Bob', text: '五号线索' }]);
+  const a9 = route(state, topic('@enso_bot 总结', 9), 0, BOT);
+  assert.deepEqual(a9.context, [{ from: 'Bob', text: '九号线索' }]);
+  // 再积累后解绑整群：话题历史一并清理
+  route(state, topic('残留', 5, { from: bob }), 0, BOT);
+  unbindRoute(state, '-200');
+  assert.equal(state.history['-200:5'], undefined);
+  assert.equal(state.history['-200:9'], undefined);
+});
+
+test('论坛群名册：General 默认存在，未见过的话题先记占位名再被真名覆盖', () => {
+  const state = emptyState();
+  const topic = (text, threadId, extra = {}) =>
+    msg(text, -200, {
+      chat: { id: -200, type: 'supergroup', title: 'F', is_forum: true },
+      message_thread_id: threadId,
+      is_topic_message: true,
+      ...extra,
+    });
+  route(state, topic('hi', 7), 0, BOT);
+  const chat = state.knownChats['-200'];
+  assert.equal(chat.topics['1'], 'General');
+  assert.equal(chat.topics['7'], '话题 #7');
+  // 见到 forum_topic_created 更新真名
+  route(state, topic('hi', 7, { forum_topic_created: { name: '发布讨论' } }), 0, BOT);
+  assert.equal(chat.topics['7'], '发布讨论');
+});
+
+test('pruneAsks：超期已关闭 ask 被清理，最多留 50 条', () => {
+  const state = emptyState();
+  const now = Date.now();
+  for (let i = 0; i < 60; i++) {
+    state.asks[`c${String(i).padStart(2, '0')}`] = {
+      sessionId: 's1', requestId: `r${i}`, question: '', createdAt: now - 1000 - i, closedAt: now - 1000 - i, open: false, cards: [],
+    };
+  }
+  state.asks.old = { sessionId: 's1', requestId: 'rx', question: '', createdAt: now - 25 * 3600e3, closedAt: now - 25 * 3600e3, open: false, cards: [] };
+  pruneAsks(state, now);
+  assert.equal(state.asks.old, undefined, '超 24h 的删掉');
+  assert.ok(Object.keys(state.asks).length <= 50, '最多留 50 条');
+  // 开着的永远保留
+  state.asks.openone = { sessionId: 's1', requestId: 'ro', question: '', createdAt: now - 48 * 3600e3, open: true, cards: [] };
+  pruneAsks(state, now);
+  assert.ok(state.asks.openone);
 });

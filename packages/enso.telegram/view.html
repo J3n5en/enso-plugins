@@ -49,6 +49,7 @@
       let error = '';
       let busy = false;
       let tab = 'routes';
+      let changingToken = false; // 「更换 Token」展开态：轮询重绘不得把它折叠掉
       const openKeys = new Set(); // 展开编辑的路由
       ensoUI.tooltip();
 
@@ -63,9 +64,20 @@
         try {
           const next = await window.enso.call(method, args ?? {});
           if (method === 'connect') {
-            if (next.needsUpgrade) { alert(next.message); }
-            else if (next.ok) { error = ''; }
-            changed = true;
+            if (next.needsUpgrade) {
+              error = next.message; // 内联展示，不再 alert
+            } else if (next.ok) {
+              // 后端直接返回了最新视图，无需再拉一次 state（也避免覆盖错误提示）
+              view = next;
+              last = JSON.stringify(next);
+              error = '';
+              changingToken = false;
+            } else {
+              error = next.message || '连接失败';
+            }
+            busy = false;
+            render();
+            return;
           } else {
             const key = JSON.stringify(next);
             if (method === 'state' && key === last && !error) { busy = false; return; }
@@ -92,7 +104,11 @@
           const g = s.kind === 'secretary' ? '秘书' : (s.projectName || '未分组');
           (groups[g] ??= []).push(s);
         }
-        return Object.entries(groups).map(([g, list]) =>
+        // 绑定的会话不在当前列表里（已归档/跨项目拿不到）时补一个占位项，避免下拉误显示成第一项
+        const fallback = selected && !sessions.some((s) => s.id === selected)
+          ? `<optgroup label="当前绑定"><option value="${esc(selected)}" selected>${esc(selected)}（不在会话列表）</option></optgroup>`
+          : '';
+        return fallback + Object.entries(groups).map(([g, list]) =>
           `<optgroup label="${esc(g)}">${list.map((s) => `<option value="${esc(s.id)}" ${s.id === selected ? 'selected' : ''}>${esc(s.title)}</option>`).join('')}</optgroup>`
         ).join('');
       }
@@ -124,7 +140,11 @@
               <option value="custom" ${r.whitelistMode === 'custom' ? 'selected' : ''}>本路由独立</option>
               <option value="open" ${r.whitelistMode === 'open' ? 'selected' : ''}>全群开放</option>
             </select></label></div>
-          <div class="users">${allow || '<span class="m">本路由名单为空</span>'}</div>
+          <div class="users">${allow || (r.whitelistMode === 'open'
+            ? '<span class="m">全群开放：群内所有成员均可触发</span>'
+            : r.whitelistMode === 'inherit'
+              ? '<span class="m">本路由追加名单为空（叠加全局名单生效）</span>'
+              : '<span class="m">本路由名单为空</span>')}</div>
           ${req ? `<div class="users"><span class="m">待批准：</span>${req}</div>` : ''}` : ''}
           <div class="grid">
             <label>上下文条数
@@ -157,7 +177,7 @@
           const chatKey = String(c.id);
           if (!c.boundKeys.includes(chatKey)) {
             rows.push(`<div class="row"><span class="grow">${c.type === 'private' ? '👤' : '👥'} ${esc(c.title || c.id)}</span>
-              <button class="ui-btn ui-btn--sm ui-btn--outline" data-bind="${chatKey}|">绑定整群</button></div>`);
+              <button class="ui-btn ui-btn--sm ui-btn--outline" data-bind="${chatKey}|">${c.type === 'private' ? '绑定私聊' : '绑定整群'}</button></div>`);
           }
           if (c.isForum) {
             for (const t of c.topics ?? []) {
@@ -222,8 +242,8 @@
           connCard = `<div class="ui-card card">${botLine}${warn}
             <div class="btns"><button class="ui-btn ui-btn--outline" data-change>更换 Token</button>
             <button class="ui-btn ui-btn--destructive" data-disconnect>断开连接</button></div>
-            <div id="chg" style="display:none" class="row"><input type="password" class="ui-input" id="tk" placeholder="粘贴新 Token" autocomplete="off"/>
-              <button class="ui-btn ui-btn--sm ui-btn--primary" data-connect>校验并连接</button></div></div>`;
+            ${changingToken ? `<div class="row"><input type="password" class="ui-input" id="tk" placeholder="粘贴新 Token" autocomplete="off"/>
+              <button class="ui-btn ui-btn--sm ui-btn--primary" data-connect>校验并连接</button></div>` : ''}</div>`;
         }
         const tabs = v.configured
           ? `<div class="tabs"><button class="tab ${tab === 'routes' ? 'on' : ''}" data-tab="routes">路由绑定</button>
@@ -242,16 +262,17 @@
           render(); return;
         }
         if (t.hasAttribute('data-change')) {
-          const el = document.getElementById('chg');
-          if (el) el.style.display = el.style.display === 'none' ? 'flex' : 'none';
+          changingToken = !changingToken;
+          render();
+          if (changingToken) document.getElementById('tk')?.focus();
           return;
         }
         if (t.hasAttribute('data-connect')) {
           const input = document.getElementById('tk');
-          run('connect', { token: input?.value ?? '' }).then(() => run('state'));
+          run('connect', { token: input?.value ?? '' });
           return;
         }
-        if (t.hasAttribute('data-disconnect')) run('disconnect');
+        if (t.hasAttribute('data-disconnect')) { changingToken = false; run('disconnect'); }
         else if (t.hasAttribute('data-pair')) run('pair');
         else if (t.dataset.unbind) run('unbind', { key: t.dataset.unbind });
         else if (t.dataset.fresh) run('fresh', { key: t.dataset.fresh });

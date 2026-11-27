@@ -11,6 +11,7 @@
   "main": "main.mjs",
   "resident": true,
   "permissions": [
+    "process.background",
     "agent.inject",
     "agent.observe",
     "agent.tool",
