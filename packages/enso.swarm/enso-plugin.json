@@ -136,7 +136,7 @@
             },
             "mentionsOnly": {
               "type": "boolean",
-              "description": "Only wake for posts that @ you or @all (the coordinator usually wants false)."
+              "description": "Only wake for posts that @ you or @all. Workers pass true; the coordinator passes false, since it drives the swarm and must wake on every post."
             }
           },
           "required": [
