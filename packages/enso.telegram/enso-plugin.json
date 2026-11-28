@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "enso.telegram",
   "name": "Telegram Bot",
-  "version": "1.1.3",
+  "version": "1.2.0",
   "icon": "icon.svg",
   "description": "用 Telegram Bot 远程使用 EnsoCode 会话：面板直填 Token 即连；私聊、群聊与论坛话题各自绑定任意会话（含秘书），面板一键跳到目标会话；管理员消息可信直达、普通用户按外部数据隔离；两层白名单与全群开放模式、逐话题免 @ 直发；上下文条数、限速攒批与提示词前置按路由配置；双向图片与相册；ask_user 按钮直接在群里作答。",
   "engines": {
@@ -33,7 +33,7 @@
     "agentTools": [
       {
         "name": "telegram_reply",
-        "description": "主动向本会话绑定的 Telegram 聊天发一条消息（如长任务的中途进度）。回复 Telegram 消息时不需要调用：本轮最终回复会自动发回。",
+        "description": "主动向本会话绑定的 Telegram 聊天发一条消息（如长任务的中途进度）。回复 Telegram 消息时不需要调用：本轮最终回复会自动发回并引用原消息。",
         "parameters": {
           "type": "object",
           "properties": {
@@ -44,6 +44,10 @@
             "target": {
               "type": "string",
               "description": "可选：指定路由 key（chatId 或 chatId:topicId），缺省发往本会话绑定的全部路由"
+            },
+            "replyTo": {
+              "type": "integer",
+              "description": "可选：要引用的 Telegram 消息 id（注入消息头里的 message_id）。本会话绑定了多个聊天时须同时给 target；原消息已删除时照常发送、不带引用"
             }
           },
           "required": [
@@ -75,6 +79,10 @@
             "target": {
               "type": "string",
               "description": "可选：指定路由 key，缺省发往本会话绑定的全部路由"
+            },
+            "replyTo": {
+              "type": "integer",
+              "description": "可选：要引用的 Telegram 消息 id（注入消息头里的 message_id），只引在第一条（相册整组算一条）。本会话绑定了多个聊天时须同时给 target"
             }
           },
           "required": [

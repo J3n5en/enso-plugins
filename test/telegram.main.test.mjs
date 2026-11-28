@@ -39,7 +39,7 @@ async function setup({ injectError, sessions, dataDir, configSet, answerAsk, foc
         const method = url.split('/').pop();
         let body = {};
         try {
-          body = init?.bodyEncoding === 'base64' ? { __upload: true } : JSON.parse(init.body ?? '{}');
+          body = init?.bodyEncoding === 'base64' ? { __upload: true, ...multipartFields(init.body) } : JSON.parse(init.body ?? '{}');
         } catch {
           body = {};
         }
@@ -88,11 +88,15 @@ async function setup({ injectError, sessions, dataDir, configSet, answerAsk, foc
     tools: { register: (id, fn) => (handlers.tools[id] = fn) },
   };
   const handle0 = activate(enso, { loop: false });
-  const message = (text, extra = {}) =>
+  /** 返回这条入站消息的 message_id */
+  const message = (text, extra = {}) => {
+    const id = nextId++;
     updates.push({
       update_id: updates.length + calls.length + 1,
-      message: { message_id: nextId++, chat: { id: 42, type: 'private' }, from: { id: 7, username: 'al' }, text, ...extra },
+      message: { message_id: id, chat: { id: 42, type: 'private' }, from: { id: 7, username: 'al' }, text, ...extra },
     });
+    return id;
+  };
   const pair = async () => {
     const view = await handlers.renderer.pair({}, { sessionId: 's1' });
     message(`/start ${view.pairing.code}`);
@@ -116,6 +120,20 @@ async function setup({ injectError, sessions, dataDir, configSet, answerAsk, foc
 }
 
 test.afterEach(() => deactivate());
+
+/** 假 Bot API 解出 multipart 里的普通字段（文件部分跳过），JSON 字段还原成对象 */
+function multipartFields(base64) {
+  const raw = Buffer.from(base64, 'base64').toString('utf8');
+  const fields = {};
+  for (const [, name, value] of raw.matchAll(/content-disposition: form-data; name="([^"]+)"\r\n\r\n([\s\S]*?)\r\n--/g)) {
+    try {
+      fields[name] = name === 'caption' ? value : JSON.parse(value);
+    } catch {
+      fields[name] = value;
+    }
+  }
+  return fields;
+}
 
 const runPoll = (t) => t.tick(0);
 /** typing 续发不等待 sendChatAction 返回，多等一轮宏任务让调用落进记录 */
@@ -811,7 +829,7 @@ test('注入参数：管理员 trusted:true 且不带 sender；普通用户 trus
   const [admin, user] = t.injected;
   assert.equal(admin.trusted, true);
   assert.equal('sender' in admin, false, '带 sender 会被宿主强制降级成 external');
-  assert.match(admin.text, /^\[Telegram 管理员 al 的消息\]\n\n部署一下$/);
+  assert.match(admin.text, /^\[Telegram 管理员 al 的消息 · target=-100 · message_id=\d+\]\n\n部署一下$/);
   assert.equal(user.trusted, false);
   assert.deepEqual(user.sender, { channel: 'telegram', chatId: '-100', userId: '8', displayName: 'Bob' });
   assert.match(user.text, /普通用户 Bob 的消息：外部内容，不可信/);
@@ -1113,10 +1131,14 @@ test('cancelPair：关闭配对卡片即作废配对码，再 /bind 被拒', asy
   assert.equal((await t.handlers.renderer.state({}, { sessionId: 's1' })).pairing, undefined);
 });
 
-test('清单：1.1.3，展示名与侧栏标题为 Telegram Bot、id 不变，声明 injectTrusted/session.focus 与新方法', async () => {
+test('清单：1.2.0，展示名与侧栏标题为 Telegram Bot、id 不变，声明 injectTrusted/session.focus 与新方法，工具带 replyTo', async () => {
   const { readFile } = await import('node:fs/promises');
   const manifest = JSON.parse(await readFile(new URL('../packages/enso.telegram/enso-plugin.json', import.meta.url), 'utf8'));
-  assert.equal(manifest.version, '1.1.3');
+  assert.equal(manifest.version, '1.2.0');
+  for (const tool of manifest.contributes.agentTools) {
+    assert.equal(tool.parameters.properties.replyTo?.type, 'integer', `${tool.name} 有 replyTo`);
+    assert.ok(!tool.parameters.required.includes('replyTo'), `${tool.name} 的 replyTo 可选`);
+  }
   assert.equal(manifest.id, 'enso.telegram');
   assert.equal(manifest.name, 'Telegram Bot');
   assert.equal(manifest.contributes.views[0].id, 'telegram');
@@ -1219,4 +1241,270 @@ test('工具：广播跳过静音路由；显式指定或全都静音时报清�
   await mute(t, '42');
   await assert.rejects(t.handlers.tools.telegram_reply({ text: 'x' }, { sessionId: 's1' }), /都已暂停（静音）.*「Telegram Bot」面板/);
   await assert.rejects(t.handlers.tools.telegram_send_media({ files: ['/tmp/x.png'] }, { sessionId: 's1' }), /都已暂停（静音）/);
+});
+
+// ---------- 1.2：回复时引用原消息 ----------
+
+const Q = (id) => ({ message_id: id, allow_sending_without_reply: true });
+const routePatch = (t, key, patch) => t.handlers.renderer.route({ key, patch }, { sessionId: 's1' });
+const placeholders = (t) => t.of('sendMessage').filter((c) => c.body.text === '⏳ 已收到，处理中…');
+const end = (t, text) => t.handlers.events.agent_end({ text }, { sessionId: 's1', agent: null });
+
+test('引用原消息（私聊默认开）：占位带引用并被改写成回复；关进度提示时最终回复直接引用，长回复只有第一段引用', async () => {
+  const t = await setup();
+  await t.pair();
+  await runPoll(t);
+  assert.equal((await t.handlers.renderer.state({}, { sessionId: 's1' })).routes[0].quoteReply, true);
+  const id = t.message('帮我看下测试');
+  await runPoll(t);
+  const placeholder = placeholders(t).at(-1);
+  assert.deepEqual(placeholder.body.reply_parameters, Q(id), '占位发出时就引用触发消息');
+  assert.match(t.injected.at(-1).text, new RegExp(`· target=42 · message_id=${id}\\]`));
+  await end(t, '好了');
+  const edited = t.of('editMessageText').at(-1).body;
+  assert.equal(edited.message_id, placeholder.resultMessageId, '最终回复改写的是带引用的占位');
+  assert.equal(edited.text, '好了');
+
+  await routePatch(t, '42', { showProgress: false });
+  const id2 = t.message('再来一个长的');
+  await runPoll(t);
+  const before = t.of('sendMessage').length;
+  await end(t, [1, 2, 3].map((i) => `第${i}段 ${'x'.repeat(3000)}`).join('\n\n'));
+  const parts = t.of('sendMessage').slice(before);
+  assert.ok(parts.length >= 2, `长回复分段（${parts.length} 段）`);
+  assert.deepEqual(parts[0].body.reply_parameters, Q(id2), '第一段引用');
+  assert.ok(parts.slice(1).every((c) => c.body.reply_parameters === undefined), '后续段不引用');
+});
+
+test('引用原消息（群聊话题默认开）：占位与最终回复都留在原话题并引用触发消息', async () => {
+  const t = await setup();
+  const FORUM = { id: -200, type: 'supergroup', title: 'F', is_forum: true };
+  const inTopic = { chat: FORUM, message_thread_id: 5, is_topic_message: true };
+  const view = await t.handlers.renderer.pair({}, { sessionId: 's1' });
+  t.message(`/bind ${view.pairing.code}`, inTopic);
+  await runPoll(t);
+  const r = (await t.handlers.renderer.state({}, { sessionId: 's1' })).routes[0];
+  assert.equal(r.key, '-200:5');
+  assert.equal(r.chatType, 'supergroup');
+  assert.equal(r.quoteReply, true, '群聊默认开');
+  const id = t.message('@enso_bot 你好', inTopic);
+  await runPoll(t);
+  const placeholder = placeholders(t).at(-1).body;
+  assert.equal(placeholder.chat_id, -200);
+  assert.equal(placeholder.message_thread_id, 5);
+  assert.deepEqual(placeholder.reply_parameters, Q(id));
+  await end(t, '第一轮');
+
+  await routePatch(t, '-200:5', { showProgress: false });
+  const id2 = t.message('@enso_bot 再问一句', inTopic);
+  await runPoll(t);
+  await end(t, '收到');
+  const final = t.of('sendMessage').at(-1).body;
+  assert.equal(final.text, '收到');
+  assert.equal(final.chat_id, -200);
+  assert.equal(final.message_thread_id, 5, '话题 id 保留');
+  assert.deepEqual(final.reply_parameters, Q(id2));
+});
+
+test('攒批合并多条：回执引用第一条，注入、占位与最终回复引用最后一条', async () => {
+  const t = await setup();
+  await t.pair();
+  await runPoll(t);
+  await routePatch(t, '42', { debounceSec: 60 });
+  const a = t.message('第一句');
+  const b = t.message('第二句');
+  await runPoll(t);
+  const receipt = t.of('sendMessage').find((c) => c.body.text?.startsWith('📥'));
+  assert.deepEqual(receipt.body.reply_parameters, Q(a));
+  await t.flushTextBuffer('42');
+  assert.match(t.injected.at(-1).text, new RegExp(`message_id=${b}\\]`));
+  assert.deepEqual(placeholders(t).at(-1).body.reply_parameters, Q(b));
+  await end(t, '合并的回复');
+
+  await routePatch(t, '42', { showProgress: false });
+  t.message('第三句');
+  const d = t.message('第四句');
+  await runPoll(t);
+  await t.flushTextBuffer('42');
+  await end(t, '第二批的回复');
+  const final = t.of('sendMessage').at(-1).body;
+  assert.equal(final.text, '第二批的回复');
+  assert.deepEqual(final.reply_parameters, Q(d));
+});
+
+test('引用不了时降级为普通发送：引用被拒、占位被删都不丢消息', async () => {
+  const t = await setup();
+  await t.pair();
+  await runPoll(t);
+  const rejected = [];
+  const orig = t.enso.net.fetch;
+  t.enso.net.fetch = async (url, init) => {
+    const method = url.split('/').pop();
+    const body = init?.bodyEncoding === 'base64' ? multipartFields(init.body) : JSON.parse(init?.body ?? '{}');
+    if (body.reply_parameters) {
+      rejected.push({ method, body });
+      return { status: 400, body: JSON.stringify({ ok: false, description: 'Bad Request: message to be replied not found' }) };
+    }
+    if (method === 'editMessageText' && body.text === '最终') {
+      rejected.push({ method, body });
+      return { status: 400, body: JSON.stringify({ ok: false, description: 'Bad Request: message to edit not found' }) };
+    }
+    return orig(url, init);
+  };
+  const id = t.message('原消息随后被删');
+  await runPoll(t);
+  assert.deepEqual(rejected[0].body.reply_parameters, Q(id));
+  const placeholder = placeholders(t).at(-1);
+  assert.ok(placeholder, '占位去掉引用后照发');
+  assert.equal(placeholder.body.reply_parameters, undefined);
+  await end(t, '最终');
+  // 改写占位失败 → 新发并试图引用 → 引用被拒 → 不带引用再发
+  assert.deepEqual(rejected.map((r) => r.method), ['sendMessage', 'editMessageText', 'editMessageText', 'sendMessage']);
+  assert.deepEqual(rejected.at(-1).body.reply_parameters, Q(id));
+  const final = t.of('sendMessage').at(-1).body;
+  assert.equal(final.text, '最终');
+  assert.equal(final.reply_parameters, undefined);
+
+  // 提问卡片同样降级，卡片不丢
+  t.message('问我点什么');
+  await runPoll(t);
+  await t.handlers.events.ask_request({ sessionId: 's1', requestId: 'req-q', question: '继续吗？', options: ['是'] });
+  const card = t.of('sendMessage').at(-1).body;
+  assert.match(card.text, /继续吗/);
+  assert.equal(card.reply_parameters, undefined);
+  assert.equal(rejected.at(-1).method, 'sendMessage');
+  assert.match(rejected.at(-1).body.text, /继续吗/);
+});
+
+test('关掉「回复时引用原消息」：占位、提问卡片与最终回复都不引用；view 与 /status 同步，再打开恢复', async () => {
+  const t = await setup();
+  await t.pair();
+  await runPoll(t);
+  const v = await routePatch(t, '42', { quoteReply: false });
+  assert.equal(v.routes[0].quoteReply, false);
+  t.message('hi');
+  await runPoll(t);
+  assert.equal(placeholders(t).at(-1).body.reply_parameters, undefined);
+  await t.handlers.events.ask_request({ sessionId: 's1', requestId: 'req-off', question: '要不要？' });
+  assert.equal(t.of('sendMessage').at(-1).body.reply_parameters, undefined);
+  await t.handlers.events.ask_resolved({ sessionId: 's1', requestId: 'req-off' });
+  await end(t, '第一轮');
+  await routePatch(t, '42', { showProgress: false });
+  t.message('/status');
+  await runPoll(t);
+  assert.match(t.of('sendMessage').at(-1).body.text, /回复时引用原消息：关/);
+  t.message('第二轮');
+  await runPoll(t);
+  await end(t, '不引用的回复');
+  const final = t.of('sendMessage').at(-1).body;
+  assert.equal(final.text, '不引用的回复');
+  assert.equal(final.reply_parameters, undefined);
+
+  await routePatch(t, '42', { quoteReply: true, showProgress: true });
+  const id = t.message('打开了');
+  await runPoll(t);
+  assert.deepEqual(placeholders(t).at(-1).body.reply_parameters, Q(id));
+});
+
+test('提问卡片引用本轮触发消息；不是 Telegram 触发的轮次不引用', async () => {
+  const t = await setup();
+  await t.pair();
+  await runPoll(t);
+  await t.handlers.events.ask_request({ sessionId: 's1', requestId: 'req-a', question: '桌面端发起的提问？' });
+  assert.equal(t.of('sendMessage').at(-1).body.reply_parameters, undefined);
+  await t.handlers.events.ask_resolved({ sessionId: 's1', requestId: 'req-a' });
+  const id = t.message('做吧');
+  await runPoll(t);
+  assert.match(t.injected.at(-1).text, /做吧$/);
+  await t.handlers.events.ask_request({ sessionId: 's1', requestId: 'req-b', question: '确定吗？', options: ['确定'] });
+  const card = t.of('sendMessage').at(-1).body;
+  assert.match(card.text, /确定吗/);
+  assert.deepEqual(card.reply_parameters, Q(id));
+});
+
+test('工具 replyTo：文本与图片引用指定消息且只引第一条；多聊天须给 target；非法 id 报错；引用被拒照发', async () => {
+  const { writeFile } = await import('node:fs/promises');
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...Array(20).fill(0)]);
+  const p1 = join(tmpdir(), `tg-quote-${process.pid}-1.png`);
+  const p2 = join(tmpdir(), `tg-quote-${process.pid}-2.png`);
+  await writeFile(p1, png);
+  await writeFile(p2, png);
+  const t = await setup();
+  await t.pair();
+  await runPoll(t);
+  const tools = t.handlers.tools;
+  const ctx = { sessionId: 's1' };
+
+  await tools.telegram_reply({ text: '中途进度', replyTo: 55 }, ctx);
+  assert.deepEqual(t.of('sendMessage').at(-1).body.reply_parameters, Q(55));
+  await tools.telegram_reply({ text: '不引用' }, ctx);
+  assert.equal(t.of('sendMessage').at(-1).body.reply_parameters, undefined, '不给 replyTo 就不引用');
+  for (const bad of ['abc', 0, -1, 1.5])
+    await assert.rejects(tools.telegram_reply({ text: 'x', replyTo: bad }, ctx), /replyTo 要是 Telegram 消息 id/, String(bad));
+
+  await tools.telegram_send_media({ files: [p1, p2], replyTo: 56, caption: '相册' }, ctx);
+  const album = t.of('sendMediaGroup').at(-1).body;
+  assert.deepEqual(album.reply_parameters, Q(56), '相册整组引用');
+  await tools.telegram_send_media({ files: [p1, p2], replyTo: 57, asAlbum: false }, ctx);
+  const [one, two] = t.of('sendPhoto').slice(-2).map((c) => c.body);
+  assert.deepEqual(one.reply_parameters, Q(57));
+  assert.equal(two.reply_parameters, undefined, '逐张发送只有第一张引用');
+  await tools.telegram_send_media({ files: [p1], replyTo: '58' }, ctx);
+  assert.deepEqual(t.of('sendPhoto').at(-1).body.reply_parameters, Q(58), '数字字符串也接受');
+  await tools.telegram_send_media({ files: [p1] }, ctx);
+  assert.equal(t.of('sendPhoto').at(-1).body.reply_parameters, undefined);
+
+  // 第二个聊天绑到同一会话：replyTo 必须配 target
+  await t.handlers.renderer.bind({ chatId: '-100' }, ctx);
+  await assert.rejects(tools.telegram_reply({ text: 'x', replyTo: 5 }, ctx), /target/);
+  await assert.rejects(tools.telegram_send_media({ files: [p1], replyTo: 5 }, ctx), /target/);
+  assert.match(await tools.telegram_reply({ text: '广播' }, ctx), /2 个/, '不带 replyTo 照常广播');
+  await tools.telegram_reply({ text: '指定', replyTo: 5, target: '-100' }, ctx);
+  const sent = t.of('sendMessage').at(-1).body;
+  assert.equal(sent.chat_id, -100);
+  assert.deepEqual(sent.reply_parameters, Q(5));
+
+  // 引用被拒：去掉引用照发
+  const orig = t.enso.net.fetch;
+  t.enso.net.fetch = async (url, init) => {
+    const body = init?.bodyEncoding === 'base64' ? multipartFields(init.body) : JSON.parse(init?.body ?? '{}');
+    if (body.reply_parameters) return { status: 400, body: JSON.stringify({ ok: false, description: 'Bad Request: message to be replied not found' }) };
+    return orig(url, init);
+  };
+  assert.match(await tools.telegram_send_media({ files: [p1], replyTo: 59, target: '42' }, ctx), /已发送 1 张/);
+  assert.equal(t.of('sendPhoto').at(-1).body.reply_parameters, undefined);
+  assert.match(await tools.telegram_reply({ text: '照发', replyTo: 59, target: '42' }, ctx), /已发送到 1 个/);
+  assert.equal(t.of('sendMessage').at(-1).body.text, '照发');
+});
+
+test('从 1.1 升级：旧路由按开引用，旧的待回目标（没有 sourceId）照常改写占位', async () => {
+  const { writeFile } = await import('node:fs/promises');
+  const dir = await mkdtemp(join(tmpdir(), 'tg-11-'));
+  await writeFile(
+    join(dir, 'state.json'),
+    JSON.stringify({
+      version: 3,
+      offset: 0,
+      admins: [{ id: 7, name: 'al' }],
+      routes: {
+        '42': { key: '42', chatType: 'private', sessionId: 's1', enabled: true, showProgress: true },
+        '-100': { key: '-100', chatType: 'supergroup', sessionId: 's2', enabled: true, showProgress: false, whitelistMode: 'open' },
+      },
+      pending: { s1: [{ key: '42', placeholderId: 77 }] },
+    })
+  );
+  const t = await setup({ dataDir: dir });
+  const v = await t.handlers.renderer.state({}, { sessionId: 's1' });
+  assert.deepEqual(v.routes.map((r) => [r.key, r.quoteReply]), [['42', true], ['-100', true]]);
+  await end(t, '升级前那轮的回复');
+  const edited = t.of('editMessageText').at(-1).body;
+  assert.equal(edited.message_id, 77);
+  assert.equal(edited.text, '升级前那轮的回复');
+  assert.equal(t.of('sendMessage').length, 0);
+  const id = t.message('@enso_bot 升级后', { chat: GROUP, from: BOB });
+  await runPoll(t);
+  await t.handlers.events.agent_end({ text: '群里回复' }, { sessionId: 's2', agent: null });
+  const final = t.of('sendMessage').at(-1).body;
+  assert.equal(final.text, '群里回复');
+  assert.deepEqual(final.reply_parameters, Q(id));
 });

@@ -239,6 +239,22 @@ test('「进度提示」开关：默认勾选，切换发 route 补丁 showProgr
   assert.equal(box()[2], undefined);
 });
 
+test('「回复时引用原消息」开关：旧视图没有字段时按开，切换发 route 补丁 quoteReply', async () => {
+  let current = baseView();
+  const ui = await mount(async (method, args) => {
+    if (method === 'route') current = baseView({ routes: [{ ...current.routes[0], quoteReply: args.patch.quoteReply }] });
+    return current;
+  });
+  ui.click({ toggle: '-100' });
+  const box = () => ui.nodes.body.html.match(/<label class="switch" data-tip="([^"]*)"><input type="checkbox" class="ui-switch" data-route="quoteReply" data-key="-100" ?(checked)?\/>回复时引用原消息<\/label>/);
+  assert.match(box()[1], /引用触发这轮的那条消息/);
+  assert.equal(box()[2], 'checked');
+  ui.nodes.app.listeners.change.forEach((fn) => fn({ target: { dataset: { route: 'quoteReply', key: '-100' }, type: 'checkbox', checked: false } }));
+  await settle();
+  assert.deepEqual(ui.calls.at(-1), { method: 'route', args: { key: '-100', patch: { quoteReply: false } } });
+  assert.equal(box()[2], undefined);
+});
+
 test('跳转失败把中文提示显示出来', async () => {
   const ui = await mount(async (method) => {
     if (method === 'focus') throw new Error('跳转失败：这个会话不在当前窗口');
