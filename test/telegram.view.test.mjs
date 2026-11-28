@@ -334,3 +334,45 @@ test('头部路由开关：切换不误触折叠，发 route 补丁；静音时�
   assert.match(ui.nodes.body.html, /已静音/);
   assert.doesNotMatch(ui.nodes.body.html, /data-route="enabled" data-key="-100" checked/);
 });
+
+test('「信任本群匿名管理员」开关：默认关、旁边写明风险，切换发 route 补丁；私聊路由不显示', async () => {
+  let current = baseView();
+  const ui = await mount(async (method, args) => {
+    if (method === 'route') current = baseView({ routes: [{ ...current.routes[0], trustAnonymousAdmin: args.patch.trustAnonymousAdmin }] });
+    return current;
+  });
+  ui.click({ toggle: '-100' });
+  const box = () => ui.nodes.body.html.match(/data-route="trustAnonymousAdmin" data-key="-100" ?(checked)?\/>信任本群匿名管理员<\/label>\s*<span class="m( err)?">([^<]*)<\/span>/);
+  assert.equal(box()[1], undefined, '旧视图没有字段时按关');
+  assert.match(box()[3], /群里任何开了匿名的管理员[\s\S]*都会被当成你。私聊不受影响/);
+  ui.nodes.app.listeners.change.forEach((fn) => fn({ target: { dataset: { route: 'trustAnonymousAdmin', key: '-100' }, type: 'checkbox', checked: true } }));
+  await settle();
+  assert.deepEqual(ui.calls.at(-1), { method: 'route', args: { key: '-100', patch: { trustAnonymousAdmin: true } } });
+  assert.equal(box()[1], 'checked');
+  assert.equal(box()[2], ' err', '打开后风险提示标红');
+
+  const priv = await mount(async () => baseView({ routes: [{ ...baseView().routes[0], key: '42', chatId: '42', chatType: 'private' }] }));
+  priv.click({ toggle: '42' });
+  assert.doesNotMatch(priv.nodes.body.html, /信任本群匿名管理员/);
+});
+
+test('权限页「可信发言频道」：名单可移除，最近见到的频道一键加入并标出你的频道', async () => {
+  const ui = await mount(async () =>
+    baseView({
+      trustedChannels: [{ id: -1001, name: '老频道' }],
+      channelCandidates: [{ id: -1009, name: 'My Channel', chat: '群', mine: true }, { id: -1010, name: '别人的', mine: false }],
+    })
+  );
+  ui.click({ tab: 'whitelist' });
+  const body = ui.nodes.body.html;
+  assert.match(body, /<h3>可信发言频道<\/h3>/);
+  assert.match(body, /老频道 <span class="m">-1001<\/span><button class="x" data-tip="移出可信发言频道" data-unchannel="-1001">/);
+  assert.match(body, /data-mkchannel="-1009\|My Channel" data-tip="在「群」见到">＋ My Channel（这是你的频道）/);
+  assert.match(body, /＋ 别人的<\/button>/);
+  ui.click({ mkchannel: '-1009|My Channel' });
+  await settle();
+  assert.deepEqual(ui.calls.at(-1), { method: 'channel', args: { channelId: -1009, name: 'My Channel', on: true } });
+  ui.click({ unchannel: '-1001' });
+  await settle();
+  assert.deepEqual(ui.calls.at(-1), { method: 'channel', args: { channelId: -1001, on: false } });
+});

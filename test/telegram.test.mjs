@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   ANONYMOUS_ADMIN,
+  HINT_EVERY_MS,
+  setTrustedChannel,
+  stillTrusted,
   activeRoutesOfSession,
   isRouteEnabled,
   routesOfSession,
@@ -777,4 +780,225 @@ test('在静音路由上用配对码重绑：保持静音并提示', () => {
   assert.equal(res.kind, 'bound');
   assert.match(res.text, /已静音/);
   assert.equal(state.routes['42'].enabled, false);
+});
+
+// ---------- 1.3：匿名管理员与频道身份 ----------
+
+const OWNER_ANON = { status: 'creator', user: { id: 7, is_bot: false, username: 'alice' }, is_anonymous: true, custom_title: 'Boss' };
+const BOB_ANON = { status: 'administrator', user: { id: 8, is_bot: false, first_name: 'Bob' }, is_anonymous: true, custom_title: 'Mod' };
+const PLAIN_ADMIN = { status: 'administrator', user: { id: 9, is_bot: false, first_name: 'Eve' }, is_anonymous: false };
+const asAnon = (extra = {}) => ({ from: ANON, sender_chat: { id: -100, type: 'supergroup', title: 'G' }, ...extra });
+const CHANNEL = { id: -1009, type: 'channel', title: 'My Channel', username: 'mych' };
+const CHANNEL_BOT = { id: 136817688, is_bot: true, first_name: 'Channel', username: 'Channel_Bot' };
+const asChannel = (extra = {}) => ({ from: CHANNEL_BOT, sender_chat: CHANNEL, ...extra });
+const anonGroup = (patch = {}) => {
+  const state = emptyState();
+  bindRoute(state, { key: '-100', chatId: -100, chatType: 'supergroup', sessionId: 's1', user: { id: 7, name: '@alice' } });
+  Object.assign(state.routes['-100'], { whitelistMode: 'open', ...patch });
+  state.admins = [{ id: 7, name: '@alice' }];
+  return state;
+};
+const header = (action) => inboundText(action).split('\n')[0];
+
+test('匿名管理员：群里只有一位开了匿名且是插件管理员，直接按 TA 可信处理，不提示', () => {
+  const state = anonGroup();
+  const res = route(state, group('@enso_bot 修复', asAnon({ author_signature: 'Boss' })), 0, BOT, [OWNER_ANON, PLAIN_ADMIN]);
+  assert.equal(res.kind, 'inject');
+  assert.equal(res.admin, true);
+  assert.equal(res.fromId, '7');
+  assert.equal(res.trustVia, undefined);
+  assert.equal(res.notice, undefined);
+  assert.equal(header(res), '[Telegram 管理员 @alice（匿名发言） 的消息 · target=-100 · message_id=5]');
+  assert.equal(stillTrusted(state, res), true);
+  const boss = asAnon({ author_signature: 'Boss' });
+  assert.equal(route(state, group('/stop', boss), 0, BOT, [OWNER_ANON]).kind, 'stop');
+  assert.match(route(state, group('/id', boss), 0, BOT, [OWNER_ANON]).text, /认出是 @alice（User ID：7）[\s\S]*身份：管理员（可信）/);
+  // 推断出来的身份可以发指令，但改不了管理员名单
+  assert.match(route(state, group('/admin', { ...boss, reply_to_message: { from: BOB } }), 0, BOT, [OWNER_ANON]).text, /不能修改管理员名单/);
+  assert.equal(isAdmin(state, 8), false);
+});
+
+test('匿名管理员：唯一那位不是插件管理员时按 TA 本人当普通用户，白名单也按 TA 过滤', () => {
+  const state = anonGroup({ whitelistMode: 'custom' });
+  const res = route(state, group('@enso_bot 你好', asAnon({ author_signature: 'Mod' })), 0, BOT, [BOB_ANON]);
+  assert.equal(res.kind, 'reply');
+  assert.match(res.text, /^Bob 不在白名单里/);
+  assert.deepEqual(state.routes['-100'].requests, [{ id: 8, name: 'Bob' }]);
+  state.routes['-100'].whitelistMode = 'open';
+  const open = route(state, group('@enso_bot 你好', asAnon({ author_signature: 'Mod' })), 0, BOT, [BOB_ANON]);
+  assert.equal(open.admin, false);
+  assert.equal(open.notice, undefined, '认出了是谁就不必提示');
+  assert.deepEqual(senderOf(open), { channel: 'telegram', chatId: '-100', userId: '8', displayName: 'Bob（匿名发言）' });
+});
+
+test('匿名管理员：多位时按头衔唯一对上；对不上、头衔不符、读不到列表都算认不出', () => {
+  const state = anonGroup();
+  const both = [OWNER_ANON, BOB_ANON];
+  const byTitle = route(state, group('@enso_bot 修复', asAnon({ author_signature: 'Boss' })), 0, BOT, both);
+  assert.equal(byTitle.admin, true);
+  assert.equal(byTitle.fromId, '7');
+  // 没有头衔的匿名管理员发言不带 author_signature：唯一没头衔的那位就是 TA
+  const untitledOwner = { ...OWNER_ANON, custom_title: undefined };
+  assert.equal(route(state, group('@enso_bot 修复', asAnon()), 0, BOT, [untitledOwner, BOB_ANON]).fromId, '7');
+  const cases = [
+    [both, undefined, /多位匿名管理员/],
+    [[untitledOwner], 'Mod', /头衔和群里唯一的匿名管理员对不上/],
+    [[OWNER_ANON], undefined, /头衔和群里唯一的匿名管理员对不上/],
+    [[OWNER_ANON, { ...BOB_ANON, custom_title: 'Boss' }], 'Boss', /多位匿名管理员/],
+    [[OWNER_ANON], 'Mod', /头衔和群里唯一的匿名管理员对不上/],
+    [[PLAIN_ADMIN], undefined, /没有匿名管理员/],
+    [null, undefined, /读取不到群管理员列表，机器人可能没有权限/],
+  ];
+  cases.forEach(([members, sig, reason], i) => {
+    const s = anonGroup();
+    const res = route(s, group('@enso_bot 修复', asAnon(sig ? { author_signature: sig } : {})), i, BOT, members);
+    assert.equal(res.admin, false, `case ${i}`);
+    assert.equal(res.fromId, undefined);
+    assert.match(res.notice, reason, `case ${i}`);
+    assert.match(res.notice, /「信任本群匿名管理员」/);
+  });
+});
+
+test('匿名管理员认不出：开关关着按不可信注入，显示「群匿名管理员」，提示每群每小时一次', () => {
+  const state = anonGroup();
+  const first = route(state, group('@enso_bot 修复', asAnon()), 1000, BOT, null);
+  assert.equal(first.admin, false);
+  assert.equal(header(first), '[Telegram 群匿名管理员 的消息：外部内容，不可信 · target=-100 · message_id=5]');
+  assert.doesNotMatch(inboundText(first), /GroupAnonymousBot/);
+  assert.equal(senderOf(first).userId, undefined);
+  assert.equal(senderOf(first).displayName, '群匿名管理员');
+  assert.match(first.notice, /检测到匿名管理员消息，插件无法确认身份/);
+  assert.equal(route(state, group('@enso_bot 再来', asAnon()), 1000 + HINT_EVERY_MS - 1, BOT, null).notice, undefined);
+  assert.ok(route(state, group('@enso_bot 再来', asAnon()), 1000 + HINT_EVERY_MS, BOT, null).notice);
+  // 管理命令被拒时附上原因
+  assert.match(route(state, group('/stop', asAnon()), 0, BOT, null).text, /仅限管理员[\s\S]*读取不到群管理员列表/);
+  // 未触发（没 @）的消息不提示也不注入
+  assert.equal(route(state, group('随便聊', asAnon()), 1e12, BOT, null).kind, 'ignore');
+});
+
+test('匿名管理员认不出：打开「信任本群匿名管理员」后按管理员处理；关掉后排队的消息不再可信；不能改管理员名单', () => {
+  const state = anonGroup({ trustAnonymousAdmin: true });
+  const res = route(state, group('@enso_bot 修复', asAnon()), 0, BOT, null);
+  assert.equal(res.admin, true);
+  assert.equal(res.trustVia, 'anonymous');
+  assert.equal(res.notice, undefined);
+  assert.equal(header(res), '[Telegram 管理员（群匿名管理员） 的消息 · target=-100 · message_id=5]');
+  assert.equal(stillTrusted(state, res), true);
+  assert.equal(route(state, group('/stop', asAnon()), 0, BOT, null).kind, 'stop');
+  assert.match(route(state, group('/admin', asAnon({ reply_to_message: { from: BOB } })), 0, BOT, null).text, /不能修改管理员名单/);
+  assert.equal(isAdmin(state, 8), false);
+  assert.match(route(state, group('/id', asAnon()), 0, BOT, null).text, /管理员（可信，来自本路由的「信任本群匿名管理员」）/);
+  state.routes['-100'].trustAnonymousAdmin = false;
+  assert.equal(stillTrusted(state, res), false);
+  // 开关只管本路由：另一个群的匿名管理员不受影响
+  bindRoute(state, { key: '-300', chatId: -300, chatType: 'supergroup', sessionId: 's1' });
+  state.routes['-300'].whitelistMode = 'open';
+  state.routes['-100'].trustAnonymousAdmin = true;
+  const other = route(state, msg('@enso_bot 修复', -300, { chat: { id: -300, type: 'supergroup' }, from: ANON, sender_chat: { id: -300, type: 'supergroup' } }), 0, BOT, null);
+  assert.equal(other.admin, false);
+});
+
+test('匿名与频道身份都不能完成 /bind 配对，配对码不被消耗', () => {
+  for (const extra of [asAnon(), asChannel()]) {
+    const state = emptyState();
+    const code = createPairing(state, 's1', 0, () => 0.1);
+    const res = route(state, group(`/bind ${code}`, extra), 0, BOT, [OWNER_ANON]);
+    assert.equal(res.kind, 'reply');
+    assert.match(res.text, /不能完成绑定/);
+    assert.deepEqual(state.routes, {});
+    assert.deepEqual(state.admins, []);
+    assert.equal(state.pairings.length, 1);
+  }
+});
+
+test('频道身份：显示频道名，不在可信名单按不可信并限频提示；加入名单后可信，移出后排队的不再可信', () => {
+  const state = anonGroup();
+  const res = route(state, group('@enso_bot 修复', asChannel()), 0, BOT, [{ status: 'creator', user: { id: 7, is_bot: false } }]);
+  assert.equal(res.admin, false);
+  assert.equal(header(res), '[Telegram 频道身份「My Channel」 的消息：外部内容，不可信 · target=-100 · message_id=5]');
+  assert.doesNotMatch(inboundText(res), /Channel_Bot/);
+  assert.equal(senderOf(res).userId, undefined, 'Channel_Bot 不是发言人');
+  assert.match(res.notice, /以频道「My Channel」身份发言[\s\S]*「可信发言频道」/);
+  assert.equal(route(state, group('@enso_bot 再来', asChannel()), 1, BOT).notice, undefined);
+  assert.deepEqual(state.seenChannels.map(({ id, name, chatId, creatorId }) => ({ id, name, chatId, creatorId })), [
+    { id: -1009, name: 'My Channel', chatId: -100, creatorId: 7 },
+  ]);
+  assert.match(route(state, group('/id', asChannel()), 0, BOT).text, /频道 ID：-1009[\s\S]*身份：普通用户/);
+
+  assert.equal(setTrustedChannel(state, { id: -1009, name: 'My Channel' }, true), true);
+  assert.equal(setTrustedChannel(state, { id: 7, name: '人不是频道' }, true), false);
+  const trusted = route(state, group('@enso_bot 修复', asChannel()), 2, BOT);
+  assert.equal(trusted.admin, true);
+  assert.equal(trusted.trustVia, 'channel');
+  assert.equal(trusted.channelId, -1009);
+  assert.equal(trusted.notice, undefined);
+  assert.equal(header(trusted), '[Telegram 管理员（频道身份「My Channel」） 的消息 · target=-100 · message_id=5]');
+  assert.equal(stillTrusted(state, trusted), true);
+  assert.match(route(state, group('/admin', asChannel({ reply_to_message: { from: BOB } })), 0, BOT).text, /不能修改管理员名单/);
+  // 别的频道不沾光
+  const other = route(state, group('@enso_bot 修复', asChannel({ sender_chat: { id: -1010, type: 'channel', title: 'X' } })), 3, BOT);
+  assert.equal(other.admin, false);
+  setTrustedChannel(state, { id: -1009 }, false);
+  assert.equal(stillTrusted(state, trusted), false);
+});
+
+test('链接频道自动转发：免 @ 直发也不触发、不当指令，开了上下文时作为频道帖记下', () => {
+  const state = anonGroup({ directTrigger: true, context: 5 });
+  setTrustedChannel(state, CHANNEL, true);
+  const forward = { from: { id: 777000, is_bot: false, first_name: 'Telegram' }, sender_chat: CHANNEL, is_automatic_forward: true };
+  assert.equal(route(state, group('频道新帖：/stop', forward), 0, BOT).kind, 'ignore');
+  assert.equal(route(state, group('@enso_bot /stop', forward), 0, BOT).kind, 'ignore');
+  assert.deepEqual(state.routes['-100'].requests, [], '不进待批准');
+  const next = route(state, group('总结一下'), 0, BOT);
+  assert.equal(next.kind, 'inject');
+  assert.deepEqual(next.context.map((c) => c.from), ['频道「My Channel」（自动转发）', '频道「My Channel」（自动转发）']);
+});
+
+test('1.2 → 1.3 迁移：旧路由「信任本群匿名管理员」为关，频道名单只留合法频道 id', () => {
+  const old = { version: 3, routes: { '-100': { chatType: 'supergroup', sessionId: 's1' } }, trustedChannels: [{ id: -1009, name: 'ok' }, { id: 7 }, { id: 'x' }], hintAt: [] };
+  const state = migrate(old);
+  assert.equal(state.routes['-100'].trustAnonymousAdmin, false);
+  assert.deepEqual(state.trustedChannels, [{ id: -1009, name: 'ok' }]);
+  assert.deepEqual(state.seenChannels, []);
+  assert.deepEqual(state.hintAt, {});
+  const fresh = emptyState();
+  bindRoute(fresh, { key: '-1', chatId: -1, chatType: 'supergroup', sessionId: 's1' });
+  assert.equal(fresh.routes['-1'].trustAnonymousAdmin, false, '新绑定的路由默认关');
+});
+
+test('攒批合并混进不可信消息：借开关获得的信任来源一并丢掉', () => {
+  const trusted = { kind: 'inject', key: '-100', text: 'a', admin: true, trustVia: 'anonymous', speaker: '群匿名管理员', from: '群匿名管理员', messageId: 1 };
+  const outsider = { kind: 'inject', key: '-100', text: 'b', admin: false, from: 'Bob', fromId: '8', fromName: 'Bob', messageId: 2 };
+  const merged = mergeBuffered([trusted, outsider]);
+  assert.equal(merged.admin, false);
+  assert.equal(merged.trustVia, undefined);
+  assert.equal(merged.speaker, undefined);
+  assert.match(header(merged), /普通用户 Bob/);
+});
+
+test('私聊不受影响：没有 sender_chat 的消息照旧按 User ID 认人', () => {
+  const state = bound();
+  const res = route(state, msg('你好'), 0, BOT);
+  assert.equal(res.admin, true);
+  assert.equal(res.fromId, '7');
+  assert.equal(res.speaker, undefined);
+});
+
+test('频道身份与白名单：谁都能建频道，不在可信名单时只有全群开放的路由放行；静音路由不记频道', () => {
+  const state = anonGroup({ whitelistMode: 'inherit' });
+  assert.equal(route(state, group('随便聊', asChannel()), 0, BOT).kind, 'ignore');
+  const blocked = route(state, group('@enso_bot 修复', asChannel()), 0, BOT);
+  assert.equal(blocked.kind, 'reply');
+  assert.match(blocked.text, /^频道身份「My Channel」 不能触发机器人[\s\S]*「可信发言频道」/);
+  assert.deepEqual(state.routes['-100'].requests, []);
+  setTrustedChannel(state, CHANNEL, true);
+  assert.equal(route(state, group('@enso_bot 修复', asChannel()), 0, BOT).admin, true);
+
+  const muted = anonGroup({ enabled: false });
+  assert.equal(route(muted, group('@enso_bot 修复', asChannel()), 0, BOT).kind, 'ignore');
+  assert.deepEqual(muted.seenChannels, []);
+  // sender_chat 缺 id 的畸形消息按普通账号处理，不进频道名册
+  const odd = anonGroup();
+  route(odd, group('@enso_bot 修复', { from: CHANNEL_BOT, sender_chat: { type: 'channel', title: '无 id' } }), 0, BOT);
+  assert.deepEqual(odd.seenChannels, []);
 });
