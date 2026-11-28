@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-28T05:50:40.654Z",
-  "sequence": 152,
+  "generatedAt": "2026-11-28T14:37:28.015Z",
+  "sequence": 153,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -2382,11 +2382,11 @@
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.swarm.svg",
       "category": "productivity",
       "readme": {
-        "path": "packages/enso.swarm/0.1.13.readme.md",
-        "sha256": "159d2fdffb72d2b27fd4142f80a0252547e50dcdba6993404b8584bc6873abc4",
-        "size": 10755
+        "path": "packages/enso.swarm/0.1.14.readme.md",
+        "sha256": "e191a56bae45103b961bfd08c04305f48e4c892194a6db7c9c890f3bd5919b0a",
+        "size": 11523
       },
-      "latest": "0.1.13",
+      "latest": "0.1.14",
       "versions": [
         {
           "version": "0.1.10",
@@ -2447,6 +2447,26 @@
           "sha256": "fe89e4f4591a1a97df7bb020e764332e939b64becb34d0292adf34bdde3ebe7e",
           "size": 709986,
           "publishedAt": "2026-11-27T05:19:00.030Z"
+        },
+        {
+          "version": "0.1.14",
+          "engines": {
+            "enso": ">=0.3.14"
+          },
+          "permissions": [
+            "agent.inject",
+            "agent.injectTrusted",
+            "agent.observe",
+            "agent.tool",
+            "process.background",
+            "session.focus",
+            "session.read",
+            "ui.view"
+          ],
+          "path": "packages/enso.swarm/0.1.14.zip",
+          "sha256": "0a37c7da2dd0e8513e0dbb68f012b5a7ecea14c7eb5da35874deeae6a7860b57",
+          "size": 721031,
+          "publishedAt": "2026-11-28T14:37:28.015Z"
         }
       ]
     },
