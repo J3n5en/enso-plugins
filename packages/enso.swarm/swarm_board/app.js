@@ -221,14 +221,15 @@
     return parts.length ? `<span class="msg-to">${ICON.arrow}${parts.join('')}</span>` : '';
   }
 
-  // Highlight @name the way board/mentions.go matches it: "@" at a word start,
+  // Highlight @name the way channels.mjs matches it: "@" at a word start,
   // followed by a roster name or numbered group prefix (case-insensitive) and
-  // then a non-name rune. Runs on already-escaped HTML; escaping never produces
-  // name runes directly before "@".
-  const MENTION_RE = /(^|[^\p{L}\p{N}_-])@([\p{L}\p{N}_-]+)/gu;
+  // then a non-name rune, where only ASCII name runes glue ("请@worker回答"
+  // highlights, "foo@worker.com" does not). Runs on already-escaped HTML;
+  // escaping never produces name runes directly before "@".
+  const MENTION_RE = /(^|[^a-z0-9_-])@([a-z0-9_-]+)/gi;
   // "@#channel": highlighted when it names one of the swarm's channels (the
   // server decides whom it calls on: m.via_channel).
-  const CHANNEL_MENTION_RE = /(^|[^\p{L}\p{N}_-])@#([a-z][a-z0-9-]{0,23})(?![\p{L}\p{N}_-])/giu;
+  const CHANNEL_MENTION_RE = /(^|[^a-z0-9_-])@#([a-z][a-z0-9-]{0,23})(?![a-z0-9_-])/gi;
   function highlightChannelMentions(html) {
     if (!hasChannels()) return html;
     return html.replace(CHANNEL_MENTION_RE, (all, pre, name) => {

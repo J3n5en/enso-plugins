@@ -67,9 +67,11 @@ Do not paste the user's request. Workers cannot see it.
 ## Keeping the loop alive
 
 ```
-status → assign by name → swarm_wait{since:head} → swarm_read → decide → …
+status → assign by name → swarm_wait{since:head, mentionsOnly:false} → swarm_read → decide → …
 ```
 
+-   Wait with `mentionsOnly:false`: you drive the chain, so every post, called
+    or not, may need your next move.
 -   Use `swarm_wait`, not a `swarm_read` loop. Reading costs a turn; waiting
     does not.
 -   `since` must be the highest seq you have actually read. If you pass the head

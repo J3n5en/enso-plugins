@@ -14,26 +14,23 @@ export const MAIN = 'main';
 export const ALL = '*';
 
 // ---------------------------------------------------------------------------
-// Mentions, mirroring board/mentions.go: "@" at a word start, then the name
-// (or "<prefix>" when name is "<prefix>-<digits>"), then a non-name rune or
-// end of text.
+// Mentions, after board/mentions.go: "@" at a word start, then the name (or
+// "<prefix>" when name is "<prefix>-<digits>"), then a non-name rune or end of
+// text. Enso departs from it in one place: only ASCII name runes glue to the
+// mention, so "请@worker回答" calls on worker while "foo@worker.com" does not.
+// main.mjs wakes members with this same mentionsOf.
 // ---------------------------------------------------------------------------
 
-const NAME_RUNE = /[\p{L}\p{Nd}_-]/u;
+// Tested on lowercased text, so this is every ASCII letter and digit.
+const NAME_RUNE = /[a-z0-9_-]/;
 
 function namedToken(lowerText, lowerName) {
   if (!lowerName) return false;
   for (let i = lowerText.indexOf('@'); i >= 0; i = lowerText.indexOf('@', i + 1)) {
-    if (i > 0) {
-      // Spreading the last two code units yields the whole preceding rune
-      // even when it is a surrogate pair.
-      const before = [...lowerText.slice(Math.max(0, i - 2), i)].pop();
-      if (NAME_RUNE.test(before)) continue;
-    }
+    if (i > 0 && NAME_RUNE.test(lowerText[i - 1])) continue;
     if (!lowerText.startsWith(lowerName, i + 1)) continue;
     const j = i + 1 + lowerName.length;
-    if (j >= lowerText.length) return true;
-    if (!NAME_RUNE.test(String.fromCodePoint(lowerText.codePointAt(j)))) return true;
+    if (j >= lowerText.length || !NAME_RUNE.test(lowerText[j])) return true;
   }
   return false;
 }
@@ -125,13 +122,9 @@ export function channelMentions(text) {
   const lower = String(text || '').toLowerCase();
   const out = [];
   for (let i = lower.indexOf('@#'); i >= 0; i = lower.indexOf('@#', i + 1)) {
-    if (i > 0 && NAME_RUNE.test([...lower.slice(Math.max(0, i - 2), i)].pop())) continue;
+    if (i > 0 && NAME_RUNE.test(lower[i - 1])) continue;
     let j = i + 2;
-    while (j < lower.length) {
-      const r = String.fromCodePoint(lower.codePointAt(j));
-      if (!NAME_RUNE.test(r)) break;
-      j += r.length;
-    }
+    while (j < lower.length && NAME_RUNE.test(lower[j])) j += 1;
     const name = lower.slice(i + 2, j);
     if ((name === MAIN || (CHANNEL_NAME.test(name) && !RESERVED.has(name))) && !out.includes(name)) out.push(name);
   }

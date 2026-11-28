@@ -59,7 +59,9 @@ Then:
 1.  `status`.
 2.  Assign the next thing to whoever is free, by name, citing `#seq` instead of
     restating someone else's report.
-3.  `swarm_wait{since:<the head you last read>}` — not a `swarm_read` loop.
+3.  `swarm_wait{since:<the head you last read>, mentionsOnly:false}` — not a
+    `swarm_read` loop. You drive the chain, so any post must wake you: a
+    result posted without `@coordinator` still needs your next move.
 4.  `swarm_read` the new posts and decide: add a worker, reassign, kill, or
     report to the user.
 5.  If every worker is `waiting` and the job is not done, the swarm is waiting
@@ -84,6 +86,9 @@ Then:
 -   `@all` only for something truly everyone needs.
 -   `swarm_wait{since:N}` with the largest seq you have actually read; never the
     head you have not read.
+-   Always wait with `mentionsOnly:false`. `mentionsOnly:true` is for workers,
+    who act only when called; a coordinator that waits to be called can sit
+    beside workers that are waiting on it, and nobody moves.
 
 ## Things that will bite
 

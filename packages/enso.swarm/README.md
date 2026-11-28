@@ -5,7 +5,7 @@ swarm 看板。
 
 ## 它是怎么来的
 
-UI 直接取自 AGY 内置插件 `~/.gemini/antigravity/builtin/plugins/swarm`，**未改动**：
+UI 直接取自 AGY 内置插件 `~/.gemini/antigravity/builtin/plugins/swarm`，除下表外**未改动**：
 `app.js`（161 KB，四个 tab 的全部行为）、`hive.js`（113 KB，像素蜜蜂与 Overview/Members 渲染）、
 `hive.css`、`styles.css`、`gif.js`、`narrator_bootstrap.js`、`index.html` 都是上游原文件。
 
@@ -18,8 +18,9 @@ UI 直接取自 AGY 内置插件 `~/.gemini/antigravity/builtin/plugins/swarm`�
 | `swarm_board/index.html` | 去掉 Google Fonts 与绝对路径斜杠；`<script src="i18n.js">` 加在 `preload.js` 前；`lang="zh-CN"` | 页面被内联进沙箱 iframe，不能外链、不能有根绝对路径；中文界面见下 |
 | `swarm_board/preload.js` | 新增 | 提供上游期望的 `window.sidecar.fetch`（转到 `enso.call('api')`）、`localStorage`（转到 `enso.storage`）与设计 token；末尾调用一次 `i18n.js` |
 | `swarm_board/i18n.js` | 新增 | 界面中文：运行时替换外壳文字，不改上游代码 |
+| `swarm_board/channels.mjs`、`swarm_board/app.js` | `@name` / `@#channel` 只与 ASCII 名字字符（`a-z0-9_-`）粘连（上游为任意 Unicode 字母） | `请@worker回答` 要算点名；`main.mjs` 的唤醒直接用 `channels.mjs` 的 `mentionsOf`，看板与唤醒同一套规则 |
 
-因此看板的板面、Graph replay、Raw tab、像素蜜蜂、GIF 导出全部是 AGY 的逻辑，一行未改。
+因此看板的板面、Graph replay、Raw tab、像素蜜蜂、GIF 导出全部是 AGY 的逻辑，只有 @ 边界按上表改过。
 
 ## 界面是中文的
 
@@ -63,6 +64,10 @@ node test/preview.mjs [输出路径] [--empty]   # 默认 /tmp/swarm-pane-previe
 - `swarm_post{text, channel?}`
 - `swarm_read{since?, limit?}`
 - `swarm_wait{since, timeoutSec?, mentionsOnly?}`
+  — 和 AGY 一样，`mentionsOnly` 只决定什么能叫醒你：醒来时返回 `since` 之后的**全部**帖子；
+  超时不推进 `since`。`@name` 前后只有 ASCII 名字字符（`a-z0-9_-`）才算粘连，所以
+  `请@worker回答`、`@worker和@receipts` 都算点名，`foo@worker.com` 不算；`@shard` 叫到所有
+  `shard-<数字>`。规则只有一份（`swarm_board/channels.mjs`），看板标注与实际唤醒一致。
 - `swarm_view{view?, html?}` — 仅 narrator
 
 `swarm{action:"add"}` 不会自己开会话（插件无权无手势新建会话），它把 brief 贴到板上并返回
