@@ -124,6 +124,7 @@ out/v1/                   本地构建产物，不提交
 3. **本地检查**：
 
    ```bash
+   node scripts/external.mjs
    node scripts/validate.mjs
    node --test
    ```

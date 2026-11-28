@@ -536,9 +536,20 @@ export async function validateRepo(root, options = {}) {
   const { packages, errors } = await readPackages(root);
   const readmePath = join(root, 'README.md');
   if (existsSync(readmePath) && packages.length && options.catalog !== false) {
-    const readme = await readFile(readmePath, 'utf8');
-    const next = readmeWithCatalog(readme, catalogMarkdown(packages, await readExternals(root)));
-    if (next !== readme) errors.push('README 插件索引过期，运行 node scripts/catalog.mjs');
+    const externals = await readExternals(root);
+    // 索引行来自 packages/<id> 的清单；外部插件副本缺失或停在别的 commit 时，比出来的差异不说明 README 有错
+    const unsynced = Object.entries(externals)
+      .filter(([id, spec]) => {
+        const marker = join(root, 'packages', id, '.external');
+        return !existsSync(marker) || readFileSync(marker, 'utf8').trim() !== `${spec.repo}@${spec.commit}:${spec.path ?? '.'}`;
+      })
+      .map(([id]) => id);
+    if (unsynced.length) {
+      errors.push(`外部插件未拉取或与 registry/external 的 commit 不符，运行 node scripts/external.mjs：${unsynced.join('、')}`);
+    } else {
+      const readme = await readFile(readmePath, 'utf8');
+      if (readmeWithCatalog(readme, catalogMarkdown(packages, externals)) !== readme) errors.push('README 插件索引过期，运行 node scripts/catalog.mjs');
+    }
   }
   const community = options.community ?? isCommunity();
   const explicit = options.base ?? process.env.BASE_REF ?? '';
