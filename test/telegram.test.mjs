@@ -802,7 +802,7 @@ const header = (action) => inboundText(action).split('\n')[0];
 
 test('匿名管理员：群里只有一位开了匿名且是插件管理员，直接按 TA 可信处理，不提示', () => {
   const state = anonGroup();
-  const res = route(state, group('@enso_bot 修复', asAnon()), 0, BOT, [OWNER_ANON, PLAIN_ADMIN]);
+  const res = route(state, group('@enso_bot 修复', asAnon({ author_signature: 'Boss' })), 0, BOT, [OWNER_ANON, PLAIN_ADMIN]);
   assert.equal(res.kind, 'inject');
   assert.equal(res.admin, true);
   assert.equal(res.fromId, '7');
@@ -810,18 +810,22 @@ test('匿名管理员：群里只有一位开了匿名且是插件管理员，�
   assert.equal(res.notice, undefined);
   assert.equal(header(res), '[Telegram 管理员 @alice（匿名发言） 的消息 · target=-100 · message_id=5]');
   assert.equal(stillTrusted(state, res), true);
-  assert.equal(route(state, group('/stop', asAnon()), 0, BOT, [OWNER_ANON]).kind, 'stop');
-  assert.match(route(state, group('/id', asAnon()), 0, BOT, [OWNER_ANON]).text, /认出是 @alice（User ID：7）[\s\S]*身份：管理员（可信）/);
+  const boss = asAnon({ author_signature: 'Boss' });
+  assert.equal(route(state, group('/stop', boss), 0, BOT, [OWNER_ANON]).kind, 'stop');
+  assert.match(route(state, group('/id', boss), 0, BOT, [OWNER_ANON]).text, /认出是 @alice（User ID：7）[\s\S]*身份：管理员（可信）/);
+  // 推断出来的身份可以发指令，但改不了管理员名单
+  assert.match(route(state, group('/admin', { ...boss, reply_to_message: { from: BOB } }), 0, BOT, [OWNER_ANON]).text, /不能修改管理员名单/);
+  assert.equal(isAdmin(state, 8), false);
 });
 
 test('匿名管理员：唯一那位不是插件管理员时按 TA 本人当普通用户，白名单也按 TA 过滤', () => {
   const state = anonGroup({ whitelistMode: 'custom' });
-  const res = route(state, group('@enso_bot 你好', asAnon()), 0, BOT, [BOB_ANON]);
+  const res = route(state, group('@enso_bot 你好', asAnon({ author_signature: 'Mod' })), 0, BOT, [BOB_ANON]);
   assert.equal(res.kind, 'reply');
   assert.match(res.text, /^Bob 不在白名单里/);
   assert.deepEqual(state.routes['-100'].requests, [{ id: 8, name: 'Bob' }]);
   state.routes['-100'].whitelistMode = 'open';
-  const open = route(state, group('@enso_bot 你好', asAnon()), 0, BOT, [BOB_ANON]);
+  const open = route(state, group('@enso_bot 你好', asAnon({ author_signature: 'Mod' })), 0, BOT, [BOB_ANON]);
   assert.equal(open.admin, false);
   assert.equal(open.notice, undefined, '认出了是谁就不必提示');
   assert.deepEqual(senderOf(open), { channel: 'telegram', chatId: '-100', userId: '8', displayName: 'Bob（匿名发言）' });
@@ -833,8 +837,13 @@ test('匿名管理员：多位时按头衔唯一对上；对不上、头衔不�
   const byTitle = route(state, group('@enso_bot 修复', asAnon({ author_signature: 'Boss' })), 0, BOT, both);
   assert.equal(byTitle.admin, true);
   assert.equal(byTitle.fromId, '7');
+  // 没有头衔的匿名管理员发言不带 author_signature：唯一没头衔的那位就是 TA
+  const untitledOwner = { ...OWNER_ANON, custom_title: undefined };
+  assert.equal(route(state, group('@enso_bot 修复', asAnon()), 0, BOT, [untitledOwner, BOB_ANON]).fromId, '7');
   const cases = [
     [both, undefined, /多位匿名管理员/],
+    [[untitledOwner], 'Mod', /头衔和群里唯一的匿名管理员对不上/],
+    [[OWNER_ANON], undefined, /头衔和群里唯一的匿名管理员对不上/],
     [[OWNER_ANON, { ...BOB_ANON, custom_title: 'Boss' }], 'Boss', /多位匿名管理员/],
     [[OWNER_ANON], 'Mod', /头衔和群里唯一的匿名管理员对不上/],
     [[PLAIN_ADMIN], undefined, /没有匿名管理员/],
@@ -973,4 +982,23 @@ test('私聊不受影响：没有 sender_chat 的消息照旧按 User ID 认人'
   assert.equal(res.admin, true);
   assert.equal(res.fromId, '7');
   assert.equal(res.speaker, undefined);
+});
+
+test('频道身份与白名单：谁都能建频道，不在可信名单时只有全群开放的路由放行；静音路由不记频道', () => {
+  const state = anonGroup({ whitelistMode: 'inherit' });
+  assert.equal(route(state, group('随便聊', asChannel()), 0, BOT).kind, 'ignore');
+  const blocked = route(state, group('@enso_bot 修复', asChannel()), 0, BOT);
+  assert.equal(blocked.kind, 'reply');
+  assert.match(blocked.text, /^频道身份「My Channel」 不能触发机器人[\s\S]*「可信发言频道」/);
+  assert.deepEqual(state.routes['-100'].requests, []);
+  setTrustedChannel(state, CHANNEL, true);
+  assert.equal(route(state, group('@enso_bot 修复', asChannel()), 0, BOT).admin, true);
+
+  const muted = anonGroup({ enabled: false });
+  assert.equal(route(muted, group('@enso_bot 修复', asChannel()), 0, BOT).kind, 'ignore');
+  assert.deepEqual(muted.seenChannels, []);
+  // sender_chat 缺 id 的畸形消息按普通账号处理，不进频道名册
+  const odd = anonGroup();
+  route(odd, group('@enso_bot 修复', { from: CHANNEL_BOT, sender_chat: { type: 'channel', title: '无 id' } }), 0, BOT);
+  assert.deepEqual(odd.seenChannels, []);
 });

@@ -33,6 +33,7 @@ import {
   quotesSource,
   registerAsk,
   replyParams,
+  resolveAnonymous,
   rootSession,
   route,
   routeChatId,
@@ -66,6 +67,8 @@ const TRUST_FALLBACK = new Set(['PERMISSION_DENIED', 'INVALID_ARGS', 'UNSUPPORTE
 const MENU_SIZE = 10;
 /** 群/频道管理员列表缓存（认匿名管理员、频道主用）；收到成员变动更新立即作废 */
 const ADMINS_TTL_MS = 10 * 60_000;
+/** 要据此把匿名消息认成插件管理员时只信这么新的列表：缓存期间别的管理员可能刚开了匿名 */
+const ADMINS_TRUST_FRESH_MS = 5_000;
 const RETRY_EVERY_MS = 5_000;
 const MAX_QUEUED = 10;
 /** 会话已空闲/出错，待回还没等到回复：再宽限这么久就判定这一轮没有回复 */
@@ -954,8 +957,8 @@ export function activate(enso, { loop = true, idleGraceMs = IDLE_GRACE_MS, stale
     // 唯一待答 + 普通文字消息（未回复卡片但会话只有一个待答）
     if (!ask && open.length === 1 && (!m.reply_to_message || isRootReply)) ask = open[0];
     if (!ask || typeof enso.session.answerAsk !== 'function') return false;
-    // 普通用户不能替会话作答：明确回复卡片的告知一声，其余照常当普通消息投递
-    if (!action.admin) {
+    // 普通用户不能替会话作答：明确回复卡片的告知一声，其余照常当普通消息投递（信任按当前配置重新核对）
+    if (!stillTrusted(state, action)) {
       if (!explicit) return false;
       await send(action.key, '⛔ 只有管理员可以回答提问，你的回复没有提交。').catch(() => {});
       return true;
@@ -1028,13 +1031,14 @@ export function activate(enso, { loop = true, idleGraceMs = IDLE_GRACE_MS, stale
   // ---- 长轮询 ----
   /** chatId -> { at, members }；members 为 null 表示没读到（没权限、机器人不在频道里等），同样缓存免得每条都查 */
   const adminLists = new Map();
-  const chatAdmins = async (chatId, token) => {
+  const chatAdmins = async (chatId, token, maxAge = ADMINS_TTL_MS) => {
     const hit = adminLists.get(String(chatId));
-    if (hit && Date.now() - hit.at < ADMINS_TTL_MS) return hit.members;
+    if (hit && Date.now() - hit.at < maxAge) return hit.members;
     const members = await api('getChatAdministrators', { chat_id: chatId }, false, token).then(
       (r) => (Array.isArray(r) ? r : null),
       () => null
     );
+    for (const [id, entry] of adminLists) if (Date.now() - entry.at >= ADMINS_TTL_MS) adminLists.delete(id);
     adminLists.set(String(chatId), { at: Date.now(), members });
     return members;
   };
@@ -1043,7 +1047,11 @@ export function activate(enso, { loop = true, idleGraceMs = IDLE_GRACE_MS, stale
     const m = u.message;
     if (!m?.chat || !findRoute(state, m.chat.id, topicOf(m))) return undefined;
     const speaker = speakerOf(m);
-    if (speaker.kind === 'anonymousAdmin') return chatAdmins(m.chat.id, token);
+    if (speaker.kind === 'anonymousAdmin') {
+      const cached = await chatAdmins(m.chat.id, token);
+      const found = resolveAnonymous(cached, m.author_signature);
+      return found.user && isAdmin(state, found.user.id) ? chatAdmins(m.chat.id, token, ADMINS_TRUST_FRESH_MS) : cached;
+    }
     if (speaker.kind === 'channel') return chatAdmins(speaker.channel.id, token);
     return undefined;
   };

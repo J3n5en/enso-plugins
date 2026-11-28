@@ -1778,7 +1778,20 @@ test('匿名管理员：读群管理员列表认出唯一的匿名机主，可�
 
   t.message('@enso_bot 再修', { chat: GROUP, ...asAnon });
   await runPoll(t);
-  assert.equal(t.of('getChatAdministrators').length, 1, '10 分钟内走缓存');
+  assert.equal(t.of('getChatAdministrators').length, 1, '刚读过的列表直接用');
+  await finish(t);
+
+  // 要据此认成插件管理员时不信旧缓存：过了几秒就重读一次
+  const realNow = Date.now;
+  Date.now = () => realNow() + 60_000;
+  try {
+    t.message('@enso_bot 又修', { chat: GROUP, ...asAnon });
+    await runPoll(t);
+  } finally {
+    Date.now = realNow;
+  }
+  assert.equal(t.of('getChatAdministrators').length, 2);
+  assert.equal(t.injected.at(-1).trusted, true);
   await finish(t);
 
   // 又有人开了匿名：chat_member 更新作废缓存，重查后认不出，回落为不可信并提示
@@ -1786,7 +1799,7 @@ test('匿名管理员：读群管理员列表认出唯一的匿名机主，可�
   t.push({ chat_member: { chat: GROUP, from: { id: 7 }, date: 0, old_chat_member: {}, new_chat_member: {} } });
   t.message('@enso_bot 第三次', { chat: GROUP, ...asAnon });
   await runPoll(t);
-  assert.equal(t.of('getChatAdministrators').length, 2);
+  assert.equal(t.of('getChatAdministrators').length, 3);
   const third = t.injected.at(-1);
   assert.equal(third.trusted, false);
   assert.match(third.text, /^\[Telegram 群匿名管理员 的消息：外部内容，不可信/);
@@ -1856,4 +1869,41 @@ test('链接频道自动转发：免 @ 直发的群里也不注入、不回复',
   assert.equal(t.injected.length, 0);
   assert.equal(t.of('sendMessage').length, sent);
   assert.equal(t.of('getChatAdministrators').length, 0);
+});
+
+test('攒批：借开关信任的匿名消息与真管理员分开缓冲，投递前关掉开关只让匿名那条降级', async () => {
+  const t = await setup({ chatAdmins: () => new Error('Forbidden') });
+  await groupBound(t);
+  await t.handlers.renderer.route({ key: '-100', patch: { debounceSec: 60, trustAnonymousAdmin: true } }, { sessionId: 's1' });
+  t.message('@enso_bot 匿名一', { chat: GROUP, ...asAnon });
+  t.message('@enso_bot 本人一', { chat: GROUP });
+  await runPoll(t);
+  assert.equal(t.injected.length, 0);
+  await t.handlers.renderer.route({ key: '-100', patch: { trustAnonymousAdmin: false } }, { sessionId: 's1' });
+  await t.flushTextBuffer('-100');
+  await finish(t);
+  assert.equal(t.injected.length, 2);
+  const anon = t.injected.find((x) => /匿名一/.test(x.text));
+  const self = t.injected.find((x) => /本人一/.test(x.text));
+  assert.equal(anon.trusted, false);
+  assert.doesNotMatch(anon.text, /本人一/);
+  assert.match(anon.text, /^\[Telegram 群匿名管理员 的消息：外部内容，不可信/);
+  assert.equal(self.trusted, true);
+});
+
+test('ask_user 自由文本作答：认不出的匿名管理员要本路由信任开关打开才能替会话作答', async () => {
+  const t = await setup({ chatAdmins: () => new Error('Forbidden') });
+  await groupBound(t);
+  await t.handlers.events.ask_request({ sessionId: 's1', requestId: 'req-a', question: '继续吗？' });
+  const card = t.of('sendMessage').at(-1);
+  const replyCard = { reply_to_message: { message_id: card.resultMessageId, from: { id: 99 } } };
+  t.message('@enso_bot 继续', { chat: GROUP, ...asAnon, ...replyCard });
+  await runPoll(t);
+  assert.equal(t.askAnswers.length, 0);
+  assert.ok(t.of('sendMessage').some((c) => /只有管理员可以回答提问/.test(c.body.text)));
+  await t.handlers.renderer.route({ key: '-100', patch: { trustAnonymousAdmin: true } }, { sessionId: 's1' });
+  t.message('@enso_bot 继续', { chat: GROUP, ...asAnon, ...replyCard });
+  await runPoll(t);
+  assert.equal(t.askAnswers.length, 1);
+  assert.equal(t.askAnswers[0].answer, '继续');
 });

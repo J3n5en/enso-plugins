@@ -361,7 +361,7 @@ const channelName = (c) => String(c?.title || (c?.username ? `@${c.username}` : 
  */
 export function speakerOf(m) {
   const sc = m?.sender_chat;
-  if (!sc) return { kind: 'user' };
+  if (!Number.isInteger(sc?.id)) return { kind: 'user' };
   if (sc.id === m.chat?.id) return m.from?.id === ANONYMOUS_ADMIN ? { kind: 'anonymousAdmin' } : { kind: 'user' };
   return { kind: m.is_automatic_forward ? 'autoForward' : 'channel', channel: { id: sc.id, name: channelName(sc) } };
 }
@@ -374,21 +374,17 @@ const ANON_REASONS = {
 };
 
 /**
- * 用 getChatAdministrators 的结果认出匿名管理员：开了匿名的只有一位就是 TA；
- * 多位时按 author_signature（自定义头衔）唯一对上一位。members 为 null 表示没读到。
+ * 用 getChatAdministrators 的结果认出匿名管理员：author_signature 是发言人的自定义头衔（没有头衔就不带），
+ * 开了匿名的管理员里头衔与它严格相等的恰好一位就是 TA。members 为 null 表示没读到。
  */
 export function resolveAnonymous(members, signature) {
   if (!Array.isArray(members)) return { reason: 'unavailable' };
-  const anon = members.filter((c) => c?.is_anonymous === true && Number.isInteger(c.user?.id) && !c.user.is_bot);
-  const sig = String(signature ?? '').trim();
-  const titleOf = (c) => String(c.custom_title ?? '').trim();
+  const anon = members.filter((c) => c?.is_anonymous === true && Number.isInteger(c.user?.id));
   if (!anon.length) return { reason: 'none' };
-  if (anon.length === 1) {
-    if (sig && titleOf(anon[0]) && titleOf(anon[0]) !== sig) return { reason: 'mismatch' };
-    return { user: userOf(anon[0].user) };
-  }
-  const titled = sig ? anon.filter((c) => titleOf(c) === sig) : [];
-  return titled.length === 1 ? { user: userOf(titled[0].user) } : { reason: 'multiple' };
+  const sig = String(signature ?? '').trim();
+  const hits = anon.filter((c) => String(c.custom_title ?? '').trim() === sig);
+  if (hits.length === 1) return { user: userOf(hits[0].user) };
+  return { reason: anon.length === 1 ? 'mismatch' : 'multiple' };
 }
 
 export const isTrustedChannel = (state, id) => (state.trustedChannels ?? []).some((c) => c.id === id);
@@ -449,7 +445,7 @@ export function identify(state, m, hit, members) {
         user: found.user,
         id: found.user.id,
         admin: isAdmin(state, found.user.id),
-        strict: true,
+        strict: false, // 推断出来的身份不能改管理员名单
         from: name,
         name,
         idLine: `你以匿名管理员身份发言，已从群管理员列表认出是 ${found.user.name}（User ID：${found.user.id}）。`,
@@ -725,7 +721,7 @@ function decide(state, update, now, bot, members) {
   const who = identify(state, m, hit, members);
   // 链接频道自动转发进讨论群的帖子不是谁在跟机器人说话：不触发、不当指令（开了上下文时照记进群聊上下文）
   if (who.kind === 'autoForward') return { kind: 'ignore' };
-  if (who.kind === 'channel' && hit) noteChannel(state, who.channel, chatId, creatorOf(members), now);
+  if (who.kind === 'channel' && hit && isRouteEnabled(hit)) noteChannel(state, who.channel, chatId, creatorOf(members), now);
   const { from, admin } = who;
 
   const command = parseCommand(text);
@@ -810,6 +806,13 @@ function decide(state, update, now, bot, members) {
     if (!(command || mention?.test(text) || repliedToBot || live.directTrigger)) return { kind: 'ignore' };
     noteRequest(live, who.user);
     return reply2(`${who.user.name} 不在白名单里。请白名单成员回复 TA 的消息发 /allow，或在 EnsoCode 侧栏批准。`);
+  }
+  // 频道身份谁都能建：不在可信名单里只有全群开放的路由放行
+  if (isGroup && who.kind === 'channel' && !admin && live.whitelistMode !== 'open') {
+    if (!(command || mention?.test(text) || repliedToBot || live.directTrigger)) return { kind: 'ignore' };
+    return reply2(
+      `${who.name} 不能触发机器人：以频道身份发言认不出是谁，不按白名单放行。如是机主，请在 EnsoCode「Telegram Bot」面板「权限」页把它加入「可信发言频道」，或改用个人身份发言。`
+    );
   }
 
   if (command) {
