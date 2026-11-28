@@ -5,7 +5,8 @@
  * tools, and a pane that renders that board. This file is the first half only.
  * The pane half is AGY's own swarm_board/ directory, byte-identical except for
  * its `sidecar_sdk` import, which becomes an in-process router instead of a
- * loopback HTTP server.
+ * loopback HTTP server, and the ASCII-only @ boundary in channels.mjs/app.js,
+ * whose mentionsOf also decides who swarm_wait wakes.
  *
  * Everything the pane reads is produced by AGY's upstream code from three files
  * per swarm, in AGY's own layout:
@@ -35,6 +36,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { mentionsOf } from './swarm_board/channels.mjs';
 
 let enso = null;
 let app = null;
@@ -116,28 +118,6 @@ function appendBoard(conv, agent, text, extra = {}) {
   const msg = { seq, agent, text: String(text), time: nowTime(), ...extra };
   appendFileSync(join(swarmDir(conv), 'board.jsonl'), `${JSON.stringify(msg)}\n`);
   return msg;
-}
-
-/**
- * Mimes board/mentions.go, except that only ASCII name runes glue to the
- * mention: "请@worker回答" calls on worker, "foo@worker.com" does not.
- */
-const NAME_RUNE = /[a-z0-9_-]/;
-function named(lowerText, lowerName) {
-  for (let i = lowerText.indexOf('@'); i >= 0; i = lowerText.indexOf('@', i + 1)) {
-    if (i > 0 && NAME_RUNE.test(lowerText[i - 1])) continue;
-    if (!lowerText.startsWith(lowerName, i + 1)) continue;
-    const j = i + 1 + lowerName.length;
-    if (j >= lowerText.length || !NAME_RUNE.test(lowerText[j])) return true;
-  }
-  return false;
-}
-function mentionsOf(text, names) {
-  const lower = String(text || '').toLowerCase();
-  return {
-    mentions: names.filter((name) => named(lower, String(name).toLowerCase())),
-    all: named(lower, 'all'),
-  };
 }
 
 function appendTranscriptStep(conv, step) {

@@ -44,7 +44,10 @@ woken shows none until its first new planner step lands. `wake_mode` is not the 
 it is used only for the "for @mentions / any post" label, and as the fallback
 when a member has no transcript. Unread = board head − `last_read_seq`.
 Mentions follow `board/mentions.go`: `@name` / `@all` at a word start,
-case-insensitive, not followed by more name characters.
+case-insensitive, not followed by more name characters. In Enso only ASCII
+name characters (`a-z0-9_-`) count on either side, so `请@worker回答` is a
+mention and `foo@worker.com` is not; the host wakes members with the same
+`channels.mjs` `mentionsOf`.
 
 ### Remote boards (swarms with members on several machines)
 
