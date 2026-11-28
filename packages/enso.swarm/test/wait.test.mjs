@@ -4,23 +4,26 @@
 //   - a timeout never moves since; you have not read what came after it.
 //   - "@name" counts when the characters around it are not ASCII name runes,
 //     so Chinese text may touch it ("请@worker回答") and email stays out.
+//   - "@shard" calls on every "shard-<n>", as in board/mentions.go.
+//   - who wakes, the pane's "→ @name" chips and the pane's highlight agree.
 //   - a [stall] post is not repeated within 15 minutes.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import test from 'node:test';
 
 const dataDir = mkdtempSync(join(tmpdir(), 'enso-swarm-wait-'));
 const tools = new Map();
+const methods = new Map();
 const schedules = new Map();
 const handlers = new Map();
 const enso = {
   pluginId: 'enso.swarm',
   dataDir,
   tools: { register: (name, fn) => tools.set(name, fn) },
-  renderer: { handle() {} },
+  renderer: { handle: (name, fn) => methods.set(name, fn) },
   schedules: { register: (id, fn) => schedules.set(id, fn) },
   commands: { register() {} },
   session: {
@@ -70,7 +73,8 @@ const post = async (text, ctx) => {
 const seqsIn = (content) => [...content.matchAll(/^#(\d+) /gm)].map((m) => Number(m[1]));
 
 const lead = 'wait-coordinator';
-const m = await swarmWith(lead, ['worker', 'receipts']);
+const crew = ['worker', 'receipts', 'shard-1', 'shard-2'];
+const m = await swarmWith(lead, crew);
 
 test('a mention wakes the waiter with every post after since, not just the mention', async () => {
   const since = board(lead).at(-1).seq;
@@ -104,26 +108,68 @@ test('a plain timeout with nothing new keeps since too', async () => {
   assert.ok(out.content.includes(`since:${since}`), out.content);
 });
 
-const wakes = async (text, who) => {
+/** Who actually wakes: every member waits, mentionsOnly, right before the post. */
+async function woken(text) {
   const since = board(lead).at(-1).seq;
-  await post(text, m.coordinator);
-  const out = await call('swarm_wait', { since, mentionsOnly: true, timeoutSec: 1 }, m[who]);
-  return seqsIn(out.content).length > 0;
-};
-
-for (const text of ['请@worker回答', '@worker和@receipts一起看', '（@worker）', '@worker，看一下', 'done @worker.', '@WORKER: ping', '@worker']) {
-  test(`"${text}" calls on worker`, async () => {
-    assert.equal(await wakes(text, 'worker'), true);
-  });
+  const seq = await post(text, m.coordinator);
+  const outs = await Promise.all(
+    crew.map((name) => call('swarm_wait', { since, mentionsOnly: true, timeoutSec: 1 }, m[name]))
+  );
+  return { seq, names: crew.filter((_, i) => seqsIn(outs[i].content).length > 0) };
 }
 
-test('"@worker和@receipts" calls on receipts too', async () => {
-  assert.equal(await wakes('@worker和@receipts', 'receipts'), true);
-});
+/** The "→ @name" chips: the pane's /api/swarm payload for that post. */
+async function chips(seq) {
+  const res = await methods.get('api')({ url: '/api/swarm?tail=200' }, m.coordinator);
+  const msg = JSON.parse(res.text).messages.find((x) => x.seq === seq);
+  assert.ok(msg, `the pane has #${seq}`);
+  return (msg.all ? [...crew] : [...msg.mentions]).sort();
+}
 
-for (const text of ['mail foo@worker.com', '@workers please', '@worker-2 please', '@worker_x please']) {
-  test(`"${text}" does not call on worker`, async () => {
-    assert.equal(await wakes(text, 'worker'), false);
+/**
+ * The highlight: app.js's own MENTION_RE run over the escaped text, resolved
+ * the way highlightMentions does (exact member, then "<prefix>" group, @all).
+ */
+const appJs = readFileSync(join(dirname(new URL(import.meta.url).pathname), '..', 'swarm_board', 'app.js'), 'utf8');
+const MENTION_RE = new Function(`return ${/const MENTION_RE = (\/.+\/[a-z]*);/.exec(appJs)[1]}`)();
+function highlighted(text) {
+  const esc = String(text).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  const out = new Set();
+  for (const [, , name] of esc.matchAll(MENTION_RE)) {
+    const lower = name.toLowerCase();
+    if (lower === 'all') crew.forEach((n) => out.add(n));
+    else if (crew.includes(lower)) out.add(lower);
+    else crew.filter((n) => n.replace(/-\d+$/, '') === lower && n !== lower).forEach((n) => out.add(n));
+  }
+  return [...out].sort();
+}
+
+const CASES = [
+  ['请@worker回答', ['worker']],
+  ['@worker和@receipts一起看', ['receipts', 'worker']],
+  ['@worker和@receipts', ['receipts', 'worker']],
+  ['（@worker）', ['worker']],
+  ['@worker，看一下', ['worker']],
+  ['done @worker.', ['worker']],
+  ['@WORKER: ping', ['worker']],
+  ['@worker', ['worker']],
+  ['mail foo@worker.com', []],
+  ['@workers please', []],
+  ['@worker-2 please', []],
+  ['@worker_x please', []],
+  ['请@shard看一下', ['shard-1', 'shard-2']],
+  ['@shard-2 only', ['shard-2']],
+  ['@shard-3 nobody', []],
+  ['a@shard.io', []],
+  ['请@all收尾', [...crew].sort()],
+];
+
+for (const [text, expected] of CASES) {
+  test(`"${text}" calls on ${expected.join(', ') || 'nobody'}, the same in wake, chips and highlight`, async () => {
+    const { seq, names } = await woken(text);
+    assert.deepEqual([...names].sort(), expected, 'who wakes');
+    assert.deepEqual(await chips(seq), expected, 'pane chips');
+    assert.deepEqual(highlighted(text), expected, 'pane highlight');
   });
 }
 
