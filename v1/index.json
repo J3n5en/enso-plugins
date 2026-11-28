@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-28T05:04:22.989Z",
-  "sequence": 151,
+  "generatedAt": "2026-11-28T05:50:40.654Z",
+  "sequence": 152,
   "plugins": [
     {
       "id": "aierlanta.alicetheme",
@@ -2501,11 +2501,11 @@
       "icon": "https://cdn.jsdelivr.net/gh/J3n5en/enso-plugins@main/registry/icons/enso.telegram.svg",
       "category": "integrations",
       "readme": {
-        "path": "packages/enso.telegram/1.2.0.readme.md",
-        "sha256": "56fee43d4ce33d7b6ef5907fec66889494bdd7f7dea2908272e9497cb65d5593",
-        "size": 7184
+        "path": "packages/enso.telegram/1.2.1.readme.md",
+        "sha256": "aff5b015159123290a23657ef16ae339ba9063802d3b1364436dbba52145da4b",
+        "size": 8566
       },
-      "latest": "1.2.0",
+      "latest": "1.2.1",
       "versions": [
         {
           "version": "0.2.0",
@@ -2789,6 +2789,30 @@
           "sha256": "68f2786c9a7007116d1e4ad3d2f5b8ba937be9bf3691ece9777c2d78f96e6757",
           "size": 182694,
           "publishedAt": "2026-11-28T05:04:22.989Z"
+        },
+        {
+          "version": "1.2.1",
+          "engines": {
+            "enso": ">=0.3.14"
+          },
+          "permissions": [
+            "process.background",
+            "agent.inject",
+            "agent.injectTrusted",
+            "agent.observe",
+            "agent.tool",
+            "net.fetch",
+            "session.create",
+            "session.focus",
+            "session.read",
+            "session.readAll",
+            "ui.openExternal",
+            "ui.view"
+          ],
+          "path": "packages/enso.telegram/1.2.1.zip",
+          "sha256": "d16be4ad0d9664c5c41466d0474515bde56129c989b8807d9e61ede298dd3848",
+          "size": 190310,
+          "publishedAt": "2026-11-28T05:50:40.654Z"
         }
       ]
     },
