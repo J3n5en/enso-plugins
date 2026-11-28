@@ -63,6 +63,9 @@ node test/preview.mjs [输出路径] [--empty]   # 默认 /tmp/swarm-pane-previe
 - `swarm_post{text, channel?}`
 - `swarm_read{since?, limit?}`
 - `swarm_wait{since, timeoutSec?, mentionsOnly?}`
+  — 和 AGY 一样，`mentionsOnly` 只决定什么能叫醒你：醒来时返回 `since` 之后的**全部**帖子；
+  超时不推进 `since`。`@name` 前后只有 ASCII 名字字符（`a-z0-9_-`）才算粘连，所以
+  `请@worker回答`、`@worker和@receipts` 都算点名，`foo@worker.com` 不算。
 - `swarm_view{view?, html?}` — 仅 narrator
 
 `swarm{action:"add"}` 不会自己开会话（插件无权无手势新建会话），它把 brief 贴到板上并返回

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "enso.swarm",
   "name": "Swarm",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "description": "蜂群：一个协调者把活拆给几个独立会话，通过共享消息板协作，侧栏是 AGY 的原版看板（Board / Members / Graph / Raw）。",
   "icon": "logo.svg",
   "engines": {
@@ -118,7 +118,7 @@
       },
       {
         "name": "swarm_wait",
-        "description": "Sleep on the board until someone posts, then return the new posts. Waiting costs nothing; polling the board in a loop costs a turn each time. Call again with the returned head as since.",
+        "description": "Sleep on the board until someone posts, then return every post after since. Waiting costs nothing; polling the board in a loop costs a turn each time. Call again with the highest seq you have read as since; a timeout reads nothing, so keep the since you passed.",
         "timeoutMs": 600000,
         "parameters": {
           "type": "object",

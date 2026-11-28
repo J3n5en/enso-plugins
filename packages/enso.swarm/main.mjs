@@ -85,7 +85,8 @@ function writeJsonAtomic(path, value) {
 function readRoster(conv) {
   const roster = readJson(join(swarmDir(conv), 'members.json'), null);
   if (!roster || typeof roster.members !== 'object' || !roster.members) return null;
-  return { title: String(roster.title || ''), members: roster.members };
+  // Callers write this object back, so every field it drops is erased on disk.
+  return { ...roster, title: String(roster.title || '') };
 }
 
 function readBoard(conv) {
@@ -117,15 +118,17 @@ function appendBoard(conv, agent, text, extra = {}) {
   return msg;
 }
 
-/** Mimes board/mentions.go closely enough for the four tools that need it. */
-const NAME_RUNE = /[\p{L}\p{Nd}_-]/u;
+/**
+ * Mimes board/mentions.go, except that only ASCII name runes glue to the
+ * mention: "请@worker回答" calls on worker, "foo@worker.com" does not.
+ */
+const NAME_RUNE = /[a-z0-9_-]/;
 function named(lowerText, lowerName) {
   for (let i = lowerText.indexOf('@'); i >= 0; i = lowerText.indexOf('@', i + 1)) {
-    if (i > 0 && NAME_RUNE.test([...lowerText.slice(Math.max(0, i - 2), i)].pop())) continue;
+    if (i > 0 && NAME_RUNE.test(lowerText[i - 1])) continue;
     if (!lowerText.startsWith(lowerName, i + 1)) continue;
     const j = i + 1 + lowerName.length;
-    if (j >= lowerText.length) return true;
-    if (!NAME_RUNE.test(String.fromCodePoint(lowerText.codePointAt(j)))) return true;
+    if (j >= lowerText.length || !NAME_RUNE.test(lowerText[j])) return true;
   }
   return false;
 }
@@ -671,23 +674,24 @@ async function waitForPosts(ctx, conv, { since = 0, timeoutSec = 120, mentionsOn
     const board = readBoard(conv);
     const fresh = board.filter((msg) => Number(msg.seq) > from);
     const names = Object.keys((readRoster(conv) || { members: {} }).members);
-    const relevant = mentionsOnly
-      ? fresh.filter((msg) => {
+    // mentionsOnly decides what wakes you, not what you get: the wake hands
+    // back every post after since, like AGY's swarm_wait.
+    const woken = mentionsOnly
+      ? fresh.some((msg) => {
           const { mentions, all } = mentionsOf(msg.text, names);
           return msg.agent !== me.name && (all || mentions.includes(me.name));
         })
-      : fresh;
-    if (relevant.length) {
-      const head = Number(board[board.length - 1].seq) || 0;
+      : fresh.length > 0;
+    const head = board.length ? Number(board[board.length - 1].seq) || 0 : 0;
+    if (woken) {
+      const posts = fresh.slice(-40);
       recordActivity(ctx, conv, 'swarm_wait', {}, 'Waiting for posts');
-      return { head, timedOut: false, posts: relevant.slice(-40) };
+      return { head, since: from, timedOut: false, omitted: fresh.length - posts.length, posts };
     }
-    if (Date.now() >= deadline) {
-      recordActivity(ctx, conv, 'swarm_wait', {}, 'Waiting for posts');
-      return { head: board.length ? Number(board[board.length - 1].seq) || 0 : 0, timedOut: true, posts: [] };
-    }
-    if (ctx && ctx.signal && ctx.signal.aborted) {
-      return { head: board.length ? Number(board[board.length - 1].seq) || 0 : 0, timedOut: true, posts: [] };
+    const aborted = Boolean(ctx && ctx.signal && ctx.signal.aborted);
+    if (aborted || Date.now() >= deadline) {
+      if (!aborted) recordActivity(ctx, conv, 'swarm_wait', {}, 'Waiting for posts');
+      return { head, since: from, timedOut: true, unread: fresh.length, posts: [] };
     }
     await sleep(400);
   }
@@ -984,10 +988,16 @@ export async function activate(inner) {
     const conv = requireSwarm(ctx).swarm;
     const out = await waitForPosts(ctx, conv, args || {});
     if (out.timedOut) {
-      return { content: `No new posts. head is still #${out.head}; call swarm_wait{since:${out.head}} again to keep waiting.` };
+      // since stays put: a timeout read nothing, so moving it would skip posts.
+      const unread = out.unread
+        ? `Nothing called on you. You have not read the ${out.unread} post${out.unread === 1 ? '' : 's'} after #${out.since} (head #${out.head}); ` +
+          `swarm_read{since:${out.since}} to read them, then wait from the highest seq you read.`
+        : `No new posts after #${out.since}.`;
+      return { content: `${unread} To keep waiting: swarm_wait{since:${out.since}}.` };
     }
     const lines = out.posts.map((msg) => `#${msg.seq} ${msg.agent}: ${msg.text}`);
-    return { content: `head #${out.head}\n${lines.join('\n')}` };
+    const omitted = out.omitted ? ` (${out.omitted} older posts after #${out.since} omitted; swarm_read{since:${out.since}} for them)` : '';
+    return { content: `head #${out.head}${omitted}\n${lines.join('\n')}` };
   });
 
   enso.tools.register('swarm_view', async (args, ctx) => {
