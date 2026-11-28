@@ -61,6 +61,10 @@ const TRUST_FALLBACK = new Set(['PERMISSION_DENIED', 'INVALID_ARGS', 'UNSUPPORTE
 const MENU_SIZE = 10;
 const RETRY_EVERY_MS = 5_000;
 const MAX_QUEUED = 10;
+/** 会话已空闲/出错，待回还没等到回复：再宽限这么久就判定这一轮没有回复 */
+const IDLE_GRACE_MS = 15_000;
+/** 旧宿主查不到会话状态：这么久没有任何动静才判定卡住 */
+const STALE_MS = 20 * 60_000;
 /** 入站相册：同组消息 1.2s 防抖后合并且 inflight 下载计数的等待上限 */
 const ALBUM_DEBOUNCE_MS = 1_200;
 const ALBUM_WAIT_MS = 8_000;
@@ -91,8 +95,8 @@ export function deactivate() {
   current = null;
 }
 
-/** options.loop=false 时不起常驻轮询，返回 tick() 供测试逐轮驱动 */
-export function activate(enso, { loop = true } = {}) {
+/** options.loop=false 时不起常驻轮询，返回 tick() 供测试逐轮驱动；idleGraceMs/staleMs 供测试缩短卡住判定 */
+export function activate(enso, { loop = true, idleGraceMs = IDLE_GRACE_MS, staleMs = STALE_MS } = {}) {
   deactivate();
   const self = { stopped: false, timers: [], timeouts: new Set(), wake: null };
   current = self;
@@ -370,10 +374,21 @@ export function activate(enso, { loop = true } = {}) {
   /** 返回 false 表示会话仍没运行，留在队列里 */
   const deliverInject = async (action, retry = false) => {
     const latest = await load().catch(() => null);
+    const sid = rootSession(action.sessionId);
+    /** 补投时丢掉队首这条（静音了、图片取不到） */
+    const dropQueued = async () => {
+      if (!retry) return 'dropped';
+      await update((state) => {
+        const rest = (state.queue?.[sid] ?? []).filter((q) => !(q.key === action.key && q.messageId === action.messageId));
+        if (rest.length) state.queue[sid] = rest;
+        else delete state.queue[sid];
+      });
+      return 'dropped';
+    };
     // 关掉开关前已进缓冲/队列的消息：投递前再看一次，静音了就丢掉
     if (latest?.routes[action.key]?.enabled === false) {
       typingStop(action.key);
-      return true;
+      return dropQueued();
     }
     // 提示词前置：以当前路由配置为准
     if (action.promptPrefix === undefined) {
@@ -390,7 +405,7 @@ export function activate(enso, { loop = true } = {}) {
         attached = await Promise.all(imageRefs.map((img) => downloadImage(img)));
       } catch (error) {
         await send(action.key, `图片没收到：${error?.message ?? error}`).catch(() => {});
-        return true;
+        return dropQueued();
       }
     }
     // 管理员：trusted 且不带 sender（带 sender 的注入宿主一律按外部数据包裹）；普通用户：不可信 + sender
@@ -435,84 +450,182 @@ export function activate(enso, { loop = true } = {}) {
     const done = () => imageRefs.forEach(dropImage);
     // 占位与最终回复引用触发这轮的消息（攒批合并时是最后一条）；路由关了引用就都不引
     const source = quotesSource(latest, action.key) ? action.messageId : undefined;
-    if (retry) {
-      try {
-        await inject();
-      } catch (error) {
-        if (notRunning(error)) return false;
-        done();
-        await send(action.key, explain(error)).catch(() => {});
-        return true;
+    const steer = !retry && action.deliverAs === 'steer';
+    const ticket = { key: action.key, sourceId: action.messageId, at: Date.now() };
+    const sameTicket = (t) => t.key === ticket.key && t.sourceId === ticket.sourceId;
+    const notify = (text) =>
+      sendQuoted({ chat_id: routeChatId(action.key), ...threadParams(action.key), text }, source).catch(() => null);
+
+    // 一个会话同一时间只跑一轮 Telegram 发起的任务：宿主把运行中收到的 followUp 并进同一轮，
+    // agent_end 只带最后一条回复，前一条的回答会丢。所以上一轮没结束时普通消息先排队，/steer 才插进当前任务。
+    // 认领（记待回）与排队在同一把锁里判定，补投和新消息不会同时认领。
+    const claim = await update(async (state) => {
+      const queued = state.queue?.[sid] ?? [];
+      const busy = pendingTargets(state, sid).length > 0;
+      if (retry) {
+        if (busy) return 'busy';
+        state.queue[sid] = queued.filter((q) => !(q.key === action.key && q.messageId === action.messageId));
+        if (!state.queue[sid].length) delete state.queue[sid];
+      } else if (!steer && (busy || queued.length)) {
+        if (queued.length >= MAX_QUEUED) return 'full';
+        // 排队提示总是发（关了进度提示也发）：每条消息都要知道自己的下落
+        const notice = await notify(`⏸ 已排队：前面还有 ${queued.length + (busy ? 1 : 0)} 条没处理完，轮到时自动处理。`);
+        state.queue[sid] = [...queued, { ...action, noticeId: notice?.message_id }];
+        return 'queued';
       }
-      done();
-      const placeholder = quiet(latest, action.key)
-        ? null
-        : await sendQuoted(
-            { chat_id: routeChatId(action.key), ...threadParams(action.key), text: '▶️ 会话已启动，开始处理排队的消息…' },
-            source
-          ).catch(() => null);
-      await update((state) =>
-        markPending(state, action.sessionId, { key: action.key, placeholderId: placeholder?.message_id, sourceId: action.messageId })
-      );
-      if (!quiet(latest, action.key)) typingStart(action.key);
-      return true;
-    }
-    const steer = action.deliverAs === 'steer';
-    const placeholder = quiet(latest, action.key)
-      ? null
-      : await sendQuoted(
-          { chat_id: routeChatId(action.key), ...threadParams(action.key), text: steer ? '↪️ 已插入当前任务' : '⏳ 已收到，处理中…' },
-          source
-        ).catch(() => null);
-    await update((state) => {
-      const existing = pendingTargets(state, action.sessionId).find((t) => t.key === action.key);
-      if (!(steer && existing))
-        markPending(state, action.sessionId, { key: action.key, placeholderId: placeholder?.message_id, sourceId: action.messageId });
+      const existing = pendingTargets(state, sid).find((t) => t.key === action.key);
+      if (steer && existing) return 'steered';
+      markPending(state, sid, ticket);
+      return 'claimed';
     });
+    if (claim === 'busy') return 'busy';
+    if (claim === 'queued') {
+      done();
+      return 'queued';
+    }
+    if (claim === 'full') {
+      done();
+      await notify(`⚠️ 排队的消息已满（${MAX_QUEUED} 条），这条没有排上，请等前面的处理完再发。`);
+      return 'dropped';
+    }
+    const setPlaceholder = (placeholderId) =>
+      update((state) => {
+        const t = pendingTargets(state, sid).find(sameTicket);
+        if (t) t.placeholderId = placeholderId;
+        return !!t;
+      });
+    const unclaim = () =>
+      update((state) => {
+        const rest = pendingTargets(state, sid).filter((t) => !(claim === 'claimed' && sameTicket(t)));
+        if (rest.length) state.pending[sid] = rest;
+        else delete state.pending[sid];
+      });
+
+    // 新消息：先发占位再注入（占位发出时就引用原消息）；补投：注入成功后才动排队提示
+    const placeholder =
+      retry || quiet(latest, action.key) ? null : await notify(steer ? '↪️ 已插入当前任务' : '⏳ 已收到，处理中…');
+    if (placeholder && claim === 'claimed') await setPlaceholder(placeholder.message_id);
     try {
       await inject();
-      if (!quiet(latest, action.key)) typingStart(action.key);
-      done();
     } catch (error) {
-      const queue = notRunning(error);
-      await update((state) => {
-        state.pending[rootSession(action.sessionId)] = pendingTargets(state, action.sessionId).filter(
-          (t) => t.key !== action.key
-        );
-        if (queue) {
-          const k = rootSession(action.sessionId);
-          state.queue = { ...state.queue, [k]: [...(state.queue?.[k] ?? []), action].slice(-MAX_QUEUED) };
+      await unclaim();
+      if (notRunning(error)) {
+        if (retry) {
+          // 放回队首，等会话启动
+          await update((state) => {
+            state.queue[sid] = [action, ...(state.queue?.[sid] ?? [])];
+          });
+          return 'offline';
         }
-      });
-      if (!queue) done();
-      const text = queue
-        ? '⏸ 绑定的会话还没启动，消息已排队，会话启动后自动处理（EnsoCode 窗口需要开着）。'
-        : explain(error);
-      if (placeholder) await edit(action.key, placeholder.message_id, text);
-      else await send(action.key, text, { replyTo: source });
+        const text = '⏸ 绑定的会话还没启动，消息已排队，会话启动后自动处理（EnsoCode 窗口需要开着）。';
+        const notice = placeholder ? (await edit(action.key, placeholder.message_id, text), placeholder) : await notify(text);
+        const full = await update((state) => {
+          const queued = state.queue?.[sid] ?? [];
+          if (queued.length >= MAX_QUEUED) return true;
+          state.queue[sid] = [...queued, { ...action, noticeId: notice?.message_id }];
+          return false;
+        });
+        if (full) {
+          done();
+          const refuse = `⚠️ 排队的消息已满（${MAX_QUEUED} 条），这条没有排上，请等会话启动后再发。`;
+          if (notice) await edit(action.key, notice.message_id, refuse);
+          else await notify(refuse);
+        }
+        return 'offline';
+      }
+      done();
+      if (placeholder) await edit(action.key, placeholder.message_id, explain(error));
+      else await notify(explain(error));
+      return 'dropped';
     }
-    return true;
+    done();
+    if (retry && claim === 'claimed' && !quiet(latest, action.key)) {
+      // 排队提示改作这一轮的占位；关了进度提示就留着它，最终回复引用原消息另发
+      // 先登记再改写：这一轮若已经结束（回复已写进排队提示），就别再把它改回「▶️」
+      const text = '▶️ 轮到这条了，开始处理…';
+      if (action.noticeId) {
+        if (await setPlaceholder(action.noticeId)) await edit(action.key, action.noticeId, text);
+      } else {
+        const sent = await notify(text);
+        if (sent) await setPlaceholder(sent.message_id);
+      }
+    }
+    if (!quiet(latest, action.key)) typingStart(action.key);
+    return 'injected';
   };
 
-  /** 逐个会话按顺序重投排队的消息 */
-  let flushing = null;
-  const flush = (only) =>
-    (flushing ??= (async () => {
-      const queue = (await load()).queue ?? {};
-      for (const [sid, items] of Object.entries(queue)) {
-        if (only && sid !== rootSession(only)) continue;
-        for (const item of items) {
-          if (!(await deliverInject(item, true))) break;
-          await update((state) => {
-            const rest = (state.queue?.[sid] ?? []).filter(
-              (q) => !(q.key === item.key && q.messageId === item.messageId)
-            );
-            if (rest.length) state.queue[sid] = rest;
-            else delete state.queue?.[sid];
-          });
-        }
+  /** 上一轮卡住（宿主重启、出错不再重试等，始终等不到带正文的 agent_end）时给它一个结局，免得后面排队的消息永远等下去 */
+  const sessionState = async (sid) => {
+    if (typeof enso.session?.status !== 'function') return null;
+    try {
+      return (await enso.session.status(sid))?.state ?? null;
+    } catch {
+      return null;
+    }
+  };
+  const activity = new Map(); // 会话 -> 最近一次工具调用
+  const releaseStale = async () => {
+    const state = await load();
+    const now = Date.now();
+    for (const [sid, targets] of Object.entries(state.pending)) {
+      if (!targets?.length) continue;
+      // 1.2.0 留下的待回没有时间戳：从现在起算
+      if (targets.some((t) => !t.at)) {
+        await update((s) => (s.pending[sid] ?? []).forEach((t) => (t.at ??= now)));
+        continue;
       }
-    })().finally(() => (flushing = null)));
+      const idleFor = now - Math.max(...targets.map((t) => t.at), activity.get(sid) ?? 0);
+      const st = await sessionState(sid);
+      const stale = st === 'idle' || st === 'error' ? idleFor >= idleGraceMs : st === null && idleFor >= staleMs;
+      if (!stale) continue;
+      await closeTickets(sid, '⚠️ 这一轮没有等到回复（会话已结束、出错或被中断），请重新发送这条消息。');
+    }
+  };
+  /** 不带正文地关掉一个会话的全部待回：有占位就改写，没有就引用原消息另发一条 */
+  const closeTickets = async (sid, text) => {
+    const { taken, state } = await update((s) => {
+      const ts = s.pending[sid] ?? [];
+      delete s.pending[sid];
+      return { taken: ts, state: s };
+    });
+    progress.delete(sid);
+    for (const t of taken) {
+      typingStop(t.key);
+      if (state.routes[t.key]?.enabled === false) continue;
+      if (t.placeholderId) await edit(t.key, t.placeholderId, text);
+      else await send(t.key, text, { replyTo: quotesSource(state, t.key) ? t.sourceId : undefined }).catch(() => {});
+    }
+    return taken;
+  };
+
+  /** 每个会话一次只放出队首一条；flush 进行中又被叫到时，跑完再来一遍，不漏掉刚结束的轮次 */
+  let flushing = null;
+  let flushAgain = false;
+  const flushOnce = async () => {
+    await releaseStale();
+    const queue = (await load()).queue ?? {};
+    for (const sid of Object.keys(queue)) {
+      for (;;) {
+        const head = (await load()).queue?.[sid]?.[0];
+        if (!head) break;
+        const r = await deliverInject(head, true);
+        if (r !== 'dropped') break;
+      }
+    }
+  };
+  const flush = () => {
+    if (flushing) {
+      flushAgain = true;
+      return flushing;
+    }
+    flushing = (async () => {
+      do {
+        flushAgain = false;
+        await flushOnce();
+      } while (flushAgain);
+    })().finally(() => (flushing = null));
+    return flushing;
+  };
 
   // ---- 攒批与相册缓冲（内存态；重启丢失可接受，Telegram 不会重投同一条） ----
   // 缓冲按「路由 + 角色」分组，管理员与普通用户的消息绝不合并进同一条注入
@@ -881,7 +994,10 @@ export function activate(enso, { loop = true } = {}) {
         try {
           await enso.session.abort(action.sessionId);
           typingStop(action.key);
-          return send(action.key, '⏹ 已停止当前任务。');
+          // 被停掉的这一轮不会再有回复：先给它的待回一个结局，再放排队的下一条
+          await closeTickets(rootSession(action.sessionId), '⏹ 已停止，这一轮没有回复。');
+          await send(action.key, '⏹ 已停止当前任务。');
+          return flush();
         } catch (error) {
           if (error?.code === 'ABORT_FAILED') return send(action.key, '没有正在运行的任务。');
           if (error?.code === 'UNSUPPORTED' || error?.code === 'INVALID_ARGS' || /session\.abort/.test(error?.message))
@@ -962,6 +1078,7 @@ export function activate(enso, { loop = true } = {}) {
     const entry = progress.get(key) ?? { steps: 0, at: 0 };
     entry.steps += 1;
     progress.set(key, entry);
+    activity.set(key, Date.now());
     if (Date.now() - entry.at < PROGRESS_EVERY_MS) return;
     entry.at = Date.now();
     const state = await load();
@@ -972,9 +1089,13 @@ export function activate(enso, { loop = true } = {}) {
   });
 
   enso.events.on('agent_end', async (data, ctx) => {
-    if (!ctx?.sessionId) return;
-    void flush(ctx.sessionId).catch(() => {});
-    if (ctx.agent) return;
+    if (!ctx?.sessionId || ctx.agent) return;
+    await finishTurn(data, ctx).catch((e) => console.error('[telegram]', e?.message ?? e));
+    // 本轮的待回关掉之后才放排队的下一条
+    await flush().catch((e) => console.error('[telegram]', e?.message ?? e));
+  });
+  /** 一轮结束：回复只发给本轮的待回（同一会话同时只有一轮 Telegram 任务在跑） */
+  const finishTurn = async (data, ctx) => {
     // silent：秘书 silence_turn 等不回发不镜像
     if (data?.silent === true) {
       // 秘书 silence_turn 等：既不回发也不镜像，但要把待回清掉，避免下轮借尸还魂
@@ -1014,11 +1135,11 @@ export function activate(enso, { loop = true } = {}) {
     if (!text || visuallyEmpty(text)) return;
     for (const key of mirrorTargets(latest, ctx.sessionId, answered))
       await send(key, text).catch((e) => console.error('[telegram]', e.message));
-  });
+  };
 
   enso.events.on('input', async (data, ctx) => {
     if (!ctx?.sessionId) return;
-    void flush(ctx.sessionId).catch(() => {});
+    void flush().catch(() => {});
     if (ctx.agent || data?.source === 'extension') return;
     const text = String(data?.text ?? '').trim();
     if (!text || visuallyEmpty(text)) return;
