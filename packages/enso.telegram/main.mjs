@@ -20,6 +20,7 @@ import {
   isAdmin,
   isRouteEnabled,
   isTopicRootReply,
+  isTrustedChannel,
   markPending,
   markdownToHtml,
   mergeBuffered,
@@ -39,10 +40,14 @@ import {
   senderOf,
   setAdmin,
   setAllowed,
+  setTrustedChannel,
   shortIdOf,
+  speakerOf,
   splitRouteKey,
+  stillTrusted,
   takeReply,
   threadParams,
+  topicOf,
   unbindRoute,
   userOf,
   visuallyEmpty,
@@ -59,6 +64,8 @@ const COMMANDS_VERSION = 7;
 const TRUST_FALLBACK = new Set(['PERMISSION_DENIED', 'INVALID_ARGS', 'UNSUPPORTED']);
 /** /session 列出的会话数，太多按钮在手机上不好点 */
 const MENU_SIZE = 10;
+/** 群/频道管理员列表缓存（认匿名管理员、频道主用）；收到成员变动更新立即作废 */
+const ADMINS_TTL_MS = 10 * 60_000;
 const RETRY_EVERY_MS = 5_000;
 const MAX_QUEUED = 10;
 /** 会话已空闲/出错，待回还没等到回复：再宽限这么久就判定这一轮没有回复 */
@@ -395,8 +402,8 @@ export function activate(enso, { loop = true, idleGraceMs = IDLE_GRACE_MS, stale
       const r = latest?.routes[action.key];
       if (r?.promptPrefix) action.promptPrefix = r.promptPrefix;
     }
-    // 投递时按最新名单重新认人：排队期间被取消管理员的消息不再可信
-    const trusted = action.admin === true && !!latest && isAdmin(latest, action.fromId);
+    // 投递时按最新名单重新认人：排队期间被取消管理员、关掉匿名信任、移出可信频道的消息不再可信
+    const trusted = stillTrusted(latest, action);
     // 收集图片：单张 action.image 或相册 action.images
     const imageRefs = action.images?.length ? action.images : action.image ? [action.image] : [];
     let attached;
@@ -628,10 +635,13 @@ export function activate(enso, { loop = true, idleGraceMs = IDLE_GRACE_MS, stale
   };
 
   // ---- 攒批与相册缓冲（内存态；重启丢失可接受，Telegram 不会重投同一条） ----
-  // 缓冲按「路由 + 角色」分组，管理员与普通用户的消息绝不合并进同一条注入
+  // 缓冲按「路由 + 角色」分组，管理员与普通用户的消息绝不合并进同一条注入；
+  // 借开关/频道名单获得的信任单独成组，投递时才能按各自的来源重新核对
   const textBuffers = new Map(); // `${routeKey}|admin|user` -> { routeKey, actions: [], firstAt, lastAt, timer }
   const albums = new Map(); // `${key}|${mediaGroupId}` -> { actions: [], timer, inflight, done }
-  const bufferKeyOf = (action) => `${action.key}|${action.admin ? 'admin' : 'user'}`;
+  const roleOf = (action) =>
+    !action.admin ? 'user' : action.trustVia === 'channel' ? `channel:${action.channelId}` : action.trustVia ?? 'admin';
+  const bufferKeyOf = (action) => `${action.key}|${roleOf(action)}`;
   /** steer/stop 等控制指令不进入攒批 */
   const instantKind = (action) => action.deliverAs === 'steer';
 
@@ -1006,6 +1016,7 @@ export function activate(enso, { loop = true, idleGraceMs = IDLE_GRACE_MS, stale
         }
       }
       case 'inject': {
+        if (action.notice) await send(action.key, action.notice).catch(() => {});
         if (await tryAnswerFreeText(update, action)) return;
         // 相册分片：进相册缓冲合并且只投一次
         if (action.mediaGroupId && action.image) return albumArrive(action);
@@ -1015,6 +1026,28 @@ export function activate(enso, { loop = true, idleGraceMs = IDLE_GRACE_MS, stale
   };
 
   // ---- 长轮询 ----
+  /** chatId -> { at, members }；members 为 null 表示没读到（没权限、机器人不在频道里等），同样缓存免得每条都查 */
+  const adminLists = new Map();
+  const chatAdmins = async (chatId, token) => {
+    const hit = adminLists.get(String(chatId));
+    if (hit && Date.now() - hit.at < ADMINS_TTL_MS) return hit.members;
+    const members = await api('getChatAdministrators', { chat_id: chatId }, false, token).then(
+      (r) => (Array.isArray(r) ? r : null),
+      () => null
+    );
+    adminLists.set(String(chatId), { at: Date.now(), members });
+    return members;
+  };
+  /** 认匿名管理员要本群管理员列表，频道身份要那个频道的（看频道主）；只查已绑定路由的群 */
+  const membersFor = async (state, u, token) => {
+    const m = u.message;
+    if (!m?.chat || !findRoute(state, m.chat.id, topicOf(m))) return undefined;
+    const speaker = speakerOf(m);
+    if (speaker.kind === 'anonymousAdmin') return chatAdmins(m.chat.id, token);
+    if (speaker.kind === 'channel') return chatAdmins(speaker.channel.id, token);
+    return undefined;
+  };
+
   const pollOnce = async (seconds, me) => {
     const pollToken = await tokenOf();
     const { offset, commandsVersion } = await load();
@@ -1031,16 +1064,25 @@ export function activate(enso, { loop = true, idleGraceMs = IDLE_GRACE_MS, stale
       updates = await api('getUpdates', {
         offset,
         timeout: seconds,
-        allowed_updates: ['message', 'callback_query'],
+        // 成员变动只用来作废管理员列表缓存（chat_member 要机器人是群管理员才会收到）
+        allowed_updates: ['message', 'callback_query', 'my_chat_member', 'chat_member'],
       }, true, pollToken);
     } finally {
       self.wake = null;
     }
     if (!updates.length) return [];
+    for (const u of updates) {
+      const changed = (u.chat_member ?? u.my_chat_member)?.chat?.id;
+      if (changed != null) adminLists.delete(String(changed));
+    }
+    // 长轮询期间路由可能刚绑上：按收到更新这一刻的状态决定查哪些群
+    const snapshot = await load();
+    const members = [];
+    for (const u of updates) members.push(await membersFor(snapshot, u, pollToken));
     return update((state) =>
-      updates.map((u) => {
+      updates.map((u, i) => {
         state.offset = Math.max(state.offset, u.update_id + 1);
-        return { action: route(state, u, Date.now(), me), update: u };
+        return { action: route(state, u, Date.now(), me, members[i]), update: u };
       })
     );
   };
@@ -1372,6 +1414,7 @@ export function activate(enso, { loop = true, idleGraceMs = IDLE_GRACE_MS, stale
       sync: r.sync,
       enabled: r.enabled !== false,
       directTrigger: r.directTrigger,
+      trustAnonymousAdmin: r.trustAnonymousAdmin === true,
       showProgress: r.showProgress !== false,
       quoteReply: r.quoteReply !== false,
       whitelistMode: r.whitelistMode,
@@ -1425,6 +1468,16 @@ export function activate(enso, { loop = true, idleGraceMs = IDLE_GRACE_MS, stale
       globalAllow: state.globalAllow ?? [],
       admins,
       adminCandidates,
+      trustedChannels: state.trustedChannels ?? [],
+      // 最近见到的频道身份；mine：机器人读得到该频道管理员，且频道主是插件管理员（仍要手动加入）
+      channelCandidates: (state.seenChannels ?? [])
+        .filter((c) => !isTrustedChannel(state, c.id))
+        .map((c) => ({
+          id: c.id,
+          name: c.name,
+          chat: state.knownChats[String(c.chatId)]?.title,
+          mine: Number.isInteger(c.creatorId) && admins.some((a) => a.id === c.creatorId),
+        })),
       running: root && sessions.length ? sessions.some((s) => s.id === root && s.running) : null,
       queued: root ? (state.queue?.[root] ?? []).length : 0,
     };
@@ -1548,6 +1601,7 @@ export function activate(enso, { loop = true, idleGraceMs = IDLE_GRACE_MS, stale
       }
       if (patch.sync !== undefined) r.sync = patch.sync === true;
       if (patch.directTrigger !== undefined) r.directTrigger = patch.directTrigger === true;
+      if (patch.trustAnonymousAdmin !== undefined) r.trustAnonymousAdmin = patch.trustAnonymousAdmin === true;
       if (patch.showProgress !== undefined) {
         r.showProgress = patch.showProgress === true;
         // 进行中的轮次也立刻停掉「正在输入」
@@ -1624,6 +1678,17 @@ export function activate(enso, { loop = true, idleGraceMs = IDLE_GRACE_MS, stale
       ].find((u) => u.id === id);
       const name = String(args?.name || known?.name || id).slice(0, 100);
       setAdmin(state, { id, name }, args?.on !== false);
+    });
+    return view(ctx?.sessionId ?? null);
+  });
+
+  /** 面板增删可信发言频道：以这些频道身份发的消息按管理员处理 */
+  enso.renderer.handle('channel', async (args, ctx) => {
+    const id = Number(args?.channelId);
+    if (!Number.isInteger(id) || id >= 0) throw new Error('频道 ID 要是负整数（形如 -100…）');
+    await update((state) => {
+      const known = [...(state.trustedChannels ?? []), ...(state.seenChannels ?? [])].find((c) => c.id === id);
+      setTrustedChannel(state, { id, name: args?.name || known?.name || String(id) }, args?.on !== false);
     });
     return view(ctx?.sessionId ?? null);
   });

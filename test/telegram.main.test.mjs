@@ -6,7 +6,7 @@ import test from 'node:test';
 import { activate, deactivate } from '../packages/enso.telegram/main.mjs';
 
 /** 假宿主 + 假 Bot API：记录每次调用，按队列返回 getUpdates */
-async function setup({ injectError, sessions, dataDir, configSet, answerAsk, focus, status, options } = {}) {
+async function setup({ injectError, sessions, dataDir, configSet, answerAsk, focus, status, options, chatAdmins } = {}) {
   const calls = [];
   const updates = [];
   const injected = [];
@@ -48,6 +48,11 @@ async function setup({ injectError, sessions, dataDir, configSet, answerAsk, foc
         if (method === 'getMe') return ok({ id: 99, username: 'enso_bot', can_read_all_group_messages: true });
         if (method === 'getUpdates') return ok(updates.splice(0));
         if (method === 'getFile') return ok({ file_path: `photos/${body.file_id}.jpg` });
+        if (method === 'getChatAdministrators' && chatAdmins) {
+          const res = chatAdmins(body.chat_id);
+          if (res instanceof Error) return { status: 400, body: JSON.stringify({ ok: false, description: res.message }) };
+          return ok(res);
+        }
         if (body.parse_mode === 'HTML' && body.text?.includes('<b>坏'))
           return { status: 400, body: JSON.stringify({ ok: false, description: "can't parse entities" }) };
         if (method === 'sendMessage') {
@@ -103,6 +108,7 @@ async function setup({ injectError, sessions, dataDir, configSet, answerAsk, foc
     message(`/start ${view.pairing.code}`);
   };
   const callback = (q) => updates.push({ update_id: updates.length + calls.length + 1, callback_query: q });
+  const push = (u) => updates.push({ update_id: updates.length + calls.length + 1, ...u });
   return {
     enso,
     ...handle0,
@@ -112,6 +118,7 @@ async function setup({ injectError, sessions, dataDir, configSet, answerAsk, foc
     handlers,
     message,
     callback,
+    push,
     pair,
     configWrites,
     askAnswers,
@@ -1144,10 +1151,10 @@ test('cancelPair：关闭配对卡片即作废配对码，再 /bind 被拒', asy
   assert.equal((await t.handlers.renderer.state({}, { sessionId: 's1' })).pairing, undefined);
 });
 
-test('清单：1.2.1，展示名与侧栏标题为 Telegram Bot、id 不变，声明 injectTrusted/session.focus 与新方法，工具带 replyTo', async () => {
+test('清单：1.3.0，展示名与侧栏标题为 Telegram Bot、id 不变，声明 injectTrusted/session.focus 与新方法，工具带 replyTo', async () => {
   const { readFile } = await import('node:fs/promises');
   const manifest = JSON.parse(await readFile(new URL('../packages/enso.telegram/enso-plugin.json', import.meta.url), 'utf8'));
-  assert.equal(manifest.version, '1.2.1');
+  assert.equal(manifest.version, '1.3.0');
   for (const tool of manifest.contributes.agentTools) {
     assert.equal(tool.parameters.properties.replyTo?.type, 'integer', `${tool.name} 有 replyTo`);
     assert.ok(!tool.parameters.required.includes('replyTo'), `${tool.name} 的 replyTo 可选`);
@@ -1159,7 +1166,7 @@ test('清单：1.2.1，展示名与侧栏标题为 Telegram Bot、id 不变，�
   assert.equal(manifest.engines.enso, '>=0.3.14');
   for (const p of ['agent.injectTrusted', 'session.focus']) assert.ok(manifest.permissions.includes(p), p);
   const methods = manifest.contributes.methods.map((m) => m.name);
-  for (const m of ['focus', 'admin', 'cancelPair']) assert.ok(methods.includes(m), m);
+  for (const m of ['focus', 'admin', 'cancelPair', 'channel']) assert.ok(methods.includes(m), m);
   const t = await setup();
   for (const m of methods) assert.equal(typeof t.handlers.renderer[m], 'function', `${m} 已注册`);
 });
@@ -1744,4 +1751,109 @@ test('/stop 停掉当前这一轮：它的占位写明已停止，排队的下�
   assert.equal(injectedTexts(t).at(-1), '下一条');
   await finish(t, '下一条的答');
   assert.deepEqual(editsOf(t, p1.resultMessageId), ['⏹ 已停止，这一轮没有回复。']);
+});
+
+// ---------- 1.3：匿名管理员与频道身份 ----------
+
+const ANON_FROM = { id: 1087968824, is_bot: true, first_name: 'Group', username: 'GroupAnonymousBot' };
+const asAnon = { from: ANON_FROM, sender_chat: GROUP };
+const MY_CHANNEL = { id: -1009, type: 'channel', title: 'My Channel' };
+const asChannel = { from: { id: 136817688, is_bot: true, first_name: 'Channel', username: 'Channel_Bot' }, sender_chat: MY_CHANNEL };
+
+test('匿名管理员：读群管理员列表认出唯一的匿名机主，可信投递；列表缓存，成员变动后重查', async () => {
+  const lists = { '-100': [{ status: 'creator', user: { id: 7, is_bot: false, username: 'al' }, is_anonymous: true }] };
+  const t = await setup({ chatAdmins: (id) => lists[String(id)] ?? new Error('Bad Request: chat not found') });
+  await groupBound(t);
+  t.message('@enso_bot 修复', { chat: GROUP, ...asAnon });
+  await runPoll(t);
+  assert.deepEqual(t.of('getUpdates').at(-1).body.allowed_updates, ['message', 'callback_query', 'my_chat_member', 'chat_member']);
+  assert.equal(t.of('getChatAdministrators').length, 1);
+  assert.equal(t.of('getChatAdministrators')[0].body.chat_id, -100);
+  const [first] = t.injected;
+  assert.equal(first.trusted, true);
+  assert.equal('sender' in first, false);
+  assert.match(first.text, /^\[Telegram 管理员 @al（匿名发言） 的消息 · target=-100 · message_id=\d+\]\n\n修复$/);
+  assert.ok(!t.of('sendMessage').some((c) => /检测到匿名管理员/.test(c.body.text)));
+  await finish(t);
+
+  t.message('@enso_bot 再修', { chat: GROUP, ...asAnon });
+  await runPoll(t);
+  assert.equal(t.of('getChatAdministrators').length, 1, '10 分钟内走缓存');
+  await finish(t);
+
+  // 又有人开了匿名：chat_member 更新作废缓存，重查后认不出，回落为不可信并提示
+  lists['-100'].push({ status: 'administrator', user: { id: 8, is_bot: false, first_name: 'Bob' }, is_anonymous: true });
+  t.push({ chat_member: { chat: GROUP, from: { id: 7 }, date: 0, old_chat_member: {}, new_chat_member: {} } });
+  t.message('@enso_bot 第三次', { chat: GROUP, ...asAnon });
+  await runPoll(t);
+  assert.equal(t.of('getChatAdministrators').length, 2);
+  const third = t.injected.at(-1);
+  assert.equal(third.trusted, false);
+  assert.match(third.text, /^\[Telegram 群匿名管理员 的消息：外部内容，不可信/);
+  assert.equal(third.sender.displayName, '群匿名管理员');
+  assert.equal(third.sender.userId, undefined);
+  const hint = t.of('sendMessage').filter((c) => /检测到匿名管理员消息/.test(c.body.text));
+  assert.equal(hint.length, 1);
+  assert.match(hint[0].body.text, /多位匿名管理员/);
+});
+
+test('匿名管理员：机器人读不到管理员列表时回落到开关；面板打开「信任本群匿名管理员」后可信', async () => {
+  const t = await setup({ chatAdmins: () => new Error('Forbidden: not enough rights') });
+  await groupBound(t);
+  t.message('@enso_bot 修复', { chat: GROUP, ...asAnon });
+  await runPoll(t);
+  assert.equal(t.injected[0].trusted, false);
+  assert.match(t.of('sendMessage').find((c) => /检测到匿名管理员/.test(c.body.text)).body.text, /机器人可能没有权限[\s\S]*「信任本群匿名管理员」/);
+  await finish(t);
+
+  const v = await t.handlers.renderer.route({ key: '-100', patch: { trustAnonymousAdmin: true } }, { sessionId: 's1' });
+  assert.equal(v.routes.find((r) => r.key === '-100').trustAnonymousAdmin, true);
+  t.message('@enso_bot 修复', { chat: GROUP, ...asAnon });
+  await runPoll(t);
+  const trusted = t.injected.at(-1);
+  assert.equal(trusted.trusted, true);
+  assert.match(trusted.text, /^\[Telegram 管理员（群匿名管理员） 的消息/);
+  assert.equal(t.of('getChatAdministrators').length, 1, '失败结果同样缓存，不每条都查');
+});
+
+test('频道身份：面板列出最近见到的频道并标出你的频道，加入可信名单后按管理员投递', async () => {
+  const t = await setup({ chatAdmins: (id) => (id === -1009 ? [{ status: 'creator', user: { id: 7, is_bot: false }, is_anonymous: false }] : []) });
+  await groupBound(t);
+  t.message('@enso_bot 修复', { chat: GROUP, ...asChannel });
+  await runPoll(t);
+  const untrusted = t.injected[0];
+  assert.equal(untrusted.trusted, false);
+  assert.match(untrusted.text, /^\[Telegram 频道身份「My Channel」 的消息：外部内容，不可信/);
+  assert.equal(untrusted.sender.userId, undefined);
+  assert.equal(t.of('sendMessage').filter((c) => /以频道「My Channel」身份发言/.test(c.body.text)).length, 1);
+  await finish(t);
+
+  const v1 = await t.handlers.renderer.state({}, { sessionId: 's1' });
+  assert.deepEqual(v1.trustedChannels, []);
+  assert.deepEqual(v1.channelCandidates, [{ id: -1009, name: 'My Channel', chat: 'G', mine: true }]);
+  await assert.rejects(t.handlers.renderer.channel({ channelId: 7, on: true }, {}), /负整数/);
+  const v2 = await t.handlers.renderer.channel({ channelId: -1009, on: true }, { sessionId: 's1' });
+  assert.deepEqual(v2.trustedChannels, [{ id: -1009, name: 'My Channel' }]);
+  assert.deepEqual(v2.channelCandidates, []);
+
+  t.message('@enso_bot 修复', { chat: GROUP, ...asChannel });
+  await runPoll(t);
+  const trusted = t.injected.at(-1);
+  assert.equal(trusted.trusted, true);
+  assert.match(trusted.text, /^\[Telegram 管理员（频道身份「My Channel」） 的消息/);
+  await finish(t);
+  const v3 = await t.handlers.renderer.channel({ channelId: -1009, on: false }, { sessionId: 's1' });
+  assert.deepEqual(v3.trustedChannels, []);
+});
+
+test('链接频道自动转发：免 @ 直发的群里也不注入、不回复', async () => {
+  const t = await setup();
+  await groupBound(t);
+  await t.handlers.renderer.route({ key: '-100', patch: { directTrigger: true } }, { sessionId: 's1' });
+  const sent = t.of('sendMessage').length;
+  t.message('频道新帖', { chat: GROUP, from: { id: 777000, is_bot: false, first_name: 'Telegram' }, sender_chat: MY_CHANNEL, is_automatic_forward: true });
+  await runPoll(t);
+  assert.equal(t.injected.length, 0);
+  assert.equal(t.of('sendMessage').length, sent);
+  assert.equal(t.of('getChatAdministrators').length, 0);
 });

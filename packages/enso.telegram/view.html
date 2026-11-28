@@ -181,7 +181,10 @@
             <span class="btns"><button class="ui-btn ui-btn--sm ui-btn--outline" data-fresh="${esc(r.key)}" data-tip="新建一个会话并把这个聊天改绑过去">新建会话</button>
             <button class="ui-btn ui-btn--sm ui-btn--destructive" data-unbind="${esc(r.key)}">解绑</button></span>
           </div>
-          ${r.chatType !== 'private' ? `<div class="field-row"><span class="lbl">白名单</span>
+          ${r.chatType !== 'private' ? `<div class="row wrap">
+            <label class="switch" data-tip="插件先用群管理员列表认匿名管理员：只有一位开了匿名、或头衔唯一对上时直接按那个人处理。认不出时打开此开关才按管理员（可信）处理"><input type="checkbox" class="ui-switch" data-route="trustAnonymousAdmin" data-key="${esc(r.key)}" ${r.trustAnonymousAdmin ? 'checked' : ''}/>信任本群匿名管理员</label>
+            <span class="m${r.trustAnonymousAdmin ? ' err' : ''}">风险：打开后，群里任何开了匿名的管理员在认不出是谁时都会被当成你。私聊不受影响。</span></div>
+          <div class="field-row"><span class="lbl">白名单</span>
             <select class="ui-input" data-route="whitelistMode" data-key="${esc(r.key)}">
               <option value="inherit" ${r.whitelistMode === 'inherit' ? 'selected' : ''}>继承全局</option>
               <option value="custom" ${r.whitelistMode === 'custom' ? 'selected' : ''}>本路由独立</option>
@@ -258,6 +261,12 @@
           `<span class="ui-badge">${esc(u.name)} <span class="m">${u.id}</span><button class="x" data-tip="移出全局白名单" data-gdeny="${u.id}">×</button></span>`
         ).join('') || '<span class="m">全局白名单为空。继承模式下，只有名单内成员（与各路由自己的名单）能使用机器人。</span>';
         const reqs = (view.routes ?? []).flatMap((r) => (r.requests ?? []).map((u) => ({ r, u })));
+        const channels = (view.trustedChannels ?? []).map((c) =>
+          `<span class="ui-badge ui-badge--brand">${esc(c.name)} <span class="m">${c.id}</span><button class="x" data-tip="移出可信发言频道" data-unchannel="${c.id}">×</button></span>`
+        ).join('') || '<span class="m">还没有可信发言频道：以频道身份发的消息都按外部数据处理。</span>';
+        const channelCands = (view.channelCandidates ?? []).map((c) =>
+          `<button class="ui-btn ui-btn--sm ui-btn--outline" data-mkchannel="${c.id}|${esc(c.name)}" data-tip="${c.chat ? `在「${esc(c.chat)}」见到` : '最近见到'}">＋ ${esc(c.name)}${c.mine ? '（这是你的频道）' : ''}</button>`
+        ).join('');
         const reqHtml = reqs.map(({ r, u }) =>
           `<div class="row wrap"><span class="grow">${esc(u.name)} <span class="m">@${esc(r.title)}${r.topicName ? ' #' + esc(r.topicName) : ''}</span></span>
             <span class="btns"><button class="ui-btn ui-btn--sm ui-btn--outline" data-approve="${esc(r.key)}|${u.id}">批准为普通用户</button>
@@ -277,6 +286,10 @@
               <input class="ui-input" type="text" id="wl-name" placeholder="备注名（可选）" style="flex:1"/>
               <button class="ui-btn ui-btn--sm ui-btn--primary" data-gadd>添加</button></div>
             <div class="m">对机器人发 /id 或用 @userinfobot 可以查到 User ID。</div></div>
+          <div class="ui-card card"><h3>可信发言频道</h3>
+            <div class="m">在群里「以频道身份发言」时 Telegram 不告诉机器人是谁。名单里的频道发的消息按管理员（可信）处理；频道的其他管理员也能以它发言，只加你独占的频道。链接频道自动转发进讨论群的帖子一律不触发机器人。</div>
+            <div class="users">${channels}</div>
+            ${channelCands ? `<div class="users"><span class="m">最近见到的频道身份：</span>${channelCands}</div>` : ''}</div>
           ${reqs.length ? `<div class="ui-card card"><h3>待批准请求</h3>${reqHtml}</div>` : ''}`;
       }
 
@@ -382,6 +395,11 @@
         }
         else if (t.dataset.gdeny) run('globalAllow', { userId: Number(t.dataset.gdeny), on: false });
         else if (t.dataset.unadmin) run('admin', { userId: Number(t.dataset.unadmin), on: false });
+        else if (t.dataset.unchannel) run('channel', { channelId: Number(t.dataset.unchannel), on: false });
+        else if (t.dataset.mkchannel) {
+          const i = t.dataset.mkchannel.indexOf('|');
+          run('channel', { channelId: Number(t.dataset.mkchannel.slice(0, i)), name: t.dataset.mkchannel.slice(i + 1), on: true });
+        }
         else if (t.dataset.mkadmin) {
           const i = t.dataset.mkadmin.indexOf('|');
           run('admin', { userId: Number(t.dataset.mkadmin.slice(0, i)), name: t.dataset.mkadmin.slice(i + 1), on: true });
