@@ -6,7 +6,16 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildRepo, checkPackageLimits, repoRoot, validateRepo } from '../scripts/lib.mjs';
+import {
+  buildRepo,
+  catalogMarkdown,
+  checkPackageLimits,
+  readExternals,
+  readmeWithCatalog,
+  readPackages,
+  repoRoot,
+  validateRepo,
+} from '../scripts/lib.mjs';
 import { createMarketKey } from '../scripts/keygen.mjs';
 import { signIndex } from '../scripts/sign.mjs';
 import { zipFiles } from '../scripts/zip.mjs';
@@ -413,6 +422,38 @@ test('未改动的外部插件不出现在权限变更里', async () => {
     await rm(join(root, 'packages/dsh.bce'), { recursive: true, force: true });
     const removed = await validateRepo(root, { base: 'main', catalog: false, community: false });
     assert.match(removed.summary, /dsh\.bce` 已从仓库移除/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('外部插件没拉取或副本 commit 不符时，提示运行 external.mjs，不误报 README 过期或多余元数据', async () => {
+  const root = await tempRoot();
+  const spec = { repo: 'linqiu919/dsh-bce', commit: 'a'.repeat(40), path: 'enso' };
+  const external = { id: 'dsh.bce', version: '0.1.5', permissions: ['ui.slot'] };
+  const copyAt = (commit) => ({
+    meta: { tier: 'community', tags: ['mcp'] },
+    files: { '.external': `${spec.repo}@${commit}:${spec.path}\n` },
+  });
+  const hint = '外部插件未拉取或与 registry/external 的 commit 不符，运行 node scripts/external.mjs：dsh.bce';
+  try {
+    await writePlugin(root, { id: 'enso.example.notes', version: '1.0.0' });
+    await mkdir(join(root, 'registry/external'), { recursive: true });
+    await writeFile(join(root, 'registry/external/dsh.bce.json'), JSON.stringify(spec));
+    await writePlugin(root, external, copyAt(spec.commit));
+    const { packages } = await readPackages(root);
+    const catalog = catalogMarkdown(packages, await readExternals(root));
+    await writeFile(join(root, 'README.md'), readmeWithCatalog('# 插件\n\n<!-- plugins:start -->\n<!-- plugins:end -->\n', catalog));
+    const synced = await validateRepo(root);
+    assert.equal(synced.ok, true, synced.errors.join('\n'));
+
+    await rm(join(root, 'packages/dsh.bce'), { recursive: true, force: true });
+    const missing = await validateRepo(root);
+    assert.deepEqual(missing.errors, [hint]);
+
+    await writePlugin(root, external, copyAt('b'.repeat(40)));
+    const stale = await validateRepo(root);
+    assert.deepEqual(stale.errors, [hint]);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
