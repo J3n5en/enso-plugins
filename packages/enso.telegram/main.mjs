@@ -29,7 +29,9 @@ import {
   noteRequest,
   openAsksForSession,
   pendingTargets,
+  quotesSource,
   registerAsk,
+  replyParams,
   rootSession,
   route,
   routeChatId,
@@ -202,7 +204,19 @@ export function activate(enso, { loop = true } = {}) {
   };
 
   // ---- 出站文本 ----
-  const deliver = async (key, text, editId) => {
+  /** 带引用发送；引用本身被拒（400）就去掉引用再发一次，不能因为引不了而丢消息 */
+  const sendQuoted = async (body, replyTo) => {
+    const quote = replyParams(replyTo);
+    if (!quote.reply_parameters) return api('sendMessage', body);
+    try {
+      return await api('sendMessage', { ...body, ...quote });
+    } catch (error) {
+      if (error.status !== 400) throw error;
+      return api('sendMessage', body);
+    }
+  };
+  /** editId：改写这条占位（它发出时已带引用）；replyTo：新发消息时引用的原消息 */
+  const deliver = async (key, text, { editId, replyTo } = {}) => {
     const chatId = routeChatId(key);
     const html = markdownToHtml(text);
     const base = { chat_id: chatId, ...threadParams(key) };
@@ -211,22 +225,22 @@ export function activate(enso, { loop = true } = {}) {
     for (const body of attempts) {
       try {
         if (editId) return await api('editMessageText', { ...base, message_id: editId, ...body });
-        return await api('sendMessage', { ...base, ...body });
+        return await sendQuoted({ ...base, ...body }, replyTo);
       } catch (error) {
         lastError = error;
         if (error.status !== 400) break;
       }
     }
-    if (editId) return deliver(key, text);
+    if (editId) return deliver(key, text, { replyTo });
     throw lastError;
   };
-  /** 长文按围栏状态分片（代码块跨片不断裂），逐片投递；视觉空消息直接跳过 */
-  const send = async (key, text, editId) => {
+  /** 长文按围栏状态分片（代码块跨片不断裂），逐片投递，只有第一片改写占位或引用原消息；视觉空消息直接跳过 */
+  const send = async (key, text, { editId, replyTo } = {}) => {
     if (visuallyEmpty(text)) return null;
     const parts = chunkMarkdown(text, 3500);
     let first = null;
     for (const [i, part] of parts.entries()) {
-      const r = await deliver(key, part, i === 0 ? editId : undefined);
+      const r = await deliver(key, part, i === 0 ? { editId, replyTo } : {});
       first ??= r;
     }
     return first;
@@ -419,6 +433,8 @@ export function activate(enso, { loop = true } = {}) {
       }
     };
     const done = () => imageRefs.forEach(dropImage);
+    // 占位与最终回复引用触发这轮的消息（攒批合并时是最后一条）；路由关了引用就都不引
+    const source = quotesSource(latest, action.key) ? action.messageId : undefined;
     if (retry) {
       try {
         await inject();
@@ -431,14 +447,12 @@ export function activate(enso, { loop = true } = {}) {
       done();
       const placeholder = quiet(latest, action.key)
         ? null
-        : await api('sendMessage', {
-            chat_id: routeChatId(action.key),
-            ...threadParams(action.key),
-            text: '▶️ 会话已启动，开始处理排队的消息…',
-            reply_parameters: { message_id: action.messageId, allow_sending_without_reply: true },
-          }).catch(() => null);
+        : await sendQuoted(
+            { chat_id: routeChatId(action.key), ...threadParams(action.key), text: '▶️ 会话已启动，开始处理排队的消息…' },
+            source
+          ).catch(() => null);
       await update((state) =>
-        markPending(state, action.sessionId, { key: action.key, placeholderId: placeholder?.message_id })
+        markPending(state, action.sessionId, { key: action.key, placeholderId: placeholder?.message_id, sourceId: action.messageId })
       );
       if (!quiet(latest, action.key)) typingStart(action.key);
       return true;
@@ -446,15 +460,14 @@ export function activate(enso, { loop = true } = {}) {
     const steer = action.deliverAs === 'steer';
     const placeholder = quiet(latest, action.key)
       ? null
-      : await api('sendMessage', {
-          chat_id: routeChatId(action.key),
-          ...threadParams(action.key),
-          text: steer ? '↪️ 已插入当前任务' : '⏳ 已收到，处理中…',
-          reply_parameters: { message_id: action.messageId, allow_sending_without_reply: true },
-        }).catch(() => null);
+      : await sendQuoted(
+          { chat_id: routeChatId(action.key), ...threadParams(action.key), text: steer ? '↪️ 已插入当前任务' : '⏳ 已收到，处理中…' },
+          source
+        ).catch(() => null);
     await update((state) => {
       const existing = pendingTargets(state, action.sessionId).find((t) => t.key === action.key);
-      if (!(steer && existing)) markPending(state, action.sessionId, { key: action.key, placeholderId: placeholder?.message_id });
+      if (!(steer && existing))
+        markPending(state, action.sessionId, { key: action.key, placeholderId: placeholder?.message_id, sourceId: action.messageId });
     });
     try {
       await inject();
@@ -476,7 +489,7 @@ export function activate(enso, { loop = true } = {}) {
         ? '⏸ 绑定的会话还没启动，消息已排队，会话启动后自动处理（EnsoCode 窗口需要开着）。'
         : explain(error);
       if (placeholder) await edit(action.key, placeholder.message_id, text);
-      else await send(action.key, text);
+      else await send(action.key, text, { replyTo: source });
     }
     return true;
   };
@@ -604,12 +617,10 @@ export function activate(enso, { loop = true } = {}) {
     scheduleBuffer(bufKey, decision.waitMs);
     // 给用户一个已入缓冲的即时反馈（仅第一次）
     if (buf.actions.length === 1 && !quiet(state, action.key)) {
-      await api('sendMessage', {
-        chat_id: routeChatId(action.key),
-        ...threadParams(action.key),
-        text: `📥 已收到，将在安静期结束后合并处理…`,
-        reply_parameters: { message_id: action.messageId, allow_sending_without_reply: true },
-      }).catch(() => {});
+      await sendQuoted(
+        { chat_id: routeChatId(action.key), ...threadParams(action.key), text: `📥 已收到，将在安静期结束后合并处理…` },
+        quotesSource(state, action.key) ? action.messageId : undefined
+      ).catch(() => {});
     }
   };
 
@@ -678,12 +689,19 @@ export function activate(enso, { loop = true } = {}) {
                 .filter(Boolean),
             }
           : undefined;
-        const msg = await api('sendMessage', {
-          chat_id: routeChatId(key),
-          ...threadParams(key),
-          text: body.slice(0, 3900),
-          ...(keyboard?.inline_keyboard.length ? { reply_markup: keyboard } : {}),
-        });
+        // 本轮由这条路由的消息触发时，提问卡片也引用那条消息
+        const source = quotesSource(state, key)
+          ? pendingTargets(state, ask.sessionId).find((t) => t.key === key)?.sourceId
+          : undefined;
+        const msg = await sendQuoted(
+          {
+            chat_id: routeChatId(key),
+            ...threadParams(key),
+            text: body.slice(0, 3900),
+            ...(keyboard?.inline_keyboard.length ? { reply_markup: keyboard } : {}),
+          },
+          source
+        );
         cards.push({ key, messageId: msg.message_id });
       } catch (error) {
         console.error('[telegram] ask 卡片发送失败', error?.message ?? error);
@@ -984,15 +1002,17 @@ export function activate(enso, { loop = true } = {}) {
     });
     progress.delete(rootSession(ctx.sessionId));
     for (const t of reply?.targets ?? []) typingStop(t.key);
+    const latest = await load();
     const answered = [];
     for (const t of reply?.targets ?? []) {
       if (!visuallyEmpty(reply.text) && !muted.has(t.key)) {
-        await send(t.key, reply.text, t.placeholderId).catch((e) => console.error('[telegram]', e.message));
+        const replyTo = quotesSource(latest, t.key) ? t.sourceId : undefined;
+        await send(t.key, reply.text, { editId: t.placeholderId, replyTo }).catch((e) => console.error('[telegram]', e.message));
       }
       answered.push(t.key);
     }
     if (!text || visuallyEmpty(text)) return;
-    for (const key of mirrorTargets(await load(), ctx.sessionId, answered))
+    for (const key of mirrorTargets(latest, ctx.sessionId, answered))
       await send(key, text).catch((e) => console.error('[telegram]', e.message));
   });
 
@@ -1089,9 +1109,22 @@ export function activate(enso, { loop = true } = {}) {
     if (cur.length) chunks.push(cur);
     return chunks;
   };
-  const sendMediaTo = async (key, media, caption) => {
+  /** 媒体带引用上传；引用被拒（400）去掉引用重发一次 */
+  const uploadQuoted = async (method, fields, files, replyTo) => {
+    const quote = replyParams(replyTo);
+    if (!quote.reply_parameters) return apiUpload(method, fields, files);
+    try {
+      return await apiUpload(method, { ...fields, ...quote }, files);
+    } catch (error) {
+      if (error.status !== 400) throw error;
+      return apiUpload(method, fields, files);
+    }
+  };
+  /** replyTo 只给第一条发出去的消息（相册整组算一条） */
+  const sendMediaTo = async (key, media, caption, replyTo) => {
     const chatId = routeChatId(key);
     const thread = threadParams(key);
+    let quote = replyTo;
     const cap = (caption ?? '').slice(0, CAPTION_MAX);
     const extraCaption = caption && caption.length > CAPTION_MAX ? caption.slice(CAPTION_MAX) : null;
     const stills = media.filter((m) => m.mime !== 'image/gif');
@@ -1112,9 +1145,12 @@ export function activate(enso, { loop = true } = {}) {
       try {
         if (chunk.length === 1) {
           const one = chunk[0];
-          await apiUpload('sendPhoto', { chat_id: chatId, ...thread, caption: useCaption() }, [
-            { name: 'photo', filename: one.filename, mime: one.mime, data: one.data },
-          ]);
+          await uploadQuoted(
+            'sendPhoto',
+            { chat_id: chatId, ...thread, caption: useCaption() },
+            [{ name: 'photo', filename: one.filename, mime: one.mime, data: one.data }],
+            quote
+          );
         } else {
           const files2 = chunk.map((m, i) => ({ name: `file${i}`, filename: m.filename, mime: m.mime, data: m.data }));
           const firstCaption = useCaption();
@@ -1123,8 +1159,9 @@ export function activate(enso, { loop = true } = {}) {
             media: `attach://file${i}`,
             ...(i === 0 && firstCaption ? { caption: firstCaption } : {}),
           }));
-          await apiUpload('sendMediaGroup', { chat_id: chatId, ...thread, media: JSON.stringify(mediaDesc) }, files2);
+          await uploadQuoted('sendMediaGroup', { chat_id: chatId, ...thread, media: JSON.stringify(mediaDesc) }, files2, quote);
         }
+        quote = undefined;
         sent += chunk.length;
       } catch (error) {
         if (error.status === 400 && chunk.length > 1) {
@@ -1140,9 +1177,13 @@ export function activate(enso, { loop = true } = {}) {
     }
     for (const m of definiteRejects) {
       try {
-        await apiUpload('sendPhoto', { chat_id: chatId, ...thread, caption: useCaption() }, [
-          { name: 'photo', filename: m.filename, mime: m.mime, data: m.data },
-        ]);
+        await uploadQuoted(
+          'sendPhoto',
+          { chat_id: chatId, ...thread, caption: useCaption() },
+          [{ name: 'photo', filename: m.filename, mime: m.mime, data: m.data }],
+          quote
+        );
+        quote = undefined;
         sent += 1;
       } catch (e) {
         failures.push(`单张 ${m.filename} 发送失败：${e?.message ?? e}`);
@@ -1150,9 +1191,13 @@ export function activate(enso, { loop = true } = {}) {
     }
     for (const gif of gifs) {
       try {
-        await apiUpload('sendAnimation', { chat_id: chatId, ...thread, caption: useCaption() }, [
-          { name: 'animation', filename: gif.filename, mime: gif.mime, data: gif.data },
-        ]);
+        await uploadQuoted(
+          'sendAnimation',
+          { chat_id: chatId, ...thread, caption: useCaption() },
+          [{ name: 'animation', filename: gif.filename, mime: gif.mime, data: gif.data }],
+          quote
+        );
+        quote = undefined;
         sent += 1;
       } catch (e) {
         failures.push(`GIF ${gif.filename} 发送失败：${e?.message ?? e}`);
@@ -1207,6 +1252,7 @@ export function activate(enso, { loop = true } = {}) {
       enabled: r.enabled !== false,
       directTrigger: r.directTrigger,
       showProgress: r.showProgress !== false,
+      quoteReply: r.quoteReply !== false,
       whitelistMode: r.whitelistMode,
       allow: r.allow,
       requests: r.requests,
@@ -1386,6 +1432,7 @@ export function activate(enso, { loop = true } = {}) {
         // 进行中的轮次也立刻停掉「正在输入」
         if (!r.showProgress) typingStop(args.key);
       }
+      if (patch.quoteReply !== undefined) r.quoteReply = patch.quoteReply === true;
       if (patch.whitelistMode !== undefined && ['inherit', 'custom', 'open'].includes(patch.whitelistMode)) r.whitelistMode = patch.whitelistMode;
       if (patch.context !== undefined) r.context = patch.context;
       if (patch.debounceSec !== undefined) r.debounceSec = patch.debounceSec;
@@ -1497,6 +1544,15 @@ export function activate(enso, { loop = true } = {}) {
     return { targets, skipped: all.length - targets.length };
   };
   const skippedNote = (n) => (n ? `（跳过 ${n} 个已静音的路由）` : '');
+  /** 工具的 replyTo：消息 id 只在它所在的聊天里有效，所以目标必须唯一 */
+  const toolReplyTo = (args, targets) => {
+    if (args?.replyTo == null || args.replyTo === '') return undefined;
+    const id = Number(args.replyTo);
+    if (!Number.isInteger(id) || id <= 0) throw new Error(`replyTo 要是 Telegram 消息 id（正整数）：${args.replyTo}`);
+    if (targets.length > 1)
+      throw new Error('replyTo 只在一个聊天里有效：本会话绑定了多个聊天，请同时用 target 指定（注入消息头里的 target=…）');
+    return id;
+  };
 
   enso.tools.register('telegram_reply', async (args, ctx) => {
     const text = String(args?.text ?? '').trim();
@@ -1504,7 +1560,8 @@ export function activate(enso, { loop = true } = {}) {
     if (!ctx.sessionId) throw new Error('调用不属于任何会话');
     const sessionId = rootSession(ctx.sessionId);
     const { targets, skipped } = toolTargets(await load(), sessionId, args?.target);
-    for (const key of targets) await send(key, text);
+    const replyTo = toolReplyTo(args, targets);
+    for (const key of targets) await send(key, text, { replyTo });
     return `已发送到 ${targets.length} 个 Telegram 聊天${skippedNote(skipped)}`;
   });
 
@@ -1515,6 +1572,7 @@ export function activate(enso, { loop = true } = {}) {
     if (files.length > 10) throw new Error('一次最多 10 张');
     const sessionId = rootSession(ctx.sessionId);
     const { targets, skipped } = toolTargets(await load(), sessionId, args?.target);
+    const replyTo = toolReplyTo(args, targets);
     // 多路由循环外只读一次文件；项目目录以调用会话的 projectRoot 为准
     const media = [];
     const roots = mediaRoots({ projectRoot: ctx?.projectRoot });
@@ -1524,7 +1582,7 @@ export function activate(enso, { loop = true } = {}) {
     let totalSent = 0;
     for (const key of targets) {
       if (asAlbum) {
-        const r = await sendMediaTo(key, media, args?.caption);
+        const r = await sendMediaTo(key, media, args?.caption, replyTo);
         totalSent += r.sent;
         failures.push(...r.failures);
       } else {
@@ -1532,14 +1590,17 @@ export function activate(enso, { loop = true } = {}) {
         const cap = (args?.caption ?? '').slice(0, CAPTION_MAX);
         const extraCaption = args?.caption && String(args.caption).length > CAPTION_MAX ? String(args.caption).slice(CAPTION_MAX) : null;
         let captionUsed = false;
+        let quote = replyTo;
         for (const one of media) {
           const method = one.mime === 'image/gif' ? 'sendAnimation' : 'sendPhoto';
           try {
-            await apiUpload(
+            await uploadQuoted(
               method,
               { chat_id: routeChatId(key), ...threadParams(key), ...(captionUsed || !cap ? {} : { caption: cap }) },
-              [{ name: method === 'sendPhoto' ? 'photo' : 'animation', filename: one.filename, mime: one.mime, data: one.data }]
+              [{ name: method === 'sendPhoto' ? 'photo' : 'animation', filename: one.filename, mime: one.mime, data: one.data }],
+              quote
             );
+            quote = undefined;
             captionUsed = captionUsed || !!cap;
             totalSent += 1;
           } catch (e) {
